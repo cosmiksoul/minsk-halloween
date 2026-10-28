@@ -55,7 +55,7 @@
         <div class="btns"><button type="submit" class="green">запустить на карту</button><button type="button" id="bReroll">другой костюм</button></div>
       </form>
       <canvas id="minePic" width="72" height="108"></canvas>
-      <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. У него 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
+      <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. По городу спрятаны 22 аркана таро — дома с зелёной аурой. У скелета 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
       <div id="mineList"></div>
       <div id="board"></div>
     </div>
@@ -84,7 +84,7 @@
     <div class="line muted" id="cStatus"></div>
     <div class="line muted" id="cState"></div>
     <div id="cGame"></div>
-    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bPlay" hidden>играть за него</button><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
+    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bDeck" hidden>🃏 колода</button><button id="bPlay" hidden>играть за него</button><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
   </div>
 </div>
 <div id="tip" hidden></div>
@@ -97,6 +97,27 @@
     <div class="line muted" id="askMeta"></div>
     <div class="askBtns"><button id="askSweet" class="sweet">🍬 Сладость</button><button id="askTrick" class="trick">💀 Гадость</button><button id="askNo">мимо</button></div>
     <div class="hint">d20: 1 — крит. провал (−2 ❤ и минус череп или друг), 2–10 — провал (−1 ❤), 11–19 — успех, 20 — крит. успех (+1 ❤)</div>
+  </div>
+</div>
+
+<div id="tarot" hidden>
+  <div class="tBox">
+    <div class="tFlip"><div class="tInner" id="tInner"><div class="tFace tBack"><canvas id="tBackCv" width="40" height="60"></canvas></div><div class="tFace tFront"><canvas id="tCv" width="40" height="60"></canvas></div></div></div>
+    <div class="tText">
+      <div class="tKicker" id="tKicker">новая аркана</div>
+      <div class="tName" id="tName"></div>
+      <div class="tPlace" id="tPlace"></div>
+      <div class="tH">чем примечательно</div><div class="tP" id="tWhy"></div>
+      <div class="tH">городская легенда</div><div class="tP tL" id="tLegend"></div>
+      <div class="btns"><button id="tDeck">🃏 колода</button><button id="tClose" class="green">закрыть</button></div>
+    </div>
+  </div>
+</div>
+<div id="deck" hidden>
+  <div class="dBox">
+    <div class="dTitle">СТАРШИЕ АРКАНЫ <span id="dCount"></span><button class="x" id="dClose">×</button></div>
+    <div class="dGrid" id="dGrid"></div>
+    <div class="hint">Карты спрятаны на примечательных местах Минска: ищи дома с зелёной аурой и лучом света. У неоткрытых видно только место.</div>
   </div>
 </div>
 

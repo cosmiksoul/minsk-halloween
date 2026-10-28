@@ -10,6 +10,8 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game } from './game.js';
 import { local, makeRemote } from './store.js';
+import { buildLandmarks } from './landmarks.js';
+import { Tarot } from './tarot.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('c');
@@ -32,6 +34,7 @@ scene.add(new THREE.AmbientLight(0x403060, 1.0));
 const moon = new THREE.DirectionalLight(0xbfc8ff, 1.8); moon.position.set(-900, 1300, 700); scene.add(moon);
 scene.add(buildGround());
 const mats = makeMaterials();
+const lms = buildLandmarks(index.center); scene.add(lms.group); mats.skip = lms.zones;
 const tiles = new TileManager(scene, index, mats, BASE);
 await tiles.loadBig();
 
@@ -60,6 +63,7 @@ addEventListener('resize', resize); resize();
 
 const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspots: projectHotspots(index.center) });
 const markers = buildMarkers(venues, sim.danceZones); scene.add(markers.group); markers.setScale(sim.H);
+const tarot = new Tarot(scene, sim, index.center, lms.items); mats.tarot = tarot.zones; tarot.setScale(sim.H);
 const POP0 = isMobile ? 200 : 600;
 sim.setPopulation(POP0);
 
@@ -74,7 +78,7 @@ let fromLink = null;
 if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location.hash.slice(3))); fromLink = { name: o.n, gender: o.g, age: o.a, job: o.j, arch: o.c, seed: o.s, guest: true }; } catch { } }
 
 const game = new Game(sim, scene, {
-  save: saveMine,
+  tarot, save: saveMine,
   showCard: (a, refresh) => showCard(a, refresh),
   onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } },
 });
@@ -109,6 +113,7 @@ $('bShare').onclick = async () => { const link = shareLink(cardAgent.def); try {
 $('bDelete').onclick = () => { const a = cardAgent; if (a === game.player) game.clearPlayer(); mine = mine.filter(d => d !== a.def); saveMine(); if (remote) remote.remove(a.def); sim.remove(a); $('card').hidden = true; renderMine(); pickPlayer(); };
 $('bPlay').onclick = () => { const a = cardAgent; if (!a || !a.custom || a.def.guest) return; game.setPlayer(a); game.select(true); follow = a; $('bFollow').classList.add('on'); showCard(a); renderMine(); };
 $('bSelect').onclick = () => { game.select(!game.selected); showCard(cardAgent); };
+$('bDeck').onclick = () => game.openDeck();
 function openTab(name) { for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.tab === name); for (const id of ['places', 'events', 'mine']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id; if (isMobile) $('right').classList.add('showFeed'); }
 for (const t of document.querySelectorAll('.tab')) t.onclick = () => openTab(t.dataset.tab);
 addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.code === 'Space') { e.preventDefault(); $('bMe').onclick(); } });
@@ -130,7 +135,7 @@ function showCard(a, refresh) {
   $('bFollow').classList.toggle('on', follow === a);
   $('bShare').hidden = !a.custom; $('bDelete').hidden = !(a.custom && !a.def.guest);
   $('bPlay').hidden = !(a.custom && !a.def.guest && a !== game.player);
-  $('bSelect').hidden = a !== game.player; $('bSelect').textContent = game.selected ? 'снять выделение' : 'управлять'; $('bSelect').classList.toggle('on', game.selected);
+  $('bDeck').hidden = a !== game.player; $('bSelect').hidden = a !== game.player; $('bSelect').textContent = game.selected ? 'снять выделение' : 'управлять'; $('bSelect').classList.toggle('on', game.selected);
 }
 // подсказки к черепам и сердечкам в карточке
 const tip = $('tip');
@@ -141,11 +146,21 @@ $('card').addEventListener('mouseout', e => { if (e.target.closest('[data-tip]')
 $('card').addEventListener('click', e => { const el = e.target.closest('[data-tip]'); if (el) { if (tip.hidden) showTip(el); else hideTip(); } });
 
 // --- заведения: всплывающая карточка
-let popupVenue = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
+let popupVenue = null, popupTarot = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtDate = d => ({ '2026-10-29': '29 октября', '2026-10-30': '30 октября', '2026-10-31': '31 октября', '2026-11-01': '1 ноября', '2026-11-02': '2 ноября' }[d] || d);
+function showTarotMarker(it) {
+  popupTarot = it; popupVenue = null; $('popup').hidden = false;
+  const done = game.g && game.g.tarot.some(t => t.id === it.a.id);
+  $('pName').textContent = done ? `${it.a.roman} · ${it.a.name}` : 'аркана таро';
+  $('pType').textContent = done ? 'найдена' : 'ещё не найдена' + (it.node < 0 ? ' · вне пешеходной сети' : '');
+  $('pAddr').textContent = it.a.place; $('pHours').textContent = ''; $('pRate').textContent = ''; $('pInside').textContent = done ? '' : 'подойди своим скелетом, чтобы открыть';
+  $('pEvents').innerHTML = ''; $('pWeb').innerHTML = done ? '<a href="#" id="pOpenCard">посмотреть карту</a>' : '';
+  if (done) $('pOpenCard').onclick = e => { e.preventDefault(); game.showTarot(it.a, false); };
+  $('pGo').hidden = !(game.player && it.node >= 0 && !done); $('pGo').textContent = '🃏 дойти своим скелетом';
+}
 function showVenue(v) {
-  popupVenue = v; $('popup').hidden = false;
+  popupVenue = v; popupTarot = null; $('popup').hidden = false; $('pGo').textContent = '🎃 зайти своим скелетом';
   $('pName').textContent = v.name;
   $('pType').textContent = (VENUE_TYPES[v.type] || v.type) + (v.node < 0 ? ' · вне пешеходной сети' : '');
   $('pAddr').textContent = v.addr ? 'адрес: ' + v.addr : '';
@@ -161,8 +176,11 @@ function updatePopup() {
   $('pRate').textContent = 'рейтинг в скелетах: ' + skulls(v, maxVisits()) + ` (${v.visits} заход${v.visits % 10 === 1 && v.visits % 100 !== 11 ? '' : 'ов'})`;
   $('pInside').textContent = v.inside ? `сейчас внутри: ${v.inside} скел.` : 'сейчас пусто, заходи';
 }
-$('pClose').onclick = () => { $('popup').hidden = true; popupVenue = null; };
-$('pGo').onclick = () => { if (!popupVenue || !game.player) return; game.select(true); game.clickVenue(popupVenue); follow = game.player; $('bFollow').classList.add('on'); };
+$('pClose').onclick = () => { $('popup').hidden = true; popupVenue = null; popupTarot = null; };
+$('pGo').onclick = () => {
+  if (!game.player) return; game.select(true); follow = game.player; $('bFollow').classList.add('on');
+  if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.x, popupTarot.z);
+};
 
 // --- лента: места и афиша
 function renderPlaces() {
@@ -240,17 +258,19 @@ canvas.addEventListener('pointerup', e => {
     if (a === game.player && !game.selected) { game.select(true); showCard(a); }
     return;
   }
+  const th = ray.intersectObjects(tarot.pickables, false);
+  if (th.length) { showTarotMarker(tarot.byId[th[0].object.userData.tarot.id]); return; }
   const mh = ray.intersectObjects(markers.pickables, false);
   if (mh.length) { const v = mh[0].object.userData.venue; showVenue(v); game.clickVenue(v); return; }
   if (game.selected && onGround) { game.clickGround(hit.x, hit.z); return; }
-  if (popupVenue) { $('popup').hidden = true; popupVenue = null; }
+  if (popupVenue || popupTarot) { $('popup').hidden = true; popupVenue = null; popupTarot = null; }
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType !== 'mouse' || downAt) return;
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const onGround = !!ray.ray.intersectPlane(groundPlane, hit);
-  const over = (onGround && sim.pickAgent(ray, hit.x, hit.z)) || ray.intersectObjects(markers.pickables, false).length;
+  const over = (onGround && sim.pickAgent(ray, hit.x, hit.z)) || ray.intersectObjects(markers.pickables, false).length || ray.intersectObjects(tarot.pickables, false).length;
   canvas.style.cursor = over ? 'pointer' : game.selected ? 'crosshair' : 'grab';
 });
 addEventListener('pointerup', () => { downAt = null; });
@@ -276,8 +296,9 @@ function drawBubbles() {
     else if (a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }
   for (let i = n; i < pool.length; i++) pool[i].style.display = 'none';
-  if (popupVenue) {
-    v3.set(popupVenue.x, (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5, popupVenue.z).project(camera);
+  const pt = popupVenue || popupTarot;
+  if (pt) {
+    v3.set(pt.x, popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : 30 + tarot.size, pt.z).project(camera);
     $('popup').style.left = ((v3.x + 1) / 2 * w | 0) + 'px'; $('popup').style.top = ((1 - v3.y) / 2 * h | 0) + 'px';
   }
 }
@@ -299,8 +320,8 @@ function frame() {
   tiles.update(camera);
   // чем ближе камера, тем ближе скелет к человеческому росту
   const H = THREE.MathUtils.clamp(8 * Math.pow(3 / camera.zoom, 0.6), 2.4, 13);
-  if (Math.abs(H - sim.H) > 0.02) { sim.setHeight(H); markers.setScale(H); }
-  markers.update(clock.elapsedTime);
+  if (Math.abs(H - sim.H) > 0.02) { sim.setHeight(H); markers.setScale(H); tarot.setScale(H); }
+  markers.update(clock.elapsedTime); lms.update(clock.elapsedTime);
   const e = camera.matrixWorld.elements; sim.camRight.set(e[0], 0, e[2]).normalize();
   const sdt = dt * +ui.spd.value;
   sim.update(sdt);
@@ -315,5 +336,5 @@ renderPlaces();
 await tiles.ready(camera);
 frame();
 $('loading').remove();
-window.__app = { camera, controls, sim, game, tiles, venues, flyTo, showCard, showVenue, renderer, remote, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, flyTo, showCard, showVenue, renderer, remote, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест');

@@ -201,13 +201,17 @@ export function buildTile(t, M, seed = 1) {
   for (const r of t.river || []) fb.ribbon(r.p, 26, 0.2, new THREE.Color(C.water));
   const roadGeo = fb.build(); if (roadGeo) group.add(new THREE.Mesh(roadGeo, M.flat));
 
-  const bgeos = [];
+  const bgeos = []; const skip = M.skip || [], tarot = M.tarot || [];
   for (const b of t.buildings || []) {
+    const bx = b.p[0], bz = b.p[1];
+    if (skip.some(z => (bx - z[0]) ** 2 + (bz - z[1]) ** 2 < z[2] * z[2])) continue; // под особым зданием
     const sh = toShape(b.p, b.holes); if (!sh) continue;
+    // дом с арканой таро: зелёный
+    const marked = tarot.some(z => pointInPoly(z[0], z[1], b.p) || (bx - z[0]) ** 2 + (bz - z[1]) ** 2 < 30 * 30);
     try {
       const g = new THREE.ExtrudeGeometry(sh, { depth: b.h, bevelEnabled: false, curveSegments: 1 });
       g.rotateX(-Math.PI / 2);
-      bgeos.push(colorize(g, vary(C[b.t] || C.yes, hashf(b.p[0], b.p[1]), 0.18)));
+      bgeos.push(colorize(g, marked ? vary(0x5fe060, hashf(bx, bz), 0.1) : vary(C[b.t] || C.yes, hashf(bx, bz), 0.18)));
     } catch (e) { /* пропускаем */ }
   }
   if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); group.add(new THREE.Mesh(bgeo, M.building)); }
