@@ -71,24 +71,52 @@ def project(center):
     return lambda lat, lon: (round((lon - lon0) * kx, 1), round(-(lat - lat0) * kz, 1))
 
 
+class BadChunk(Exception):
+    """Overpass ответил 200, но результат битый: таймаут, нехватка памяти или подозрительно пусто."""
+
+
+def check(data):
+    remark = str(data.get('remark', ''))
+    if any(k in remark.lower() for k in ('error', 'timed out', 'timeout', 'memory')):
+        raise BadChunk(remark[:160])
+    if not data.get('elements'):
+        raise BadChunk('пустой ответ')
+    return data
+
+
 def fetch(server, s, w, n, e, cache_dir, pause):
     q = QUERY.format(s=s, w=w, n=n, e=e)
     key = hashlib.sha1((server + q).encode()).hexdigest()[:16]
     path = os.path.join(cache_dir, f'{s:.3f}_{w:.3f}_{key}.json')
     if os.path.exists(path):
-        with open(path, encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(path, encoding='utf-8') as f:
+                return check(json.load(f))
+        except (BadChunk, json.JSONDecodeError) as ex:
+            print(f'  кэш битый ({ex}), качаем заново', file=sys.stderr)
+            os.remove(path)
     body = urllib.parse.urlencode({'data': q}).encode()
     for attempt in range(6):
         try:
             req = urllib.request.Request(server, data=body, headers={'User-Agent': 'minsk-halloween-bake/1.0'})
             with urllib.request.urlopen(req, timeout=300) as r:
                 raw = r.read()
-            data = json.loads(raw)
+            data = check(json.loads(raw))
             with open(path, 'wb') as f:
                 f.write(raw)
+            print(f'  ок: {len(data["elements"])} объектов')
             time.sleep(pause)
             return data
+        except BadChunk as ex:
+            # пустой кусок на краю города бывает честно пустым: принимаем после второй попытки
+            if 'пустой' in str(ex) and attempt >= 1:
+                print('  пусто, принимаем как есть')
+                with open(path, 'wb') as f:
+                    f.write(raw)
+                return {'elements': []}
+            wait = 20 * (attempt + 1)
+            print(f'  Overpass вернул битый ответ ({ex}); повтор через {wait} с', file=sys.stderr)
+            time.sleep(wait)
         except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError) as ex:
             wait = 15 * (attempt + 1)
             print(f'  ошибка {ex}; повтор через {wait} с', file=sys.stderr)
@@ -201,9 +229,12 @@ def main():
         lat += CHUNK_LAT
     print(f'{len(chunks)} запросов к {args.server}')
 
+    thin = []
     for i, (s, w, n, e) in enumerate(chunks):
         print(f'[{i + 1}/{len(chunks)}] {s:.3f},{w:.3f} – {n:.3f},{e:.3f}')
         res = fetch(args.server, s, w, n, e, cache_dir, args.pause)
+        if len(res.get('elements', [])) < 200:
+            thin.append((i + 1, len(res.get('elements', []))))
         for el in res.get('elements', []):
             uid = el['type'][0] + str(el['id'])
             if uid in seen:
@@ -302,6 +333,8 @@ def main():
                 per[key] = c + 1
         data['trees'] = kept
 
+    if thin:
+        print('подозрительно пустые куски (номер: объектов):', ', '.join(f'{i}: {n}' for i, n in thin), '— если это не окраина, удали их файлы из tools/cache и перезапусти')
     print('зданий', len(data['buildings']), 'дорог', len(data['roads']), 'зелени', len(data['green']), 'воды', len(data['water']), 'деревьев', len(data['trees']), 'заведений', len(data['pois']))
     index = write_outputs(data, args.out, tile=args.tile, source=f'OpenStreetMap, Overpass {time.strftime("%Y-%m-%d")}')
     print('тайлов:', len(index['tiles']), 'bbox:', index['bbox'])
