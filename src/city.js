@@ -114,6 +114,43 @@ function pointInPoly(x, z, p) {
 }
 function polyArea(p) { let a = 0; for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) a += (p[j] * p[i + 1] - p[i] * p[j + 1]); return a / 2; }
 
+// маркеры заведений: зелёная пиксельная тыква парит над крышей
+function pumpkinTexture(glow) {
+  const cv = document.createElement('canvas'); cv.width = 18; cv.height = 18; const g = cv.getContext('2d');
+  const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  if (glow) { R(1, 4, 16, 13, '#ff8a2a'); R(2, 3, 14, 15, '#ff8a2a'); }
+  R(2, 5, 14, 11, '#4df21e'); R(3, 4, 12, 13, '#4df21e'); R(4, 3, 10, 1, '#4df21e');
+  R(5, 4, 1, 12, '#2fb312'); R(9, 3, 1, 14, '#2fb312'); R(12, 4, 1, 12, '#2fb312');
+  R(8, 1, 2, 3, '#1f5a12'); R(10, 1, 1, 1, '#1f5a12');
+  R(5, 7, 3, 2, '#0b0b0b'); R(10, 7, 3, 2, '#0b0b0b'); R(8, 10, 2, 1, '#0b0b0b');
+  R(5, 12, 8, 1, '#0b0b0b'); R(4, 11, 1, 1, '#0b0b0b'); R(13, 11, 1, 1, '#0b0b0b'); R(7, 13, 1, 1, '#0b0b0b'); R(10, 13, 1, 1, '#0b0b0b');
+  const tex = new THREE.CanvasTexture(cv); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+export function buildMarkers(venues, danceZones, data) {
+  const group = new THREE.Group();
+  const texA = pumpkinTexture(false), texB = pumpkinTexture(true);
+  const sprites = [];
+  for (const v of venues) {
+    // высота здания, в котором стоит заведение
+    let top = 6;
+    for (const b of data.buildings) if (pointInPoly(v.x, v.z, b.p)) { top = b.h; break; }
+    v.top = top;
+    const major = v.type === 'nightclub' || v.type === 'event' || v.events.length > 0;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: major ? texB : texA, transparent: true, alphaTest: 0.5, fog: false }));
+    sp.center.set(0.5, 0); sp.position.set(v.x, top + 2, v.z); sp.userData.venue = v; sp.userData.major = major; sp.userData.phase = Math.random() * 6;
+    group.add(sp); sprites.push(sp);
+  }
+  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x175a0e });
+  for (const z of danceZones) { const g = new THREE.TorusGeometry(z[3], 1.0, 4, 32); g.rotateX(Math.PI / 2); const m = new THREE.Mesh(g, zoneMat); m.position.set(z[0], 0.5, z[1]); group.add(m); }
+  let size = 7;
+  return {
+    group, pickables: sprites,
+    setScale(h) { size = h * 0.85; for (const sp of sprites) { const k = sp.userData.major ? 1.5 : 1; sp.scale.set(size * k, size * k, 1); } },
+    update(t) { for (const sp of sprites) sp.position.y = sp.userData.venue.top + 2 + Math.sin(t * 2 + sp.userData.phase) * 1.2; },
+  };
+}
+
 export function buildCity(data) {
   const group = new THREE.Group();
   const flatMat = new THREE.MeshLambertMaterial({ vertexColors: true });

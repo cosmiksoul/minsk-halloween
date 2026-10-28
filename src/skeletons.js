@@ -11,22 +11,26 @@ const EYES = ['#1b1326', '#1b1326', '#ff7a1a', '#7dff5a', '#ff3a3a', '#5ad8ff', 
 const CLOTH = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#2c3e50', '#e84393', '#6c5ce7', '#fdcb6e', '#00b894', '#b33939', '#218c74', '#474787', '#ffb142'];
 const DARK = '#1b1326';
 
+export const ACID = '#4df21e';
 export function randomCostume(rng, arch) {
-  return {
+  const c = {
     hat: pick(rng, arch.hats), body: pick(rng, arch.bodies), prop: pick(rng, arch.props),
     bone: pick(rng, BONES), eye: arch.id === 'vamp' ? '#ff3a3a' : pick(rng, EYES),
     c1: pick(rng, CLOTH), c2: pick(rng, CLOTH), c3: pick(rng, CLOTH),
   };
+  if (arch.id === 'raver') { const g = rng() < 0.5; c.c1 = g ? ACID : '#141414'; c.c2 = g ? '#141414' : ACID; c.c3 = ACID; c.eye = ACID; c.bone = '#e6f0d8'; }
+  return c;
 }
 
 // позы: ноги (стопы, колени), руки (кисти), сдвиг тела, предмет виден?
 function pose(f) {
   const P = { lf: [8, 35], rf: [15, 35], lk: [10, 31], rk: [13, 31], lh: [7, 25], rh: [16, 25], dy: 0, dx: 0, prop: true, mug: null, headDy: 0 };
   switch (f) {
-    case 0: Object.assign(P, { lf: [6, 35], rf: [17, 35], lk: [9, 31], rk: [14, 31], lh: [16, 23], rh: [7, 23] }); break;
-    case 1: Object.assign(P, { lf: [10, 35], rf: [13, 34], lk: [10, 31], rk: [13, 30], dy: -1 }); break;
-    case 2: Object.assign(P, { lf: [17, 35], rf: [6, 35], lk: [14, 31], rk: [9, 31], lh: [7, 23], rh: [16, 23] }); break;
-    case 3: Object.assign(P, { lf: [13, 35], rf: [10, 34], lk: [13, 31], rk: [10, 30], dy: -1 }); break;
+    // шаг: ноги почти под тазом, одна стопа впереди, другая сзади; при проносе нога приподнята и колено вперёд
+    case 0: Object.assign(P, { lf: [14, 35], rf: [9, 35], lk: [12, 31], rk: [11, 31], lh: [8, 24], rh: [16, 22] }); break;
+    case 1: Object.assign(P, { lf: [12, 35], rf: [12, 33], lk: [11, 31], rk: [13, 30], lh: [8, 25], rh: [16, 25], dy: -1 }); break;
+    case 2: Object.assign(P, { lf: [9, 35], rf: [14, 35], lk: [11, 31], rk: [13, 31], lh: [8, 22], rh: [16, 24] }); break;
+    case 3: Object.assign(P, { lf: [12, 33], rf: [12, 35], lk: [10, 30], rk: [12, 31], lh: [8, 25], rh: [16, 25], dy: -1 }); break;
     case 4: break;
     case 5: Object.assign(P, { lf: [6, 35], rf: [16, 35], lk: [8, 31], rk: [14, 31], lh: [3, 9], rh: [20, 9], dx: -1, prop: false }); break;
     case 6: Object.assign(P, { lf: [10, 35], rf: [15, 33], lk: [10, 31], rk: [15, 30], lh: [4, 15], rh: [21, 6], dy: -1, prop: false }); break;

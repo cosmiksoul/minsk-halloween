@@ -1,0 +1,19 @@
+{
+  "updated": "2026-10-28",
+  "sources": [
+    "https://bezkassira.by/events/party-minsk/",
+    "https://family.by/news/15463-kuda-shodit-s-rebenkom-na-hellouin-v-minske.html"
+  ],
+  "events": [
+    { "title": "Cypher: танцевальная вечеринка", "venue": "ЦЕХ2", "addr": "пр. Машерова, 11/2", "lat": 53.9157, "lon": 27.5694, "date": "2026-10-31", "time": "23:00–05:00", "price": "20 руб.", "age": "18+", "kind": "party", "desc": "Уличные танцы: хип-хоп, брейк, поппинг. Советуют удобную обувь.", "url": "https://bezkassira.by/cypher-tancevalnaya-vecherinka-minsk-227892/" },
+    { "title": "Bless: вечеринка в цирковой тематике", "venue": "375 Place", "addr": "пр. Машерова, 11", "lat": 53.9157, "lon": 27.5694, "date": "2026-10-31", "time": "23:59–06:00", "price": "20–30 руб.", "age": "18+", "kind": "party", "desc": "Цирковой декор, фотозоны, аквагрим, диджеи, артисты на ходулях и шоу.", "url": "https://bezkassira.by/bless-vozvrashhenie-vecherinka-v-cirkovoj-tematike-minsk-231315/" },
+    { "title": "Random party: хиты 2000–2026", "venue": "MVP", "addr": "пр. Независимости, 95к5", "lat": 53.9258, "lon": 27.6165, "date": "2026-10-31", "time": "23:55–05:00", "price": "20–30 руб.", "age": "18+", "kind": "party", "desc": "Городские диджеи, подарки на входе, фотограф.", "url": "https://bezkassira.by/random-party-minsk-231313/" },
+    { "title": "nkeeei, uniqe & Artem Shilovets", "venue": "Дворец спорта", "addr": "пр. Победителей, 4", "lat": 53.9108, "lon": 27.5497, "date": "2026-10-31", "time": "19:00", "price": "от 110 руб.", "age": "", "kind": "concert", "desc": "Поп-рэп трио с новой программой, около двух часов.", "url": "https://bezkassira.by/nkeeei-uniqe-artem-shilovets-216637/" },
+    { "title": "ZYNK | Дударев | Lifo", "venue": "RE:PUBLIC", "addr": "ул. Притыцкого, 62", "lat": 53.9085, "lon": 27.4613, "date": "2026-10-30", "time": "", "price": "", "age": "", "kind": "concert", "desc": "Концерт в клубе RE:PUBLIC, за пределами карты.", "url": "https://bezkassira.by/zynk-dudarev-lifo-224289/" },
+    { "title": "Бал-маскарад", "venue": "Мята Lounge Center", "addr": "пр. Независимости, 19", "date": "2026-10-31", "time": "11:00 и 15:00", "price": "", "age": "5+", "kind": "family", "desc": "Дефиле костюмов, конкурс на лучший образ, танцы и караоке-батл.", "url": "https://family.by/afisha/21847-prazdnik-bal-maskarad.html" },
+    { "title": "Halloween Brunch", "venue": "Отель «Пекин»", "addr": "ул. Красноармейская, 36", "lat": 53.8986, "lon": 27.5680, "date": "2026-10-31", "time": "17:00", "price": "", "age": "0+", "kind": "family", "desc": "Хэллоуинский бранч в отеле.", "url": "https://family.by/afisha/24889-halloween-brunch-v-otele-pekin.html" },
+    { "title": "Концерт-музыкотерапия «Ночь тишины»", "venue": "Prime Hall", "addr": "пр. Победителей, 65", "lat": 53.9212, "lon": 27.5275, "date": "2026-11-01", "time": "19:00", "price": "", "age": "12+", "kind": "concert", "desc": "Концерт между мирами, вечер 1 ноября.", "url": "https://family.by/afisha/24802-koncert-muzykoterapiya-noch-tishiny-mezhdu-mirami.html" },
+    { "title": "Жуткий маскарад", "venue": "GameRoom", "addr": "", "date": "2026-10-31", "time": "17:30", "price": "", "age": "7+", "kind": "family", "desc": "Детский маскарад.", "url": "https://family.by/afisha/24874-prazdnik-zhutkiy-maskarad.html" },
+    { "title": "Вечеринка «Очень странные дела»", "venue": "Family Club", "addr": "", "date": "2026-11-01", "time": "12:00", "price": "", "age": "3+", "kind": "family", "desc": "Семейная вечеринка.", "url": "https://family.by/afisha/24846-vecherinka-ochen-strannye-dela-v-femili-klab.html" }
+  ]
+}
