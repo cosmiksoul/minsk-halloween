@@ -52,7 +52,8 @@
         <label class="f">возраст <input id="mAge" type="number" min="18" max="120" value="30" required></label>
         <label class="f">занятие <input id="mJob" maxlength="60" placeholder="тестировщик в ПВТ" required></label>
         <label class="f">костюм <select id="mArch"></select></label>
-        <div class="btns"><button type="submit" class="green">запустить на карту</button><button type="button" id="bReroll">другой костюм</button></div>
+        <label class="f">о себе <textarea id="mAbout" maxlength="240" rows="3" placeholder="пару слов о скелете (необязательно)"></textarea></label>
+        <div class="btns"><button type="button" id="bGen" class="gen">🎲 нагенерить</button><button type="submit" class="green">запустить на карту</button><button type="button" id="bReroll">другой костюм</button></div>
       </form>
       <canvas id="minePic" width="72" height="108"></canvas>
       <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. По городу спрятаны 22 аркана таро — дома с зелёной аурой. У скелета 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
@@ -83,8 +84,9 @@
     <div class="line" id="cJob"></div>
     <div class="line muted" id="cStatus"></div>
     <div class="line muted" id="cState"></div>
+    <div class="line about" id="cAbout"></div>
     <div id="cGame"></div>
-    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bDeck" hidden>🃏 колода</button><button id="bPlay" hidden>играть за него</button><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
+    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bDeck" hidden>🃏 колода</button><button id="bShareCard" hidden>📣 поделиться</button><button id="bPlay" hidden>играть за него</button><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
   </div>
 </div>
 <div id="tip" hidden></div>
@@ -121,11 +123,32 @@
   </div>
 </div>
 
+<div id="shop" hidden>
+  <div class="dBox shBox">
+    <div class="dTitle">🛍 <span id="shName"></span><span id="shCoins" class="coins"></span><button class="x" id="shClose">×</button></div>
+    <div class="shRow"><canvas id="shBefore" width="24" height="36"></canvas><span class="arrow">→</span><canvas id="shAfter" width="24" height="36"></canvas><div id="shMsg" class="shMsg">выбери, что купить: вещь выпадает случайно</div></div>
+    <div class="btns" id="shopBtns"></div>
+    <div class="btns" id="shopFree"></div>
+    <div class="hint">монеты дают успешные броски (сладость или гадость), иногда они лежат на дорогах. Покупка — случайная вещь из категории, обмену и возврату не подлежит</div>
+  </div>
+</div>
+<div id="share" hidden>
+  <div class="dBox shrBox">
+    <div class="dTitle">📣 ПОДЕЛИТЬСЯ <span id="shrTok" class="coins"></span><button class="x" id="shrClose">×</button></div>
+    <div class="tabs2"><button class="on" data-f="post">пост</button><button data-f="story">сторис</button></div>
+    <div class="shrPrev"><canvas id="shrCv" width="1200" height="630"></canvas></div>
+    <div class="btns"><button id="shrDl">⬇ скачать PNG</button><button id="shrCopy">🔗 скопировать ссылку</button><button id="shrNative" hidden>📲 поделиться…</button></div>
+    <div class="btns socials"><button data-net="threads">Threads</button><button data-net="tg">Telegram</button><button data-net="fb">Facebook</button><button data-net="inst">Instagram</button><button data-net="vk">VK</button></div>
+    <div class="hint" id="shrHint">первая публикация даёт жетон спас-броска: им можно перебросить неудачный d20. Картинка скачивается, ссылка ведёт на твоего скелета; в Instagram и Threads картинку прикрепи вручную (на телефоне — через «поделиться…»)</div>
+  </div>
+</div>
+
 <div id="dice" hidden>
   <div id="diceTitle"></div>
   <canvas id="diceCv" width="72" height="72"></canvas>
   <div id="diceRes"></div>
   <div id="diceNum"></div>
+  <div id="diceSave" hidden><button id="dsYes" class="green">🎟 спас-бросок</button><button id="dsNo">оставить</button><div class="hint" id="dsHint"></div></div>
 </div>
 
 <div id="loading"><div class="skull">💀</div><div>собираем кости…</div></div>

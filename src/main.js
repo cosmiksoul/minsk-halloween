@@ -12,6 +12,9 @@ import { Game } from './game.js';
 import { local, makeRemote } from './store.js';
 import { buildLandmarks } from './landmarks.js';
 import { Tarot } from './tarot.js';
+import { Shops } from './shops.js';
+import { generateCharacter } from './gen.js';
+import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('c');
@@ -64,6 +67,7 @@ addEventListener('resize', resize); resize();
 const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspots: projectHotspots(index.center) });
 const markers = buildMarkers(venues, sim.danceZones); scene.add(markers.group); markers.setScale(sim.H);
 const tarot = new Tarot(scene, sim, index.center, lms.items); mats.tarot = tarot.zones; tarot.setScale(sim.H);
+const shops = new Shops(scene, sim, index.center); shops.setScale(sim.H);
 const POP0 = isMobile ? 200 : 600;
 sim.setPopulation(POP0);
 
@@ -73,12 +77,12 @@ const saveMine = () => local.save(mine);
 const remote = makeRemote(); let remoteTimer = 0;
 const b64 = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
-const shareLink = def => location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed }));
+const shareLink = def => { const g = def.game || {}; return location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed, o: def.costume || undefined, b: def.about ? def.about.slice(0, 240) : undefined, st: [(g.skulls || []).length, (g.friends || []).length, (g.tarot || []).length, (g.visits || []).length] })); };
 let fromLink = null;
-if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location.hash.slice(3))); fromLink = { name: o.n, gender: o.g, age: o.a, job: o.j, arch: o.c, seed: o.s, guest: true }; } catch { } }
+if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location.hash.slice(3))); fromLink = { name: o.n, gender: o.g, age: o.a, job: o.j, arch: o.c, seed: o.s, costume: o.o, about: o.b, stats: o.st, guest: true }; } catch { } }
 
 const game = new Game(sim, scene, {
-  tarot, save: saveMine,
+  tarot, shops, save: saveMine,
   showCard: (a, refresh) => showCard(a, refresh),
   onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } },
 });
@@ -114,6 +118,8 @@ $('bDelete').onclick = () => { const a = cardAgent; if (a === game.player) game.
 $('bPlay').onclick = () => { const a = cardAgent; if (!a || !a.custom || a.def.guest) return; game.setPlayer(a); game.select(true); follow = a; $('bFollow').classList.add('on'); showCard(a); renderMine(); };
 $('bSelect').onclick = () => { game.select(!game.selected); showCard(cardAgent); };
 $('bDeck').onclick = () => game.openDeck();
+$('bShareCard').onclick = () => openShare();
+$('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; previewMine(); };
 function openTab(name) { for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.tab === name); for (const id of ['places', 'events', 'mine']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id; if (isMobile) $('right').classList.add('showFeed'); }
 for (const t of document.querySelectorAll('.tab')) t.onclick = () => openTab(t.dataset.tab);
 addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.code === 'Space') { e.preventDefault(); $('bMe').onclick(); } });
@@ -135,7 +141,9 @@ function showCard(a, refresh) {
   $('bFollow').classList.toggle('on', follow === a);
   $('bShare').hidden = !a.custom; $('bDelete').hidden = !(a.custom && !a.def.guest);
   $('bPlay').hidden = !(a.custom && !a.def.guest && a !== game.player);
-  $('bDeck').hidden = a !== game.player; $('bSelect').hidden = a !== game.player; $('bSelect').textContent = game.selected ? 'снять выделение' : 'управлять'; $('bSelect').classList.toggle('on', game.selected);
+  $('cAbout').textContent = a.custom && a.def.about ? 'О себе: ' + a.def.about : '';
+  if (a.custom && a.def.guest && a.def.stats) $('cStatus').textContent += ` · 💀 ${a.def.stats[0]} · 💚 ${a.def.stats[1]} · 🃏 ${a.def.stats[2]} · 🎃 ${a.def.stats[3]}`;
+  $('bShareCard').hidden = a !== game.player; $('bDeck').hidden = a !== game.player; $('bSelect').hidden = a !== game.player; $('bSelect').textContent = game.selected ? 'снять выделение' : 'управлять'; $('bSelect').classList.toggle('on', game.selected);
 }
 // подсказки к черепам и сердечкам в карточке
 const tip = $('tip');
@@ -146,11 +154,17 @@ $('card').addEventListener('mouseout', e => { if (e.target.closest('[data-tip]')
 $('card').addEventListener('click', e => { const el = e.target.closest('[data-tip]'); if (el) { if (tip.hidden) showTip(el); else hideTip(); } });
 
 // --- заведения: всплывающая карточка
-let popupVenue = null, popupTarot = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
+let popupVenue = null, popupTarot = null, popupShop = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtDate = d => ({ '2026-10-29': '29 октября', '2026-10-30': '30 октября', '2026-10-31': '31 октября', '2026-11-01': '1 ноября', '2026-11-02': '2 ноября' }[d] || d);
+function showShopPopup(sh) {
+  popupShop = sh; popupTarot = null; popupVenue = null; $('popup').hidden = false;
+  $('pName').textContent = sh.name; $('pType').textContent = 'магазин одежды' + (sh.node < 0 ? ' · вне пешеходной сети' : ''); $('pAddr').textContent = sh.addr ? 'адрес: ' + sh.addr : '';
+  $('pHours').textContent = ''; $('pRate').textContent = ''; $('pInside').textContent = 'случайная вещь за монетки: шляпы, одежда, предметы, узоры, аксессуары'; $('pEvents').innerHTML = ''; $('pWeb').innerHTML = '';
+  $('pGo').hidden = !(game.player && sh.node >= 0); $('pGo').textContent = '🛍 зайти своим скелетом';
+}
 function showTarotMarker(it) {
-  popupTarot = it; popupVenue = null; $('popup').hidden = false;
+  popupTarot = it; popupVenue = null; popupShop = null; $('popup').hidden = false;
   const done = game.g && game.g.tarot.some(t => t.id === it.a.id);
   $('pName').textContent = done ? `${it.a.roman} · ${it.a.name}` : 'аркана таро';
   $('pType').textContent = done ? 'найдена' : 'ещё не найдена' + (it.node < 0 ? ' · вне пешеходной сети' : '');
@@ -160,7 +174,7 @@ function showTarotMarker(it) {
   $('pGo').hidden = !(game.player && it.node >= 0 && !done); $('pGo').textContent = '🃏 дойти своим скелетом';
 }
 function showVenue(v) {
-  popupVenue = v; popupTarot = null; $('popup').hidden = false; $('pGo').textContent = '🎃 зайти своим скелетом';
+  popupVenue = v; popupTarot = null; popupShop = null; $('popup').hidden = false; $('pGo').textContent = '🎃 зайти своим скелетом';
   $('pName').textContent = v.name;
   $('pType').textContent = (VENUE_TYPES[v.type] || v.type) + (v.node < 0 ? ' · вне пешеходной сети' : '');
   $('pAddr').textContent = v.addr ? 'адрес: ' + v.addr : '';
@@ -176,10 +190,10 @@ function updatePopup() {
   $('pRate').textContent = 'рейтинг в скелетах: ' + skulls(v, maxVisits()) + ` (${v.visits} заход${v.visits % 10 === 1 && v.visits % 100 !== 11 ? '' : 'ов'})`;
   $('pInside').textContent = v.inside ? `сейчас внутри: ${v.inside} скел.` : 'сейчас пусто, заходи';
 }
-$('pClose').onclick = () => { $('popup').hidden = true; popupVenue = null; popupTarot = null; };
+$('pClose').onclick = () => { $('popup').hidden = true; popupVenue = null; popupTarot = null; popupShop = null; };
 $('pGo').onclick = () => {
   if (!game.player) return; game.select(true); follow = game.player; $('bFollow').classList.add('on');
-  if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.x, popupTarot.z);
+  if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.x, popupTarot.z); else if (popupShop) game.clickShop(popupShop);
 };
 
 // --- лента: места и афиша
@@ -212,13 +226,13 @@ mArch.onchange = previewMine; $('bReroll').onclick = () => { mineSeed = Math.flo
 $('mineForm').onsubmit = e => {
   e.preventDefault();
   const age = Math.max(18, Math.min(120, +$('mAge').value || 18));
-  const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed };
+  const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed, about: $('mAbout').value.trim().slice(0, 240) };
   if (!def.name || !def.job) return;
   mine.push(def); saveMine();
   const a = sim.spawnCustom(def, controls.target.x, controls.target.z);
   game.setPlayer(a); game.select(true);
   showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on');
-  mineSeed = Math.floor(Math.random() * 1e9); previewMine(); renderMine();
+  mineSeed = Math.floor(Math.random() * 1e9); previewMine(); renderMine(); $('mAbout').value = '';
   if (isMobile) $('right').classList.remove('showFeed');
 };
 function renderMine() {
@@ -241,6 +255,30 @@ async function renderBoard() {
 }
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true }); } });
 
+// --- поделиться карточкой персонажа
+let shareFormat = 'post';
+async function renderShare() {
+  const p = game.player; if (!p) return;
+  await ensureFonts();
+  const friends = (p.followers || []).map(f => f.costume);
+  renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
+  $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
+}
+function openShare() { if (!game.player) return; $('share').hidden = false; $('shrNative').hidden = !navigator.share; renderShare(); }
+$('shrClose').onclick = () => { $('share').hidden = true; };
+for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
+const shareText = () => { const p = game.player, g = game.g; return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: 💀 ${g.skulls.length} · 💚 ${g.friends.length} · 🃏 ${g.tarot.length}/22 · 🎃 ${g.visits.length}`; };
+$('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
+$('shrCopy').onclick = async () => { const link = shareLink(game.player.def); try { await navigator.clipboard.writeText(link); $('shrCopy').textContent = 'скопировано'; setTimeout(() => $('shrCopy').textContent = '🔗 скопировать ссылку', 1500); } catch { prompt('Ссылка на скелета', link); } };
+$('shrNative').onclick = async () => { const ok = await nativeShare($('shrCv'), shareText(), shareLink(game.player.def)); if (ok) { game.onShared('native'); renderShare(); } else if (ok === false) download($('shrCv'), `skeleton-${shareFormat}.png`); };
+for (const b of document.querySelectorAll('.socials button')) b.onclick = () => {
+  const net = b.dataset.net; const link = shareLink(game.player.def); const t = shareTargets(link, shareText());
+  download($('shrCv'), `skeleton-${shareFormat}.png`);
+  if (net === 'inst') { navigator.clipboard?.writeText(shareText() + ' ' + link).catch(() => { }); }
+  open(t[net], '_blank', 'noopener');
+  game.onShared(net); renderShare();
+};
+
 // --- клики по сцене: скелеты, маркеры заведений, земля
 const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2(); let downAt = null; const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); const hit = new THREE.Vector3();
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY, e.button]; });
@@ -260,17 +298,19 @@ canvas.addEventListener('pointerup', e => {
   }
   const th = ray.intersectObjects(tarot.pickables, false);
   if (th.length) { showTarotMarker(tarot.byId[th[0].object.userData.tarot.id]); return; }
+  const sh = ray.intersectObjects(shops.pickables, false);
+  if (sh.length) { const it = sh[0].object.userData.shop; showShopPopup(it); game.clickShop(it); return; }
   const mh = ray.intersectObjects(markers.pickables, false);
   if (mh.length) { const v = mh[0].object.userData.venue; showVenue(v); game.clickVenue(v); return; }
   if (game.selected && onGround) { game.clickGround(hit.x, hit.z); return; }
-  if (popupVenue || popupTarot) { $('popup').hidden = true; popupVenue = null; popupTarot = null; }
+  if (popupVenue || popupTarot || popupShop) { $('popup').hidden = true; popupVenue = null; popupTarot = null; popupShop = null; }
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType !== 'mouse' || downAt) return;
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const onGround = !!ray.ray.intersectPlane(groundPlane, hit);
-  const over = (onGround && sim.pickAgent(ray, hit.x, hit.z)) || ray.intersectObjects(markers.pickables, false).length || ray.intersectObjects(tarot.pickables, false).length;
+  const over = (onGround && sim.pickAgent(ray, hit.x, hit.z)) || ray.intersectObjects(markers.pickables, false).length || ray.intersectObjects(tarot.pickables, false).length || ray.intersectObjects(shops.pickables, false).length;
   canvas.style.cursor = over ? 'pointer' : game.selected ? 'crosshair' : 'grab';
 });
 addEventListener('pointerup', () => { downAt = null; });
@@ -296,9 +336,9 @@ function drawBubbles() {
     else if (a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }
   for (let i = n; i < pool.length; i++) pool[i].style.display = 'none';
-  const pt = popupVenue || popupTarot;
+  const pt = popupVenue || popupTarot || popupShop;
   if (pt) {
-    v3.set(pt.x, popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : 30 + tarot.size, pt.z).project(camera);
+    v3.set(pt.x, popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : 30 + tarot.size, pt.z).project(camera);
     $('popup').style.left = ((v3.x + 1) / 2 * w | 0) + 'px'; $('popup').style.top = ((1 - v3.y) / 2 * h | 0) + 'px';
   }
 }
@@ -320,8 +360,8 @@ function frame() {
   tiles.update(camera);
   // чем ближе камера, тем ближе скелет к человеческому росту
   const H = THREE.MathUtils.clamp(8 * Math.pow(3 / camera.zoom, 0.6), 2.4, 13);
-  if (Math.abs(H - sim.H) > 0.02) { sim.setHeight(H); markers.setScale(H); tarot.setScale(H); }
-  markers.update(clock.elapsedTime); lms.update(clock.elapsedTime);
+  if (Math.abs(H - sim.H) > 0.02) { sim.setHeight(H); markers.setScale(H); tarot.setScale(H); shops.setScale(H); }
+  markers.update(clock.elapsedTime); lms.update(clock.elapsedTime); shops.update(clock.elapsedTime);
   const e = camera.matrixWorld.elements; sim.camRight.set(e[0], 0, e[2]).normalize();
   const sdt = dt * +ui.spd.value;
   sim.update(sdt);
@@ -336,5 +376,5 @@ renderPlaces();
 await tiles.ready(camera);
 frame();
 $('loading').remove();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, flyTo, showCard, showVenue, renderer, remote, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, renderShare, openShare, flyTo, showCard, showVenue, renderer, remote, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест');

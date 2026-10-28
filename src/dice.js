@@ -27,9 +27,10 @@ function drawD20(ctx, n, color, angle) {
 }
 
 // возвращает Promise с результатом броска, когда анимация закончилась
-export function rollDice(title, result = 1 + Math.floor(Math.random() * 20)) {
+export function hideDice() { const box = $('dice'); box.hidden = true; box.className = ''; }
+export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hold = false) {
   const box = $('dice'), cv = $('diceCv'), ctx = cv.getContext('2d');
-  box.hidden = false; box.className = 'rolling'; $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = '';
+  box.hidden = false; box.className = 'rolling'; $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = ''; $('diceSave').hidden = true;
   const kind = outcomeOf(result), out = OUTCOMES[kind];
   return new Promise(resolve => {
     const t0 = performance.now(); const dur = 1400; let last = 0;
@@ -42,7 +43,7 @@ export function rollDice(title, result = 1 + Math.floor(Math.random() * 20)) {
         drawD20(ctx, result, out.color, 0);
         box.className = 'done ' + kind; $('diceRes').textContent = out.label; $('diceRes').style.color = out.color; $('diceNum').textContent = `выпало ${result}`;
         setTimeout(() => { resolve({ n: result, kind }); }, 700);
-        setTimeout(() => { if (box.className.startsWith('done')) box.hidden = true; }, 2600);
+        if (!hold) setTimeout(() => { if (box.className.startsWith('done')) box.hidden = true; }, 2600);
       }
     };
     requestAnimationFrame(tick);
