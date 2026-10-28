@@ -6,7 +6,7 @@ const norm = s => (s || '').toLowerCase().replace(/[«»"'’`]/g, '').replace(/
 export function buildVenues(data, events) {
   const venues = data.pois
     .filter(p => p.n && /^(bar|pub|nightclub|biergarten)$/.test(p.t))
-    .map((p, i) => ({ id: i, name: p.n, type: p.t, x: p.x, z: p.z, addr: p.a || '', hours: p.h || '', web: p.w || '', visits: 0, inside: 0, events: [] }));
+    .map((p, i) => ({ id: i, name: p.n, type: p.t, x: p.x, z: p.z, addr: p.a || '', hours: p.h || '', web: p.w || '', top: p.top, visits: 0, inside: 0, events: [] }));
   const [lat0, lon0] = data.center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
   for (const ev of events) {
     let v = null;

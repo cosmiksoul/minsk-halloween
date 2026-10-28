@@ -82,3 +82,61 @@ button.green:hover { background:#7cff52; color:var(--black); }
   #card { right:12px; }
   #popup { width:min(280px, calc(100vw - 24px)); }
 }
+
+/* --- игра: HUD, карточка игрока, диалог, кубик, подсказки */
+#hud { position:fixed; left:12px; top:12px; z-index:4; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:11px; max-width:300px; cursor:pointer; backdrop-filter:blur(4px); display:flex; flex-direction:column; gap:4px; }
+#hud.has { border-color:var(--green); }
+.hudName { font-family:"Press Start 2P", monospace; font-size:8px; color:var(--green); line-height:1.5; }
+.hudRow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
+.hudHint { color:var(--muted); font-size:9px; line-height:1.4; }
+i.hp { font-style:normal; color:#3a2a55; font-size:16px; line-height:1; margin-right:1px; }
+i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
+.sh { background:#2a1a08; border:1px solid var(--accent); border-radius:4px; padding:0 4px; font-size:11px; color:var(--accent); }
+.sh small { font-size:8px; margin-left:2px; }
+.skc { color:var(--green); } .frc { color:#7cff52; } .vc { color:var(--accent); } .dc { color:#ff5f5f; }
+#cGame .gm { margin-top:2px; }
+#cGame .line { line-height:1.5; }
+.sk, .fr { display:inline-block; cursor:help; font-size:13px; margin-right:1px; filter:drop-shadow(0 0 2px #4df21e); }
+.sk { filter:hue-rotate(70deg) saturate(3) drop-shadow(0 0 2px #4df21e); }
+.vis { color:var(--muted); font-size:10px; }
+.name.player { color:var(--green); } .name.ghost { color:#9dff7a; }
+.line.ghost { color:#9dff7a; } .line.friend { color:#7cff52; }
+#tip { position:fixed; z-index:9; background:var(--black); color:#e9f7e0; border:2px solid var(--green); border-radius:6px; padding:6px 8px; font-size:10px; line-height:1.5; max-width:260px; pointer-events:none; box-shadow:2px 2px 0 var(--green); }
+#tip[hidden] { display:none; }
+#tip b { color:var(--green); }
+.bub.tag.me { color:var(--accent); border-color:var(--accent); box-shadow:2px 2px 0 var(--accent); } .bub.tag.me::after { border-top-color:var(--accent); }
+.bub.tag.fr { font-size:9px; padding:2px 3px; }
+body.playing #c { cursor:crosshair; }
+
+#ask { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
+#ask[hidden] { display:none; }
+#askPic { image-rendering:pixelated; background:#1b1326; border:1px solid var(--line); border-radius:4px; align-self:flex-start; }
+.askBody { display:flex; flex-direction:column; gap:4px; flex:1; }
+.askTitle { font-family:"Press Start 2P", monospace; font-size:9px; color:var(--accent); line-height:1.5; }
+.askBtns { display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
+.askBtns button { font-size:11px; padding:6px 8px; }
+button.sweet { background:#ff5fa2; color:var(--black); border-color:#ff5fa2; font-weight:700; } button.sweet:hover { background:#ff8ac0; color:var(--black); }
+button.trick { background:var(--green); color:var(--black); border-color:var(--green); font-weight:700; } button.trick:hover { background:#7cff52; color:var(--black); }
+
+#dice { position:fixed; left:50%; top:38%; transform:translate(-50%,-50%); z-index:8; pointer-events:none; display:flex; flex-direction:column; align-items:center; gap:8px; font-family:"Press Start 2P", monospace; font-size:9px; color:var(--ink); text-shadow:2px 2px 0 var(--black); }
+#dice[hidden] { display:none; }
+#diceCv { width:144px; height:144px; image-rendering:pixelated; }
+#dice.rolling #diceCv { animation:shake .14s infinite; }
+#dice.done #diceCv { animation:pop .35s ease-out; }
+#diceTitle { background:var(--black); padding:5px 8px; border-radius:4px; border:1px solid var(--line); font-size:8px; max-width:320px; text-align:center; line-height:1.5; }
+#diceRes { font-size:12px; } #diceNum { font-size:8px; color:var(--muted); }
+@keyframes shake { 0% { transform:translate(-3px,2px) rotate(-6deg) } 50% { transform:translate(3px,-2px) rotate(6deg) } 100% { transform:translate(-2px,-2px) rotate(-3deg) } }
+@keyframes pop { 0% { transform:scale(1.6) } 60% { transform:scale(0.9) } 100% { transform:scale(1) } }
+#mineList .item.cur { border-color:var(--green); }
+#mineList .item .play { padding:2px 6px; font-size:9px; align-self:start; }
+#mineList .item .k { background:var(--green); }
+#board .item { grid-template-columns:1fr auto; cursor:default; }
+#pGo { margin-top:4px; }
+
+@media (max-width: 700px) {
+  #hud { max-width:calc(100vw - 110px); padding:6px 8px; }
+  .hudHint { display:none; }
+  #card { right:12px; }
+  #ask { bottom:12px; }
+  #dice { top:34%; }
+}
