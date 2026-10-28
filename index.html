@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Хэллоуин в Минске</title>
-<meta name="description" content="Пиксельный центр Минска, по которому гуляют, пьют пиво и танцуют случайные скелеты. Бары, клубы и афиша ночи на 1 ноября.">
+<meta name="description" content="Пиксельный Минск, по которому гуляют, пьют пиво и танцуют скелеты. Создай своего, собирай конфеты, заходи в бары и бросай d20: сладость или гадость?">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -14,26 +14,30 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
 } }
 </script>
+<script src="config.js"></script>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="bubbles"></div>
+
+<div id="hud"></div>
 
 <div id="right">
   <div id="panel">
     <div class="title">ХЭЛЛОУИН В МИНСКЕ<button id="bFeed" title="лента">лента</button><button id="bFold" title="свернуть">–</button></div>
     <div class="body">
       <div class="stats"><b id="stPop">0</b> скелетов · <b id="stMeet">0</b> встреч · <b id="stBeer">0</b> пива · <b id="stDance">0</b> танцев</div>
-      <label>население <input type="range" id="pop" min="50" max="1000" step="10" value="500"><span id="popV">500</span></label>
+      <label>население <input type="range" id="pop" min="50" max="3000" step="50" value="600"><span id="popV">600</span></label>
       <label>скорость <input type="range" id="spd" min="0.5" max="6" step="0.5" value="1.5"><span id="spdV">1,5×</span></label>
       <label>пиксель <input type="range" id="pix" min="1" max="5" step="1" value="2"><span id="pixV">2</span></label>
       <div class="btns">
+        <button id="bMe" title="к своему скелету (пробел)">🦴 мой скелет</button>
         <button id="bRot" title="повернуть камеру">⟲ поворот</button>
-        <button id="bRand">случайный скелет</button>
+        <button id="bRand">случайный</button>
         <button id="bParty">🎃 вечеринка</button>
         <button id="bReset">сброс</button>
       </div>
-      <div class="hint">перетаскивай · колесо — зум · правая кнопка — поворот · клик по скелету — кто это · клик по зелёной тыкве — заведение</div>
+      <div class="hint">перетаскивай · колесо — зум · правая кнопка — поворот · клик по скелету — кто это · клик по тыкве — заведение · свой скелет: клик по нему, потом по карте — идёт; по чужому скелету — сладость или гадость</div>
     </div>
   </div>
 
@@ -51,8 +55,9 @@
         <div class="btns"><button type="submit" class="green">запустить на карту</button><button type="button" id="bReroll">другой костюм</button></div>
       </form>
       <canvas id="minePic" width="72" height="108"></canvas>
-      <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
+      <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. У него 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
       <div id="mineList"></div>
+      <div id="board"></div>
     </div>
   </div>
 </div>
@@ -67,6 +72,7 @@
   <div class="line" id="pInside"></div>
   <div id="pEvents"></div>
   <div class="line" id="pWeb"></div>
+  <div class="line"><button id="pGo" hidden>🎃 зайти своим скелетом</button></div>
 </div>
 
 <div id="card" hidden>
@@ -77,8 +83,28 @@
     <div class="line" id="cJob"></div>
     <div class="line muted" id="cStatus"></div>
     <div class="line muted" id="cState"></div>
-    <div class="cardBtns"><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
+    <div id="cGame"></div>
+    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bPlay" hidden>играть за него</button><button id="bFollow">следить</button><button id="bShare" hidden>ссылка</button><button id="bDelete" hidden>удалить</button><button id="bClose">закрыть</button></div>
   </div>
+</div>
+<div id="tip" hidden></div>
+
+<div id="ask" hidden>
+  <canvas id="askPic" width="48" height="72"></canvas>
+  <div class="askBody">
+    <div class="askTitle">Сладость или гадость?</div>
+    <div class="line" id="askName"></div>
+    <div class="line muted" id="askMeta"></div>
+    <div class="askBtns"><button id="askSweet" class="sweet">🍬 Сладость</button><button id="askTrick" class="trick">💀 Гадость</button><button id="askNo">мимо</button></div>
+    <div class="hint">d20: 1 — крит. провал (−2 ❤ и минус череп или друг), 2–10 — провал (−1 ❤), 11–19 — успех, 20 — крит. успех (+1 ❤)</div>
+  </div>
+</div>
+
+<div id="dice" hidden>
+  <div id="diceTitle"></div>
+  <canvas id="diceCv" width="72" height="72"></canvas>
+  <div id="diceRes"></div>
+  <div id="diceNum"></div>
 </div>
 
 <div id="loading"><div class="skull">💀</div><div>собираем кости…</div></div>

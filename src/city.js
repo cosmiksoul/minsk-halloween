@@ -1,4 +1,5 @@
-// Сборка города из запечённых OSM-данных: здания, дороги, вода, парки, деревья, тыквы, фонари.
+// Сборка города из запечённых OSM-данных по тайлам: здания, дороги, вода, парки,
+// деревья, тыквы у подъездов, фонари. Каждый тайл — своя группа, которую можно выгрузить.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -11,7 +12,9 @@ const vary = (hex, seed, amt = 0.12) => {
   const c = new THREE.Color(hex); const k = 1 + (seed - 0.5) * 2 * amt;
   c.r = Math.min(1, c.r * k); c.g = Math.min(1, c.g * k); c.b = Math.min(1, c.b * k); return c;
 };
-const rnd = (() => { let s = 1234567; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; })();
+// детерминированный шум по координате: цвет здания не меняется при перезагрузке тайла
+const hashf = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
+const makeRnd = seed => { let s = (seed >>> 0) || 1234567; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
 
 function toShape(p, holes) {
   const pts = []; for (let i = 0; i < p.length; i += 2) pts.push(new THREE.Vector2(p[i], -p[i + 1]));
@@ -67,6 +70,7 @@ class FlatBuilder {
     }
   }
   build() {
+    if (!this.pos.length) return null;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
@@ -104,7 +108,7 @@ function buildingMaterial() {
   return m;
 }
 
-function pointInPoly(x, z, p) {
+export function pointInPoly(x, z, p) {
   let inside = false;
   for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
     const xi = p[i], zi = p[i + 1], xj = p[j], zj = p[j + 1];
@@ -114,34 +118,32 @@ function pointInPoly(x, z, p) {
 }
 function polyArea(p) { let a = 0; for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) a += (p[j] * p[i + 1] - p[i] * p[j + 1]); return a / 2; }
 
-// маркеры заведений: зелёная пиксельная тыква парит над крышей
+// --- маркеры заведений: оранжевая пиксельная тыква парит над крышей
 function pumpkinTexture(glow) {
   const cv = document.createElement('canvas'); cv.width = 18; cv.height = 18; const g = cv.getContext('2d');
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-  if (glow) { R(1, 4, 16, 13, '#ff8a2a'); R(2, 3, 14, 15, '#ff8a2a'); }
-  R(2, 5, 14, 11, '#4df21e'); R(3, 4, 12, 13, '#4df21e'); R(4, 3, 10, 1, '#4df21e');
-  R(5, 4, 1, 12, '#2fb312'); R(9, 3, 1, 14, '#2fb312'); R(12, 4, 1, 12, '#2fb312');
-  R(8, 1, 2, 3, '#1f5a12'); R(10, 1, 1, 1, '#1f5a12');
-  R(5, 7, 3, 2, '#0b0b0b'); R(10, 7, 3, 2, '#0b0b0b'); R(8, 10, 2, 1, '#0b0b0b');
-  R(5, 12, 8, 1, '#0b0b0b'); R(4, 11, 1, 1, '#0b0b0b'); R(13, 11, 1, 1, '#0b0b0b'); R(7, 13, 1, 1, '#0b0b0b'); R(10, 13, 1, 1, '#0b0b0b');
+  if (glow) { R(1, 4, 16, 13, '#ffd23a'); R(2, 3, 14, 15, '#ffd23a'); }
+  R(2, 5, 14, 11, '#ff8a2a'); R(3, 4, 12, 13, '#ff8a2a'); R(4, 3, 10, 1, '#ff8a2a');
+  R(5, 4, 1, 12, '#d05a10'); R(9, 3, 1, 14, '#d05a10'); R(12, 4, 1, 12, '#d05a10');
+  R(8, 1, 2, 3, '#2fb312'); R(10, 1, 1, 1, '#2fb312');
+  R(5, 7, 3, 2, '#1b0b0b'); R(10, 7, 3, 2, '#1b0b0b'); R(8, 10, 2, 1, '#1b0b0b');
+  R(5, 12, 8, 1, '#1b0b0b'); R(4, 11, 1, 1, '#1b0b0b'); R(13, 11, 1, 1, '#1b0b0b'); R(7, 13, 1, 1, '#1b0b0b'); R(10, 13, 1, 1, '#1b0b0b');
+  if (glow) { R(6, 7, 1, 1, '#ffd23a'); R(11, 7, 1, 1, '#ffd23a'); }
   const tex = new THREE.CanvasTexture(cv); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
-export function buildMarkers(venues, danceZones, data) {
+export function buildMarkers(venues, danceZones) {
   const group = new THREE.Group();
   const texA = pumpkinTexture(false), texB = pumpkinTexture(true);
   const sprites = [];
   for (const v of venues) {
-    // высота здания, в котором стоит заведение
-    let top = 6;
-    for (const b of data.buildings) if (pointInPoly(v.x, v.z, b.p)) { top = b.h; break; }
-    v.top = top;
+    if (v.top == null) v.top = 6;
     const major = v.type === 'nightclub' || v.type === 'event' || v.events.length > 0;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: major ? texB : texA, transparent: true, alphaTest: 0.5, fog: false }));
-    sp.center.set(0.5, 0); sp.position.set(v.x, top + 2, v.z); sp.userData.venue = v; sp.userData.major = major; sp.userData.phase = Math.random() * 6;
+    sp.center.set(0.5, 0); sp.position.set(v.x, v.top + 2, v.z); sp.userData.venue = v; sp.userData.major = major; sp.userData.phase = Math.random() * 6;
     group.add(sp); sprites.push(sp);
   }
-  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x175a0e });
+  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x5a2a0e });
   for (const z of danceZones) { const g = new THREE.TorusGeometry(z[3], 1.0, 4, 32); g.rotateX(Math.PI / 2); const m = new THREE.Mesh(g, zoneMat); m.position.set(z[0], 0.5, z[1]); group.add(m); }
   let size = 7;
   return {
@@ -151,46 +153,70 @@ export function buildMarkers(venues, danceZones, data) {
   };
 }
 
-export function buildCity(data) {
+// --- общие материалы и геометрии для всех тайлов
+export function makeMaterials() {
+  return {
+    flat: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    water: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x0b1a3a, emissiveIntensity: 0.6 }),
+    building: buildingMaterial(),
+    tree: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    trunk: new THREE.MeshLambertMaterial({ color: 0x2b1d2a }),
+    pumpkin: new THREE.MeshLambertMaterial({ color: 0xd05a10, emissive: 0xff7a1a, emissiveIntensity: 0.7 }),
+    lamp: new THREE.PointsMaterial({ color: 0xffb75a, size: 1.6, sizeAttenuation: false }),
+    cone: new THREE.ConeGeometry(2.0, 6.5, 5), blob: new THREE.IcosahedronGeometry(2.4, 0), trunkG: new THREE.CylinderGeometry(0.35, 0.5, 3.2, 5),
+    pumpG: (() => { const g = new THREE.SphereGeometry(0.9, 6, 4); g.scale(1, 0.75, 1); return g; })(),
+  };
+}
+
+export function buildGround(size = 60000) {
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshLambertMaterial({ color: C.ground }));
+  ground.rotateX(-Math.PI / 2); ground.position.y = -0.05; return ground;
+}
+
+const W = { major: 14, minor: 9, service: 4.5, path: 2.6 }, Y = { major: 0.42, minor: 0.38, service: 0.32, path: 0.28 };
+
+// большие полигоны (парки, озёра), которые не влезают в тайл — рисуются всегда
+export function buildBig(big, M) {
   const group = new THREE.Group();
-  const flatMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const green = flatPolys(big.green || [], 0.12, it => vary(it.f ? C.forest : C.green, hashf(it.p[0], it.p[1]), 0.15));
+  if (green) group.add(new THREE.Mesh(green, M.flat));
+  const water = flatPolys(big.water || [], 0.18, () => new THREE.Color(C.water));
+  if (water) group.add(new THREE.Mesh(water, M.water));
+  return group;
+}
 
-  // земля
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshLambertMaterial({ color: C.ground }));
-  ground.rotateX(-Math.PI / 2); ground.position.y = -0.05; group.add(ground);
+// один тайл карты
+export function buildTile(t, M, seed = 1) {
+  const group = new THREE.Group(); const rnd = makeRnd(seed * 2654435761);
+  const stats = { trees: 0 };
 
-  // парки, вода
-  const green = flatPolys(data.green, 0.12, it => vary(it.f ? C.forest : C.green, rnd(), 0.15));
-  if (green) group.add(new THREE.Mesh(green, flatMat));
-  const water = flatPolys(data.water, 0.18, () => new THREE.Color(C.water));
-  if (water) group.add(new THREE.Mesh(water, new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x0b1a3a, emissiveIntensity: 0.6 })));
+  const green = flatPolys(t.green || [], 0.12, it => vary(it.f ? C.forest : C.green, hashf(it.p[0], it.p[1]), 0.15));
+  if (green) group.add(new THREE.Mesh(green, M.flat));
+  const water = flatPolys(t.water || [], 0.18, () => new THREE.Color(C.water));
+  if (water) group.add(new THREE.Mesh(water, M.water));
 
-  // дороги, рельсы, река
   const fb = new FlatBuilder();
-  const W = { major: 14, minor: 9, service: 4.5, path: 2.6 }, Y = { major: 0.42, minor: 0.38, service: 0.32, path: 0.28 };
-  for (const r of data.roads) fb.ribbon(r.p, r.w && r.k !== 'path' ? Math.min(r.w, 24) : W[r.k], Y[r.k], new THREE.Color(C[r.k]));
-  for (const r of data.rails) fb.ribbon(r.p, r.k === 'tram' ? 2.2 : 3.2, 0.45, new THREE.Color(C.rail));
-  for (const r of data.river) fb.ribbon(r.p, 26, 0.2, new THREE.Color(C.water));
-  group.add(new THREE.Mesh(fb.build(), flatMat));
+  for (const r of t.roads || []) fb.ribbon(r.p, r.w && r.k !== 'path' ? Math.min(r.w, 24) : W[r.k], Y[r.k], new THREE.Color(C[r.k]));
+  for (const r of t.rails || []) fb.ribbon(r.p, r.k === 'tram' ? 2.2 : 3.2, 0.45, new THREE.Color(C.rail));
+  for (const r of t.river || []) fb.ribbon(r.p, 26, 0.2, new THREE.Color(C.water));
+  const roadGeo = fb.build(); if (roadGeo) group.add(new THREE.Mesh(roadGeo, M.flat));
 
-  // здания
   const bgeos = [];
-  for (const b of data.buildings) {
+  for (const b of t.buildings || []) {
     const sh = toShape(b.p, b.holes); if (!sh) continue;
     try {
       const g = new THREE.ExtrudeGeometry(sh, { depth: b.h, bevelEnabled: false, curveSegments: 1 });
       g.rotateX(-Math.PI / 2);
-      bgeos.push(colorize(g, vary(C[b.t] || C.yes, rnd(), 0.18)));
+      bgeos.push(colorize(g, vary(C[b.t] || C.yes, hashf(b.p[0], b.p[1]), 0.18)));
     } catch (e) { /* пропускаем */ }
   }
-  const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals();
-  group.add(new THREE.Mesh(bgeo, buildingMaterial()));
+  if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); group.add(new THREE.Mesh(bgeo, M.building)); }
 
   // деревья: из OSM плюс насыпанные в парки
-  const treePts = data.trees.map(t => [t[0], t[1]]);
-  for (const g of data.green) {
+  const treePts = (t.trees || []).map(tr => [tr[0], tr[1]]);
+  for (const g of t.green || []) {
     const a = Math.abs(polyArea(g.p)); if (a < 200) continue;
-    let n = Math.min(400, Math.floor(a / 260));
+    let n = Math.min(300, Math.floor(a / 260));
     let xs = Infinity, xe = -Infinity, zs = Infinity, ze = -Infinity;
     for (let i = 0; i < g.p.length; i += 2) { xs = Math.min(xs, g.p[i]); xe = Math.max(xe, g.p[i]); zs = Math.min(zs, g.p[i + 1]); ze = Math.max(ze, g.p[i + 1]); }
     let tries = n * 6;
@@ -201,46 +227,50 @@ export function buildCity(data) {
       treePts.push([x, z]); n--;
     }
   }
-  const crownCols = [0xd2601a, 0xe0a020, 0xb0301a, 0x2a4a28, 0x3a2650, 0x7a3a14, 0x355a2a];
-  const cone = new THREE.ConeGeometry(2.0, 6.5, 5), blob = new THREE.IcosahedronGeometry(2.4, 0), trunk = new THREE.CylinderGeometry(0.35, 0.5, 3.2, 5);
-  const treeMat = new THREE.MeshLambertMaterial({ color: 0xffffff }); // цвет задаётся на инстанс
-  const coneM = new THREE.InstancedMesh(cone, treeMat, treePts.length);
-  const blobM = new THREE.InstancedMesh(blob, treeMat, treePts.length);
-  const trunkM = new THREE.InstancedMesh(trunk, new THREE.MeshLambertMaterial({ color: 0x2b1d2a }), treePts.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  let nc = 0, nb = 0;
-  treePts.forEach(([x, z], i) => {
-    const sc = 0.7 + rnd() * 0.8, isCone = rnd() < 0.35;
-    q.identity();
-    m4.compose(v.set(x, 1.6 * sc, z), q, s.set(sc, sc, sc)); trunkM.setMatrixAt(i, m4);
-    const col = new THREE.Color(crownCols[Math.floor(rnd() * crownCols.length)]);
-    q.setFromAxisAngle(up, rnd() * 6);
-    if (isCone) { m4.compose(v.set(x, 6.4 * sc, z), q, s.set(sc, sc, sc)); coneM.setMatrixAt(nc, m4); coneM.setColorAt(nc, col); nc++; }
-    else { m4.compose(v.set(x, 4.8 * sc, z), q, s.set(sc, sc * 0.9, sc)); blobM.setMatrixAt(nb, m4); blobM.setColorAt(nb, col); nb++; }
-  });
-  coneM.count = nc; blobM.count = nb; group.add(coneM, blobM, trunkM);
+  if (treePts.length) {
+    const crownCols = [0xd2601a, 0xe0a020, 0xb0301a, 0x2a4a28, 0x3a2650, 0x7a3a14, 0x355a2a];
+    const coneM = new THREE.InstancedMesh(M.cone, M.tree, treePts.length);
+    const blobM = new THREE.InstancedMesh(M.blob, M.tree, treePts.length);
+    const trunkM = new THREE.InstancedMesh(M.trunkG, M.trunk, treePts.length);
+    let nc = 0, nb = 0;
+    treePts.forEach(([x, z], i) => {
+      const sc = 0.7 + rnd() * 0.8, isCone = rnd() < 0.35;
+      q.identity();
+      m4.compose(v.set(x, 1.6 * sc, z), q, s.set(sc, sc, sc)); trunkM.setMatrixAt(i, m4);
+      const col = new THREE.Color(crownCols[Math.floor(rnd() * crownCols.length)]);
+      q.setFromAxisAngle(up, rnd() * 6);
+      if (isCone) { m4.compose(v.set(x, 6.4 * sc, z), q, s.set(sc, sc, sc)); coneM.setMatrixAt(nc, m4); coneM.setColorAt(nc, col); nc++; }
+      else { m4.compose(v.set(x, 4.8 * sc, z), q, s.set(sc, sc * 0.9, sc)); blobM.setMatrixAt(nb, m4); blobM.setColorAt(nb, col); nb++; }
+    });
+    coneM.count = nc; blobM.count = nb;
+    for (const im of [coneM, blobM, trunkM]) { im.frustumCulled = false; }
+    group.add(coneM, blobM, trunkM);
+    stats.trees = treePts.length;
+  }
 
   // тыквы у подъездов
-  const pumpN = Math.min(700, data.buildings.length);
-  const pumpG = new THREE.SphereGeometry(0.9, 6, 4); pumpG.scale(1, 0.75, 1);
-  const pumpM = new THREE.InstancedMesh(pumpG, new THREE.MeshLambertMaterial({ color: 0xd05a10, emissive: 0xff7a1a, emissiveIntensity: 0.7 }), pumpN);
-  q.identity();
-  let np = 0;
-  for (let k = 0; k < pumpN; k++) {
-    const b = data.buildings[Math.floor(rnd() * data.buildings.length)]; const p = b.p; if (p.length < 8) continue;
-    const i = Math.floor(rnd() * (p.length / 2 - 1)) * 2;
-    const x0 = p[i], z0 = p[i + 1], x1 = p[i + 2], z1 = p[i + 3]; const len = Math.hypot(x1 - x0, z1 - z0); if (len < 4) continue;
-    const t = 0.3 + rnd() * 0.4; let nx = -(z1 - z0) / len, nz = (x1 - x0) / len;
-    if (polyArea(p) > 0) { nx = -nx; nz = -nz; }
-    const sc = 0.7 + rnd() * 0.6;
-    m4.compose(v.set(x0 + (x1 - x0) * t + nx * 1.6, 0.6 * sc, z0 + (z1 - z0) * t + nz * 1.6), q, s.set(sc, sc, sc));
-    pumpM.setMatrixAt(np++, m4);
+  const blds = t.buildings || [];
+  const pumpN = Math.min(90, blds.length);
+  if (pumpN) {
+    const pumpM = new THREE.InstancedMesh(M.pumpG, M.pumpkin, pumpN); pumpM.frustumCulled = false;
+    q.identity(); let np = 0;
+    for (let k = 0; k < pumpN; k++) {
+      const b = blds[Math.floor(rnd() * blds.length)]; const p = b.p; if (p.length < 8) continue;
+      const i = Math.floor(rnd() * (p.length / 2 - 1)) * 2;
+      const x0 = p[i], z0 = p[i + 1], x1 = p[i + 2], z1 = p[i + 3]; const len = Math.hypot(x1 - x0, z1 - z0); if (len < 4) continue;
+      const tt = 0.3 + rnd() * 0.4; let nx = -(z1 - z0) / len, nz = (x1 - x0) / len;
+      if (polyArea(p) > 0) { nx = -nx; nz = -nz; }
+      const sc = 0.7 + rnd() * 0.6;
+      m4.compose(v.set(x0 + (x1 - x0) * tt + nx * 1.6, 0.6 * sc, z0 + (z1 - z0) * tt + nz * 1.6), q, s.set(sc, sc, sc));
+      pumpM.setMatrixAt(np++, m4);
+    }
+    pumpM.count = np; group.add(pumpM);
   }
-  pumpM.count = np; group.add(pumpM);
 
   // фонари вдоль улиц
   const lp = [];
-  for (const r of data.roads) {
+  for (const r of t.roads || []) {
     if (r.k !== 'major' && r.k !== 'minor') continue;
     const hw = W[r.k] / 2 + 1.5; let acc = 0;
     for (let i = 0; i + 3 < r.p.length; i += 2) {
@@ -252,8 +282,13 @@ export function buildCity(data) {
       }
     }
   }
-  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
-  group.add(new THREE.Points(lg, new THREE.PointsMaterial({ color: 0xffb75a, size: 1.6, sizeAttenuation: false })));
+  if (lp.length) { const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); const pts = new THREE.Points(lg, M.lamp); pts.frustumCulled = false; group.add(pts); }
 
-  return { group, treeCount: treePts.length };
+  group.userData.stats = stats;
+  return group;
+}
+
+// освобождаем геометрии тайла (материалы общие — их не трогаем)
+export function disposeGroup(group) {
+  group.traverse(o => { if (o.geometry && !o.isInstancedMesh) o.geometry.dispose(); if (o.isInstancedMesh) { o.dispose(); } });
 }

@@ -173,3 +173,36 @@ export function drawPortrait(C, canvas) {
   const t = tmp.getContext('2d'); t.imageSmoothingEnabled = false; drawFrame(t, 0, 4, C);
   ctx.drawImage(tmp, 0, 0, FW, FH, 0, 0, canvas.width, canvas.height);
 }
+
+// --- зелёный призрак: в него превращается убитый скелет. Два варианта подола чередуются по кадрам.
+export const GHOST = { body: '#4df21e', light: '#9dff7a', dark: '#2fb312', eye: '#0b0b0b' };
+export function drawGhostFrame(ctx, ox, f) {
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(ox + x, y, w, h); };
+  R(8, 6, 8, 1, GHOST.body); R(6, 7, 12, 1, GHOST.body); R(5, 8, 14, 1, GHOST.body); R(4, 9, 16, 20, GHOST.body);
+  R(4, 9, 1, 20, GHOST.dark); R(19, 9, 1, 20, GHOST.dark); R(6, 10, 1, 9, GHOST.light); R(7, 9, 2, 1, GHOST.light);
+  if (f % 2 === 0) { R(4, 29, 3, 2, GHOST.body); R(9, 29, 3, 3, GHOST.body); R(14, 29, 3, 2, GHOST.body); R(17, 29, 3, 1, GHOST.body); R(10, 31, 1, 1, GHOST.dark); }
+  else { R(5, 29, 3, 3, GHOST.body); R(10, 29, 3, 2, GHOST.body); R(15, 29, 4, 3, GHOST.body); R(16, 31, 1, 1, GHOST.dark); }
+  R(8, 13, 2, 3, GHOST.eye); R(14, 13, 2, 3, GHOST.eye); R(11, 19, 2, 3, GHOST.eye); R(8, 13, 1, 1, '#ffffff'); R(14, 13, 1, 1, '#ffffff');
+}
+export function drawGhostStrip() {
+  const cv = document.createElement('canvas'); cv.width = FW * NF; cv.height = FH;
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  for (let f = 0; f < NF; f++) drawGhostFrame(ctx, f * FW, f);
+  return cv;
+}
+export function drawGhostPortrait(canvas) {
+  const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const tmp = document.createElement('canvas'); tmp.width = FW; tmp.height = FH; const t = tmp.getContext('2d'); drawGhostFrame(t, 0, 0);
+  ctx.drawImage(tmp, 0, 0, FW, FH, 0, 0, canvas.width, canvas.height);
+}
+
+// --- конфета: подбирается игроком, +1 сердце
+export function drawCandy(color = '#ff5fa2') {
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 12; const g = cv.getContext('2d');
+  const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  R(5, 3, 6, 6, color); R(6, 2, 4, 8, color); R(6, 4, 1, 2, '#ffffff'); R(8, 3, 1, 1, '#ffffff');
+  R(2, 4, 3, 1, color); R(1, 3, 2, 1, color); R(2, 7, 3, 1, color); R(1, 8, 2, 1, color); R(3, 5, 2, 2, color);
+  R(11, 4, 3, 1, color); R(13, 3, 2, 1, color); R(11, 7, 3, 1, color); R(13, 8, 2, 1, color); R(11, 5, 2, 2, color);
+  R(5, 9, 6, 1, '#1b1326'); R(7, 10, 2, 1, '#1b1326');
+  return cv;
+}
