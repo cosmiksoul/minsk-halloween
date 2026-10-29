@@ -465,7 +465,7 @@ if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(r
     def.game = migrate(def.game); logPush(def.game, { kind, name: row.victim_name, place: row.place, rolls: row.rolls, level: row.level, outcome: row.outcome, at: row.at }); n++;
   }
   local.set('raids.seen', newest); if (!n) return; saveMine();
-  if (game.player) sim.say(game.player, `📜 пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'music', 4);
+  if (game.player) game.notify(`пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'afisha', 4000);
   if (game.o.onLog) game.o.onLog();
 });
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead }); if (r.dead) sim.ghostify(a, 'player'); } });

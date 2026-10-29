@@ -342,3 +342,9 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 #hud .handTr { width:100%; font-size:10px; color:var(--ink); display:flex; gap:3px; align-items:center; flex-wrap:wrap; }
 #bmark { position:fixed; left:0; top:0; z-index:5; transform:translate(-50%,-50%); cursor:pointer; filter:drop-shadow(0 0 5px #ffd23a); transition:left .15s linear, top .15s linear; user-select:none; line-height:0; }
 #bmark[hidden] { display:none; }
+
+/* --- тосты: системные сообщения стопкой справа сверху под шапкой, новые сверху */
+#toasts { position:fixed; right:12px; top:56px; z-index:8; display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none; }
+.toast { display:flex; align-items:center; gap:6px; background:rgba(14,9,24,.94); color:var(--ink); border:1px solid var(--line); box-shadow:2px 2px 0 var(--black); padding:6px 10px; font-size:11px; line-height:1.4; max-width:min(320px, calc(100vw - 24px)); transform:translateY(-8px); opacity:0; transition:transform .15s ease-out, opacity .15s ease-out; }
+.toast.in { transform:none; opacity:1; } .toast.out { opacity:0; transition:opacity .3s; }
+.toast .ic { flex:0 0 auto; }

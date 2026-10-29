@@ -147,8 +147,7 @@ export class Cards {
       if (r.crit) game.heal(1);
       g.coins += 4; g.wins++; const xp = bossXp(card.rank); game.points(xp);
       game.log('card', base); this.hunters?.gain('boss'); game.quests?.onEvent('card', xp);
-      this.sim.say(me, `🃏 ${base.cardName} ${beaten(card.rank)} · XP +${xp}`, 'music', 2.8);
-      setTimeout(() => game.player === me && this.sim.say(me, '🪙 +4', 'beer', 2.2), 2600);
+      game.notify(`${base.cardName} ${beaten(card.rank)} · XP +${xp} · +4 монеты`, 'card', 3000);
       if (this.hand && this.hand.cards.every(c => c.state === 'down')) this.completeHand();
       game.save(); return 'card';
     }
@@ -166,7 +165,7 @@ export class Cards {
     g.hands = (g.hands | 0) + 1; if (!g.bestHand || hr.mult > g.bestHand.mult) g.bestHand = { key: hr.key, name: hr.name, mult: hr.mult };
     g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot(); Sfx.play('token');
     game.log('hand', { hand: hr.key, name: hr.name, mult: hr.mult, xp, cards: hand.cards.map(c => cardLabel(c.rank, c.suit)) });
-    this.sim.say(me, `🃏 рука собрана: ${hr.name} · +${xp} XP · 🎟 +1${slotNew ? ' · 🦴 новый слот' : ''}`, 'music', 5);
+    game.notify(`рука собрана: ${hr.name} · +${xp} XP · +1 спас-бросок${slotNew ? ' · новый слот скелета' : ''}`, 'hand', 5000);
     game.save(); game.renderHUD();
   }
   // --- HUD: рука объектом — пять карт canvas (лицом, серая с mm:ss отката поверх, рубашкой), ранг руки, под ними трекер цели

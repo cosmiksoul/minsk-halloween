@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
 import { Sfx } from './sfx.js';
-import { icon } from './ui.js';
+import { icon, toast, escHtml } from './ui.js';
 import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
 import { cardLabel, isRed } from './poker.js';
 import { hostOf } from './hosts.js';
@@ -241,8 +241,8 @@ export class Game {
     const first = this.controlled && !g.seenVenues.includes(v.id);
     g.visits.unshift({ name: v.name, at: clock(), id: v.id }); if (g.visits.length > 40) g.visits.length = 40; // список для карточки
     v.visits++;
-    if (first) { g.seenVenues.push(v.id); this.points(POINTS.visit); this.log('visit', { name: v.name, id: v.id }); this.sim.say(me, `🎃 ${v.name} · XP +${POINTS.visit}`, 'beer', 2.2); }
-    else this.sim.say(me, `🎃 ${v.name}`, 'beer', 1.6);
+    if (first) { g.seenVenues.push(v.id); this.points(POINTS.visit); this.log('visit', { name: v.name, id: v.id }); this.notify(`${escHtml(v.name)} · XP +${POINTS.visit}`, 'places'); }
+    else this.notify(escHtml(v.name), 'places', 1800);
     me.state = 'drink'; me.timer = 2.2; this.sim.enterVenue(me, v);
     this.save(); this.renderHUD(); this.o.showCard(me, true);
   }
@@ -318,7 +318,7 @@ export class Game {
   // щит 🎃 из запаса (g.shields, до трёх, переживает смерть) принимает одну рану; остаток бьёт по здоровью
   useShields(n) {
     const g = this.g; const used = Math.min(n, Math.max(0, g.shields | 0)); if (!used) return 0;
-    g.shields -= used; this.sim.say(this.player, used > 1 ? `🎃 щит принял ${used}` : '🎃 щит принял', 'beer', 2); return used;
+    g.shields -= used; this.notify(used > 1 ? `щит принял ${used}` : 'щит принял', 'shield', 2000); return used;
   }
   damage(n) {
     const g = this.g; n -= this.useShields(n);
@@ -413,7 +413,7 @@ export class Game {
       this.sim.release(npc); this.sim.say(npc, pick(npc.rng, LINES.mock), 'boo', 2.4);
       const dmg = res.kind === 'critfail' ? 2 : 1;
       g.losses++; this.points(POINTS.loss); this.log('fail', info);
-      this.sim.say(me, `−${dmg} ❤ · XP −${-POINTS.loss}`, 'boo', 2.4);
+      this.notify(`−${dmg} ${icon('heart', 1)} · XP −${-POINTS.loss}`, 'skull');
       this.damage(dmg); if (this.player !== me) return; // упокоен навсегда: дальше нечего начислять
       if (res.kind === 'critfail' && me.state !== 'dead' && g.tail.length) this.eat(1, 'critfail', true);
     } else {
@@ -540,7 +540,7 @@ export class Game {
     if (g.tarot.some(t => t.id === it.a.id)) { this.tarot.markDone(it.a.id); return; }
     g.tarot.push({ id: it.a.id, at: new Date().toISOString() }); this.tarot.markDone(it.a.id); // дата и время находки; старые записи «ЧЧ:ММ» fmtAt показывает как есть
     this.points(POINTS.tarot); this.log('tarot', { id: it.a.id, name: it.a.name }); this.hunters?.gain('tarot');
-    this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name} · XP +${POINTS.tarot}`, 'music', 3);
+    this.notify(`${it.a.roman} ${escHtml(it.a.name)} · XP +${POINTS.tarot}`, 'arcana', 3000);
     this.save(); this.renderHUD(); this.o.showCard(this.player, true);
     // на автопилоте карта ложится в колоду молча: модалка посреди чужих дел только мешает
     if (!this.player.auto) this.showTarot(it.a, true);
@@ -578,7 +578,7 @@ export class Game {
   onShared(net) {
     const g = this.g; if (!g) return false;
     this.quests?.onEvent('share', 0); // квест онбординга «карточка»: засчитывается любая публикация
-    if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; Sfx.play('token'); this.sim.say(this.player, '🎟 +1 спас-бросок', 'music', 3); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
+    if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; Sfx.play('token'); this.notify('+1 спас-бросок за публикацию', 'token', 3000); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
     return false;
   }
   // --- магазин одежды
@@ -599,7 +599,7 @@ export class Game {
     const g = this.g, p = this.player; if (!g || !p || this.modal !== 'shop') return;
     if (kind === 'token') {
       if (!buyToken(g)) { Sfx.play('boo'); $('shMsg').textContent = (g.tokens | 0) >= TOKEN.cap ? 'жетонов уже три' : 'не хватает монет'; return; }
-      Sfx.play('token'); $('shMsg').textContent = `спас-бросок в кармане (−${TOKEN.price} 🪙)`; this.sim.say(p, '🎟 +1', 'music', 2.4); this.log('buy', { kind: 'token', item: 'спас-бросок' });
+      Sfx.play('token'); $('shMsg').textContent = `спас-бросок в кармане (−${TOKEN.price} 🪙)`; this.notify(`+1 спас-бросок · −${TOKEN.price} монет`, 'token'); this.log('buy', { kind: 'token', item: 'спас-бросок' });
       this.save(); this.renderHUD(); this.renderShop(); this.o.showCard(p, true); return;
     }
     const price = PRICES[kind]; if (g.coins < price) { Sfx.play('boo'); $('shMsg').textContent = 'не хватает монет'; return; }
@@ -607,7 +607,7 @@ export class Game {
     if (kind === 'colors') { c.c1 = pick(p.rng, PALETTE); c.c2 = pick(p.rng, PALETTE); c.c3 = pick(p.rng, PALETTE); c.shoes = p.rng() < 0.6 ? pick(p.rng, PALETTE) : null; got = 'новые цвета'; }
     else { let id = randomItem(kind, p.rng); for (let i = 0; i < 5 && id === c[kind]; i++) id = randomItem(kind, p.rng); c[kind] = id; got = CATALOG[kind][id]; }
     drawPortrait(p.costume, $('shBefore')); this.sim.recostume(p, c); p.def.costume = c; drawPortrait(c, $('shAfter'));
-    $('shMsg').textContent = `выпало: ${got} (−${price} 🪙)`; this.sim.say(p, `🛍 ${got}`, 'music', 2.4);
+    $('shMsg').textContent = `выпало: ${got} (−${price} 🪙)`; this.notify(`${escHtml(got)} · −${price} монет`, 'coin');
     this.log('buy', { kind, item: got });
     this.save(); this.renderHUD(); this.renderShop(); this.o.showCard(p, true);
   }
@@ -652,6 +652,8 @@ export class Game {
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
     this.cards?.drawHandCards();
   }
+  // системное сообщение тостом справа сверху (начисления, визиты, щиты, квесты); пузыри над головой остаются речи
+  notify(text, iconName = null, ms = 2500) { toast(text, iconName, ms); }
   // блок в карточке скелета
   cardHtml(a) {
     if (a.def && a.def.boss && this.cards) { // босс часа: карта, бонус к кубику и XP за победу, чья копия
