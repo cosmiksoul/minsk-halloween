@@ -102,6 +102,7 @@ i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
 #tip b { color:var(--green); }
 .bub.tag.me { color:var(--accent); border-color:var(--accent); box-shadow:2px 2px 0 var(--accent); } .bub.tag.me::after { border-top-color:var(--accent); }
 .bub.tag.fr { font-size:9px; padding:2px 3px; }
+.bub.tag.boss { color:#ffd23a; border-color:#ffd23a; box-shadow:2px 2px 0 #ffd23a; } .bub.tag.boss::after { border-top-color:#ffd23a; } /* босс с картой часа: золото, охотники и гости — зелёные, свой — оранжевый */
 body.playing #c { cursor:crosshair; }
 
 #ask, #host { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
@@ -166,7 +167,7 @@ button.trick { background:var(--green); color:var(--black); border-color:var(--g
 .tPlace { color:var(--accent); font-weight:700; }
 .tH { font-family:"Press Start 2P", monospace; font-size:6px; color:var(--muted); margin-top:4px; letter-spacing:.5px; }
 .tP { line-height:1.5; color:var(--ink); } .tL { color:#e9dff7; font-style:italic; border-left:2px solid var(--green); padding-left:8px; }
-.dBox { background:var(--black); border:2px solid #d8c2ff; border-radius:8px; padding:12px 14px; width:min(640px, 100%); max-height:calc(100vh - 24px); display:flex; flex-direction:column; gap:10px; box-shadow:4px 4px 0 #d8c2ff; font-size:11px; }
+.dBox { overflow:auto; background:var(--black); border:2px solid #d8c2ff; border-radius:8px; padding:12px 14px; width:min(640px, 100%); max-height:calc(100vh - 24px); display:flex; flex-direction:column; gap:10px; box-shadow:4px 4px 0 #d8c2ff; font-size:11px; }
 .dTitle { font-family:"Press Start 2P", monospace; font-size:9px; color:#d8c2ff; display:flex; align-items:center; gap:10px; }
 .dTitle span { color:var(--green); } .dTitle .x { margin-left:auto; background:transparent; border:0; color:#d8c2ff; font-size:16px; padding:0 4px; }
 .dGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:8px; overflow:auto; padding:2px; }
@@ -245,14 +246,14 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 #menuBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); }
 #menuBtn.on { border-color:var(--accent); color:var(--accent); }
 #sndBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); } #sndBtn.off { opacity:.6; }
-#menu { position:fixed; top:52px; right:12px; z-index:6; width:300px; max-width:calc(100vw - 24px); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; display:flex; flex-direction:column; gap:6px; backdrop-filter:blur(4px); }
+#menu { position:fixed; top:52px; right:12px; z-index:6; width:300px; max-width:calc(100vw - 24px); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; display:flex; flex-direction:column; gap:6px; backdrop-filter:blur(4px); max-height:calc(100vh - 64px); overflow:auto; }
 #menu[hidden] { display:none; }
 .mTitle { font-family:"Press Start 2P", monospace; font-size:7px; color:var(--accent); letter-spacing:.5px; margin-top:2px; }
 #drawer { position:fixed; left:12px; top:140px; bottom:12px; width:320px; max-width:calc(100vw - 24px); z-index:5; display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:6px; font-size:11px; backdrop-filter:blur(4px); overflow:hidden; }
 #drawer[hidden] { display:none; }
 .dHead { display:flex; align-items:center; padding:8px 10px; font-family:"Press Start 2P", monospace; font-size:9px; color:var(--green); border-bottom:1px solid var(--line); }
 .dHead .x { margin-left:auto; background:transparent; border:0; color:var(--green); font-size:16px; padding:0 4px; }
-#drawer .tabBody { flex:1; }
+#drawer .tabBody { flex:1; min-height:0; overflow:auto; } /* содержимое вкладки длиннее ящика: скролл внутри рамки */
 body.drawerOpen #card { left:344px; }
 .lg { display:flex; gap:8px; align-items:flex-start; line-height:1.45; color:var(--ink); }
 .lg .chip { flex:0 0 auto; width:12px; height:12px; border-radius:3px; margin-top:2px; border:1px solid rgba(255,255,255,.25); }
@@ -385,3 +386,29 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 #tabBoard canvas.bcv { width:24px; height:33px; image-rendering:pixelated; vertical-align:middle; margin-right:4px; }
 #tabBoard .item { grid-template-columns:auto auto 1fr auto; }
 #tabBoard .item .s, #tabBoard .item .st { grid-column:1 / -1; }
+
+/* --- пиксельные кнопки: одна девятисекционная рамка из canvas (ui.btnFrame — контур, фаска 2 px, заливка), пиксельный шрифт, нажатие переворачивает фаску */
+button, .tbtn, #menuBtn, #sndBtn, #compass, .tStats { background:transparent; border:4px solid transparent; border-image:var(--btn-dark) 4 fill stretch; border-radius:0; box-shadow:none; backdrop-filter:none; image-rendering:pixelated; }
+button { font-family:"Press Start 2P", monospace; font-size:8px; line-height:1.5; padding:3px 6px; color:var(--ink); font-weight:400; }
+button:hover { color:#fff; filter:brightness(1.12); }
+button:active { border-image-source:var(--btn-dark-p); transform:translate(0,1px); filter:none; }
+button:disabled { opacity:.45; filter:grayscale(.6); cursor:not-allowed; transform:none; }
+button.on, .tbtn.on, .tabs2 button.on, button.green, button.trick, button.sweet, button.gen, button:hover, button.green:hover, button.trick:hover, button.sweet:hover, button.gen:hover { background:transparent; border-color:transparent; }
+button.on, .tbtn.on, .tabs2 button.on, button.on:hover, .tbtn.on:hover, .tabs2 button.on:hover { border-image-source:var(--btn-on); color:#1b1326; }
+button.on:active, .tbtn.on:active, .tabs2 button.on:active { border-image-source:var(--btn-on-p); }
+button.green, button.trick, button.green:hover, button.trick:hover { border-image-source:var(--btn-green); color:var(--black); } button.green:active, button.trick:active { border-image-source:var(--btn-green-p); }
+button.sweet, button.sweet:hover { border-image-source:var(--btn-sweet); color:var(--black); } button.sweet:active { border-image-source:var(--btn-sweet-p); }
+button.gen, button.gen:hover { border-image-source:var(--btn-gen); color:var(--black); } button.gen:active { border-image-source:var(--btn-gen-p); }
+.socials button { color:var(--ink); } .socials button[data-net=tg] { color:#2aabee; } .socials button[data-net=fb] { color:#6ea8ff; } /* бренд — цветом подписи, рамка у всех одна */
+button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; background:none; font-family:"JetBrains Mono", monospace; filter:none; transform:none; }
+#hud button.deck { border:0; border-image:none; background:none; padding:0; font:inherit; filter:none; transform:none; }
+.tbtn { padding:4px 7px; font-size:8px; } #menuBtn, #sndBtn, #compass { width:32px; height:32px; padding:0; }
+#menuBtn.on { color:var(--accent); } #compass { color:var(--accent); }
+.tStats { padding:4px 8px; font-size:11px; }
+.askBtns button, #shopBtns button, #diceSave button { font-size:9px; padding:5px 7px; } .inFoot button { font-size:10px; padding:7px 12px; } #shopFree button { font-size:8px; padding:2px 5px; }
+#host button.throw { font-size:18px; padding:2px 8px; }
+@media (max-width: 700px) { .tbtn { padding:4px; } }
+/* полосы прокрутки под пиксельный стиль: узкие, без скруглений, в цветах рамки */
+#drawer .tabBody::-webkit-scrollbar, #menu::-webkit-scrollbar, .dBox::-webkit-scrollbar, .dGrid::-webkit-scrollbar, #pfGame::-webkit-scrollbar, #journal::-webkit-scrollbar, .mnBox #mineList::-webkit-scrollbar { width:8px; }
+#drawer .tabBody::-webkit-scrollbar-track, #menu::-webkit-scrollbar-track, .dBox::-webkit-scrollbar-track, .dGrid::-webkit-scrollbar-track, #pfGame::-webkit-scrollbar-track, #journal::-webkit-scrollbar-track, .mnBox #mineList::-webkit-scrollbar-track { background:#140c20; }
+#drawer .tabBody::-webkit-scrollbar-thumb, #menu::-webkit-scrollbar-thumb, .dBox::-webkit-scrollbar-thumb, .dGrid::-webkit-scrollbar-thumb, #pfGame::-webkit-scrollbar-thumb, #journal::-webkit-scrollbar-thumb, .mnBox #mineList::-webkit-scrollbar-thumb { background:var(--line); border:1px solid #0b0b0b; } #drawer .tabBody::-webkit-scrollbar-thumb:hover { background:#6d58a0; }
