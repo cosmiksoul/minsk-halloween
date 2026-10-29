@@ -123,7 +123,9 @@ export class Hunters {
         if (!sim.moveTo(a, p.x, p.z)) { this.leave(h, 'lost'); return; }
       }
     }
+    // реплики призрака: в 300 м свои слова раз в 12 с, в 80 м ещё и намерение
     if (d < PURSUIT.nearSay && sim.time - (h.saidAt || -99) > 6) { h.saidAt = sim.time; sim.say(a, h.intent === 'kill' ? '👀 ищет тебя' : '🤝 идёт знакомиться', h.intent === 'kill' ? 'boo' : '', 2.4); }
+    else if (d < PURSUIT.nearWarn && !a.bubble && sim.time - (h.spokeAt || -99) > 12) { h.spokeAt = sim.time; sim.say(a, pick(a.rng, h.intent === 'kill' ? LINES.hunter : LINES.hunterFriend), 'boo', 2.4); }
   }
   // кандидат на выход: гость из сети, ещё не ходивший в набег (вес по счёту), иначе упырь с этого кладбища.
   // half: стартовый узел с середины отрезка кладбище-игрок; extra: лишний охотник сверх лимита («засветился»)
@@ -140,14 +142,15 @@ export class Hunters {
     if (guests.length) {
       const w = guests.map(x => 1 + (x.def.score || 0) / 10); let r = rng() * w.reduce((s, v) => s + v, 0);
       a = guests[guests.length - 1]; for (let i = 0; i < guests.length; i++) { r -= w[i]; if (r <= 0) { a = guests[i]; break; } }
-      sim.drive(a, true); sim.teleport(a, node); a.def.hunter = true;
+      sim.drive(a, true); sim.teleport(a, node); a.def.hunter = true; sim.haunt(a);
       owner = { id: a.def.rid, device: a.def.device, name: a.def.name };
     } else {
       const seed = Math.floor(rng() * 1e9); const arch = pickArchetype(makeRng(seed)); const bio = makeBio(makeRng(seed), arch);
       const job = 'упырь с ' + (named ? genitiveCem(cem.name) : 'кладбища' + (street ? ' у ' + street : ''));
       a = sim.spawnCustom({ name: bio.name, gender: bio.gender, age: bio.age, job, arch: arch.id, seed, guest: true, hunter: true, ghoul: true }, g.x[node], g.z[node]);
-      sim.drive(a, true); sim.teleport(a, node);
+      sim.drive(a, true); sim.teleport(a, node); sim.haunt(a);
     }
+    sim.say(a, pick(a.rng, LINES.hunterSpawn), 'boo', 2.6);
     a.speed = p.speed * L.speed; a.state = 'idle'; a.path = null;
     const st = a.def.stats || {};
     const intent = owner ? intentOf(st.kills || 0, st.friends || 0, rng) : (level >= 3 ? 'kill' : rng() < 0.7 ? 'kill' : 'friend');

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
 import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins } from './rules.js';
 import { hostOf } from './hosts.js';
-import { drawCandy, drawPortrait, drawGhostPortrait, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
+import { drawCandy, drawPortrait, drawGhostPortrait, GHOSTS, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
 import { ARCANA, ARCANA_BY_ID, drawArcana, drawCardBack } from './tarot.js';
@@ -350,7 +350,7 @@ export class Game {
     this.log('rip', {}); this.hunters?.reset();
     p.def.dead = true; p.def.diedAt = new Date().toISOString(); p.def.diedStreet = this.sim.streetOf(p); p.def.player = false;
     this.selected = false; this.ring.visible = false; document.body.classList.remove('playing');
-    this.sim.unsetPlayer(p); this.sim.ghostify(p); this.sim.say(p, '☠ упокоен навсегда', 'boo', 4);
+    this.sim.unsetPlayer(p); this.sim.ghostify(p, 'player'); this.sim.say(p, '☠ упокоен навсегда', 'boo', 4); // золотой призрак
     this.save(); // до обнуления игрока: прогресс и строка в базе уходят с dead
     this.lastPerished = p.bio.name; this.player = null; this.candies.clear(); if (this.tarot) this.tarot.reset();
     if (this.o.onPerish) this.o.onPerish(p);
@@ -628,6 +628,6 @@ export class Game {
       <div class="line">монеты: <span class="cn">🪙 ${g.coins}</span> · спас-броски: <span class="tk">🎟 ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
       <div class="line muted">заведений: ${g.seenVenues.length} · щиты: 🎃 ${g.shields | 0}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
   }
-  portrait(a, canvas) { if (a.ghost) drawGhostPortrait(canvas); else drawPortrait(a.costume, canvas); }
+  portrait(a, canvas) { if (a.ghost) drawGhostPortrait(canvas, GHOSTS[a.ghostKind] || GHOSTS.npc); else drawPortrait(a.costume, canvas, a.haunted ? { ghost: GHOSTS.hunter } : undefined); }
 }
 export { OUTCOMES };
