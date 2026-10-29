@@ -17,11 +17,15 @@ export const LEVELS = [
   { hunters: 5, dist: 900, speed: 1.25, pause: 30, bonus: 3 },
 ];
 // преследование: перестройка пути, пороги «близко», потеря следа и уход, ожидание без управления, радиус узла у кладбища,
-// за кадром (дальше offscreen м) скорость ×offscreenSpeed, последние direct м по прямой, досягаемость в ростах, разброс кладбищ (метры и секунды)
-export const PURSUIT = { repathEvery: 25, repathDist: 150, nearWarn: 300, nearSay: 80, seenDist: 200, farFactor: 1.5, farAfter: 90, uncontrolledAfter: 60, waitNear: 300, leaveAfter: 60, cemNodeR: 300, offscreen: 400, offscreenSpeed: 4, direct: 150, reach: 2, spread: 2 };
+// за кадром (дальше offscreen м) скорость ×offscreenSpeed, последние direct м по прямой, досягаемость в ростах, разброс кладбищ:
+// свободное кладбище подходит не дальше spread дистанций уровня или spreadNear расстояний до ближайшего кладбища (метры и секунды)
+export const PURSUIT = { repathEvery: 25, repathDist: 150, nearWarn: 300, nearSay: 80, seenDist: 200, farFactor: 1.5, farAfter: 90, uncontrolledAfter: 60, waitNear: 300, leaveAfter: 60, cemNodeR: 300, offscreen: 400, offscreenSpeed: 4, direct: 150, reach: 2, spread: 2, spreadNear: 1.5 };
 // игра с хозяином заведения: перевес любимого жеста, ничьи подряд, откат на заведение, время плашки, кап щитов,
 // дебаффы «штормит» и «засветился», сброс розыска [выигрыш, проигрыш] по типу заведения
 export const RPS = { favBias: 0.4, maxTies: 3, cooldown: 60, promptSec: 10, shieldMax: 3, tipsy: { speed: 0.65, sec: 60 }, seen: { sec: 90, bonus: 1 }, reset: { bar: [60, 20], shop: [100, 60] } };
+// срезки управляемого скелета: цель не дальше maxDist, по дорожкам в ratio раз дальше прямой, цель «на графе» ближе onPath,
+// шаг проверки прямой, полуширина ленты реки, радиус возврата на ребро, вероятность реплики
+export const CUT = { maxDist: 60, ratio: 2.5, onPath: 3, step: 2, riverHalf: 13, snapR: 140, say: 0.25 };
 export const THROWS = ['rock', 'scissors', 'paper'];
 export const THROW_ICON = { rock: '🪨', scissors: '✂️', paper: '📄' };
 export const THROW_NAME = { rock: 'камень', scissors: 'ножницы', paper: 'бумагу' }; // винительный падеж: «любит камень»
@@ -30,8 +34,10 @@ export const LOG_MAX = 200;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 
-// исход обычного d20: 1 крит-провал, 2–10 провал, 11–19 успех, 20 крит
-export function outcomeOf(n) { return n <= 1 ? 'critfail' : n <= 10 ? 'fail' : n <= 19 ? 'success' : 'crit'; }
+// исход обычного d20: 1 крит-провал, 2–7 провал, 8–19 успех, 20 крит
+export function outcomeOf(n) { return n <= 1 ? 'critfail' : n <= 7 ? 'fail' : n <= 19 ? 'success' : 'crit'; }
+// срезать ли напрямик: цель близко и по дорожкам в ratio раз дальше (или маршрута нет вовсе); стоя на месте не срезаем
+export function shouldCut(d, routeCost) { return d > 0 && d <= CUT.maxDist && (routeCost == null || routeCost >= CUT.ratio * d); }
 export function levelOf(heat) { return clamp(Math.floor(num(heat) / 20), 0, 5); }
 // спад угрозы за `seconds` секунд без прироста; мусор во времени (отрицательное, NaN) не меняет угрозу
 export function decayed(heat, seconds) {
@@ -134,9 +140,11 @@ export function intentOf(kills, friends, rng) { return kills > friends ? 'kill' 
 export function pickCemetery(items, px, pz, level, used = []) {
   if (!level || !LEVELS[level]) return null;
   const want = LEVELS[level].dist;
-  const cand = (items || []).filter(c => c.node >= 0).map(c => ({ c, d: Math.hypot(c.x - px, c.z - pz) })).filter(x => x.d >= want / 2);
+  const all = (items || []).filter(c => c.node >= 0).map(c => ({ c, d: Math.hypot(c.x - px, c.z - pz) }));
+  const dNear = all.reduce((m, x) => Math.min(m, x.d), Infinity); // до ближайшего кладбища: из центра все далеко, и разброс считаем от него
+  const cand = all.filter(x => x.d >= want / 2);
   const free = cand.filter(x => !used.includes(x.c));
-  const pool = free.some(x => x.d <= want * PURSUIT.spread) ? free : cand;
+  const pool = free.some(x => x.d <= Math.max(want * PURSUIT.spread, dNear * PURSUIT.spreadNear)) ? free : cand;
   let best = null, bd = Infinity;
   for (const x of pool) { const s = Math.abs(x.d - want); if (s < bd) { bd = s; best = x.c; } }
   return best;
