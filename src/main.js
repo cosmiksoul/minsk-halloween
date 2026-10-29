@@ -10,7 +10,7 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT } from './rules.js';
+import { statsOf, PURSUIT, migrate, logPush } from './rules.js';
 import { Hunters } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
@@ -381,6 +381,22 @@ function renderBoard(fetchRemote = true) {
 }
 setInterval(() => { if (remote && !$('tabBoard').hidden) renderBoard(true); }, 30000);
 renderMine();
+// набеги моих скелетов в чужих городах: всё новое с прошлого входа ложится в журнал хозяина; где я жертва, уже записано в момент дуэли
+const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return h >= 11 && h <= 14 ? c : m === 1 ? a : m >= 2 && m <= 4 ? b : c; };
+if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(rows => {
+  if (!rows || !rows.length) return;
+  let n = 0, newest = local.get('raids.seen', '1970-01-01T00:00:00Z');
+  for (const row of rows) {
+    if (row.at > newest) newest = row.at;
+    if (row.hunter_device !== deviceId()) continue;
+    const def = mine.find(d => !d.guest && deviceId() + ':' + d.seed === row.hunter); if (!def) continue;
+    const kind = row.outcome === 'bit' || row.outcome === 'killed' ? 'raid_bit' : row.outcome === 'skull' || row.outcome === 'heart' ? 'raid_beaten' : 'raid_lost';
+    def.game = migrate(def.game); logPush(def.game, { kind, name: row.victim_name, place: row.place, rolls: row.rolls, level: row.level, outcome: row.outcome, at: row.at }); n++;
+  }
+  local.set('raids.seen', newest); if (!n) return; saveMine();
+  if (game.player) sim.say(game.player, `📜 пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'music', 4);
+  if (game.o.onLog) game.o.onLog();
+});
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0 }); } });
 
 // --- поделиться карточкой персонажа

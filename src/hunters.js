@@ -3,6 +3,7 @@
 // в game.duel, после стычки уходят к своему кладбищу и исчезают. Все числа в rules.js.
 import { LEVELS, PURSUIT, HEAT, levelOf, decayed, hunterBonus, intentOf, pickCemetery, canReset } from './rules.js';
 import { makeRng, pickArchetype, makeBio, LINES, pick } from './bio.js';
+import { deviceId } from './store.js';
 
 const firstName = s => String(s || '').split(' ')[0];
 const bare = n => !n || /^кладбище$/i.test(n.trim());
@@ -134,7 +135,7 @@ export class Hunters {
   finish(h, outcome) {
     this.sim.say(h.a, outcome === 'skull' || outcome === 'heart' ? pick(h.a.rng, LINES.scared) : 'ушёл в туман', outcome === 'skull' || outcome === 'heart' ? 'boo' : '', 2.4);
     this.leave(h, null);
-    if (this.onFinish) this.onFinish(h, outcome);
+    this.record(h, outcome);
   }
   // уход: к кладбищу, пропадает по прибытии или через 60 с; record === 'lost' пишет «потерял след»
   leave(h, record) {
@@ -143,9 +144,18 @@ export class Hunters {
     if (record === 'lost') {
       if (this.game.g) this.game.log('lost', { uid: a.uid, name: a.bio.name, boss: true, intent: h.intent, owner: h.owner ? h.owner.id : null, level: h.level });
       this.sim.say(a, '🌫 потерял след', '', 2.2);
-      if (this.onFinish) this.onFinish(h, 'lost');
+      this.record(h, 'lost');
     }
     if (!this.sim.moveTo(a, this.sim.graph.x[h.cem.node], this.sim.graph.z[h.cem.node])) this.done(h);
+  }
+  // набег в базу: только охотники с хозяином (упыри никому не принадлежат); пишет клиент жертвы в момент исхода
+  record(h, outcome) {
+    const p = this.game.player;
+    if (h.owner && this.remote && this.remote.logEncounter && p) {
+      const rolls = outcome === 'lost' || !h.rolls ? null : h.rolls;
+      this.remote.logEncounter({ hunter: h.owner.id, hunter_device: h.owner.device, hunter_name: h.owner.name, victim: deviceId() + ':' + p.def.seed, victim_device: deviceId(), victim_name: p.def.name, outcome, rolls, level: h.level, place: this.sim.streetOf(p), at: new Date().toISOString() });
+    }
+    if (this.onFinish) this.onFinish(h, outcome);
   }
   done(h) {
     const i = this.hunters.indexOf(h); if (i >= 0) this.hunters.splice(i, 1);
