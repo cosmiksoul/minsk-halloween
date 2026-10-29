@@ -2,6 +2,7 @@
 import { drawFrame, FW, FH } from './skeletons.js';
 import { ARCANA, ARCANA_BY_ID, drawArcana } from './tarot.js';
 import { ageWord } from './bio.js';
+import { statsOf as progressStats } from './rules.js';
 
 const PIX = '"Press Start 2P", monospace', MONO = '"JetBrains Mono", ui-monospace, monospace';
 const C = { bg: '#120b1f', bg2: '#1b1326', ink: '#e9dff7', muted: '#9b8bb8', accent: '#ff8a2a', green: '#4df21e', gold: '#ffd23a', line: '#3a2a55', pink: '#ff5fa2' };
@@ -30,7 +31,8 @@ function icon(g, kind, x, y, s) {
     case 'token': R(0, 1, 8, 5, C.pink); R(1, 0, 6, 7, C.pink); R(3, 2, 2, 3, '#0b0b0b'); break;
   }
 }
-function statsOf(def) { const g = def.game || {}; return { kills: (g.skulls || []).length, friends: (g.friends || []).length, tarot: (g.tarot || []).length, visits: (g.visits || []).length, coins: g.coins || 0, tokens: g.tokens || 0, deaths: g.deaths || 0 }; }
+// сводка прогресса для карточки: общие правила понимают и старый формат, и v2 (стак, журнал)
+function statsOf(def) { const g = def.game || {}; return { ...progressStats(g), coins: g.coins || 0, tokens: g.tokens || 0 }; }
 const STAT_ROWS = [['skull', 'kills', 'черепов'], ['heart', 'friends', 'друзей'], ['card', 'tarot', 'арканов'], ['pumpkin', 'visits', 'заведений'], ['coin', 'coins', 'монет']];
 
 export function renderShareCard(canvas, { def, costume, friends = [], format = 'post', url = '' }) {

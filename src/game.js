@@ -149,13 +149,13 @@ export class Game {
   clickVenue(v) {
     if (!this.selected || !this.player || this.busy || v.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.closeDialog();
-    if (this.sim.moveTo(this.player, v.x, v.z)) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, this.sim.graph.x[v.node], this.sim.graph.z[v.node])) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   clickShop(sh) {
     if (!this.selected || !this.player || this.busy || sh.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
-    if (this.sim.moveTo(this.player, sh.x, sh.z)) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, this.sim.graph.x[sh.node], this.sim.graph.z[sh.node])) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   // --- диалог «сладость или гадость»
@@ -174,7 +174,10 @@ export class Game {
     const dist = Math.hypot(npc.x - this.player.x, npc.z - this.player.z);
     this.sim.wait(npc, this.player, Math.min(150, 30 + dist / 2.5));
     this.pending = { npc, action, tries: 0 }; this.pendingVenue = null;
-    if (!this.inReach(npc)) { if (!this.sim.moveTo(this.player, npc.x, npc.z)) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; } }
+    if (!this.inReach(npc)) {
+      if (!this.sim.moveTo(this.player, npc.x, npc.z)) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; }
+      else this.sim.wait(npc, this.player, Math.min(240, 30 + (this.player.routeCost || dist) / 3)); // ждёт по длине дороги, а не по прямой
+    }
   }
   inReach(npc) { return (npc.x - this.player.x) ** 2 + (npc.z - this.player.z) ** 2 < Math.max(5, this.sim.H * 0.8) ** 2; }
   onArrive(a, node) {
