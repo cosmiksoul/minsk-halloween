@@ -126,8 +126,11 @@ export class Graph {
   // Sim.moveTo: выбор старта с разворотом, A*, точка на ребре (stopT); cost — длина пути до конечной точки, endX/endZ — её координаты.
   // Цель на текущем ребре: { onEdge: true, swap, stopT, cost, endX, endZ, node }
   planRoute(pos, x, z) {
-    const node = this.nearest(x, z, 140); if (node < 0) return null;
-    const ep = this.edgePoint(node, x, z);
+    // цель — ближайшая точка сети: проекция на ближайшее ребро, а не ближайший узел. Между редкими узлами проспекта
+    // ближе оказывался узел тротуара или соседней полосы, и скелет шёл по тротуару, ступая на проезжую часть последним отрезком
+    const P = this.nearestEdgePoint(x, z, 140); let node, ep = null;
+    if (P) { if (P.t < 0.03) node = P.from; else if (P.t > 0.97) node = P.to; else { node = P.from; ep = { to: P.to, t: P.t }; } }
+    else { node = this.nearest(x, z, 140); if (node < 0) return null; }
     const ex = ep ? this.x[node] + (this.x[ep.to] - this.x[node]) * ep.t : this.x[node], ez = ep ? this.z[node] + (this.z[ep.to] - this.z[node]) * ep.t : this.z[node];
     if (ep && pos.from !== pos.to && ((pos.from === node && pos.to === ep.to) || (pos.from === ep.to && pos.to === node))) {
       const s = pos.from === node ? ep.t : 1 - ep.t; const swap = pos.t > s;
