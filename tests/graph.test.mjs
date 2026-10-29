@@ -66,3 +66,11 @@ test('pickSpaced: разброс и добор ближайшими', () => {
   const picked = line.pickSpaced(line.ring(line.nearest(0, 0, 1), 100, 400), 2, 150, rng, 0, 0); assert.equal(picked.length, 2); assert.ok(Math.abs(line.x[picked[0]] - line.x[picked[1]]) >= 150);
   const more = line.pickSpaced([line.nearest(400, 0, 1)], 3, 150, rng, 0, 0); assert.equal(more.length, 3); assert.equal(new Set(more).size, 3);
 });
+
+test('pickSpaced: добор только по предикату (достижимые узлы своей компоненты)', () => {
+  // две несвязанные улицы: добор не берёт узлы чужой компоненты, даже если они ближе к игроку
+  const two = new Graph([{ p: [0, 0, 200, 0, 400, 0, 600, 0], k: 'minor' }, { p: [0, 40, 200, 40, 400, 40], k: 'minor' }]);
+  const start = two.nearest(0, 0, 1); const reach = new Set(two.ring(start, 0, 1e4)); assert.ok(reach.size >= 3 && reach.size < two.x.length);
+  const picked = two.pickSpaced([], 3, 150, () => 0.5, 0, 0, n => reach.has(n));
+  assert.equal(picked.length, 3); assert.equal(new Set(picked).size, 3); for (const n of picked) assert.ok(reach.has(n));
+});

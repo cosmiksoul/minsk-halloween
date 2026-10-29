@@ -113,7 +113,8 @@ export class Game {
     return false;
   }
   // сбросить текущую цель броска и отпустить скелета, который её ждал
-  dropPending() { const p = this.pending; this.pending = null; if (p && !p.rolling && p.npc.state === 'wait') this.sim.release(p.npc); }
+  // снимает и приказ «сразиться»: без управления скелет не должен сам дойти до босса и начать бой
+  dropPending() { const p = this.pending; this.pending = null; this.pendingBoss = null; if (p && !p.rolling && p.npc.state === 'wait') this.sim.release(p.npc); }
   // --- игрок
   setPlayer(a) {
     if (this.player === a) return;
@@ -515,9 +516,11 @@ export class Game {
       }
       // босс часа: дошли на дистанцию дуэли — бой; карта отдохнула не до конца или босс ушёл со сменой часа — приказ снимается
       const pb = this.pendingBoss;
-      if (pb && !this.busy && p.state !== 'dead') {
-        if (!this.sim.agents.includes(pb.a) || pb.card.state !== 'up') this.pendingBoss = null;
-        else if (this.inReach(pb.a, PURSUIT.reach)) { this.pendingBoss = null; this.duel({ a: pb.a, intent: 'kill', bonus: bossBonus(pb.card.rank), card: pb.card }); }
+      if (pb && !this.busy) {
+        // бой только под управлением и без открытой модалки: отпустили — приказ снимается, модалка — ждём у босса
+        const gone = this.cards ? this.cards.agentOf(pb.card) !== pb.a : !this.sim.agents.includes(pb.a);
+        if (!this.controlled || gone || pb.card.state !== 'up') this.pendingBoss = null;
+        else if (this.modal === null && this.inReach(pb.a, PURSUIT.reach)) { this.pendingBoss = null; this.duel({ a: pb.a, intent: 'kill', bonus: bossBonus(pb.card.rank), card: pb.card }); }
       }
     }
     if (this.tarot) this.tarot.update(t, p, 12, it => this.collect(it));
@@ -541,7 +544,7 @@ export class Game {
   }
   // карта с текстами от прогресса любого своего скелета (g): из профиля и журнала открывается не только у текущего игрока
   showTarot(a, isNew, g = this.g) {
-    this.setModal('tarot'); const inner = $('tInner');
+    this.deckG = g; this.setModal('tarot'); const inner = $('tInner'); // кнопка «колода» в модалке открывает колоду этого же скелета
     drawArcana(a.id, $('tCv'));
     const rec = g && Array.isArray(g.tarot) && g.tarot.find(t => t.id === a.id);
     $('tKicker').textContent = isNew ? 'новая аркана!' : rec ? `найдена ${fmtAt(rec.at)}` : 'аркана';
@@ -571,6 +574,7 @@ export class Game {
   // --- публикация карточки: первый раз даёт жетон
   onShared(net) {
     const g = this.g; if (!g) return false;
+    this.quests?.onEvent('share', 0); // квест онбординга «карточка»: засчитывается любая публикация
     if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; this.sim.say(this.player, '🎟 +1 спас-бросок', 'music', 3); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
     return false;
   }

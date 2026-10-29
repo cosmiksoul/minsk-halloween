@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
+import { isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -85,7 +85,7 @@ test('CARD, TOKEN, ROAD, HEAT из спеки', () => {
   assert.deepEqual(CARD, { slots: 52, hand: 5, ringMin: 200, ringMax: 700, ringStep: 300, ringCap: 1600, spacing: 150, cooldown: 60, xpPerRank: 2, handBase: 20, bonus: { low: 0, mid: 1, high: 2, ace: 3 } });
   assert.deepEqual(HAND_MULT, { high: 1, pair: 2, twoPair: 3, three: 4, straight: 6, flush: 8, fullHouse: 10, four: 15, straightFlush: 30 });
   assert.deepEqual(TOKEN, { perHand: 1, price: 12, cap: 3 }); assert.deepEqual(ROAD, { speed: 1.2, heatPer: 4, crowdCost: 4 });
-  assert.equal(HEAT.boss, 10); assert.equal(HEAT.road, 1); assert.equal(QUESTS.length, 6); assert.deepEqual(QUESTS.map(q => q.id), ['trick', 'treat', 'candy', 'coin', 'ghost', 'card']);
+  assert.equal(HEAT.boss, 10); assert.equal(HEAT.road, 1); assert.equal(QUESTS.length, 7); assert.deepEqual(QUESTS.map(q => q.id), ['trick', 'treat', 'candy', 'coin', 'share', 'ghost', 'card']);
 });
 test('cardOfSlot: масти по четвертям, старшинство сверху вниз', () => {
   assert.deepEqual(cardOfSlot(1), { rank: 14, suit: '♠' }); assert.deepEqual(cardOfSlot(13), { rank: 2, suit: '♠' });
@@ -106,6 +106,8 @@ test('questBonus, nextQuest, questFor', () => {
   assert.equal(questBonus(2), 2); assert.equal(questBonus(0), 5); assert.equal(questBonus(28), 28);
   assert.equal(nextQuest([]).id, 'trick'); assert.equal(nextQuest(['trick']).id, 'treat'); assert.equal(nextQuest(QUESTS.map(q => q.id)), null);
   assert.equal(questFor(['trick'], 'friend').id, 'treat'); assert.equal(questFor(['trick'], 'kill'), null); assert.equal(questFor([], 'card'), null);
+  const four = ['trick', 'treat', 'candy', 'coin']; assert.equal(nextQuest(four).id, 'share'); assert.equal(questFor(four, 'share').kind, 'share'); assert.equal(questFor(four, 'win'), null);
+  assert.equal(QUESTS.length, 7); assert.equal(QUESTS.map(q => q.id).join(','), 'trick,treat,candy,coin,share,ghost,card');
 });
 test('slotsOf: не меньше одного и живых, не больше пяти', () => { assert.equal(slotsOf(0, 0), 1); assert.equal(slotsOf(undefined, 3), 3); assert.equal(slotsOf(2, 1), 2); assert.equal(slotsOf(9, 1), 5); });
 test('canBuyToken и buyToken: цена 12, потолок 3', () => {
@@ -125,4 +127,29 @@ test('cardsFromDeck: владелец по месту, свои, мёртвые 
   assert.equal(cards[0].owner, 'a:1'); assert.equal(cards[0].ghoul, false); assert.equal(cards[0].rank, 14);
   assert.equal(cards[1].ghoul, true); assert.equal(cards[2].ghoul, true); assert.equal(cards[3].ghoul, true); assert.equal(cards[3].suit, '♦');
   assert.equal(cards[1].seed, cardsFromDeck([2], rows, 497000, 'me')[0].seed); assert.notEqual(cards[1].seed, cardsFromDeck([2], rows, 497001, 'me')[0].seed);
+});
+
+test('migrate: битая рука обнуляется, состояния карт нормализуются', () => {
+  assert.equal(migrate({ ...newProgress(), hand: { hour: 1, cards: null } }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: { hour: 1, cards: [{ slot: 1 }] } }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: 'x' }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: { cards: [1, 2, 3, 4, 5].map(slot => ({ slot })) } }).hand, null);
+  const weird = [1, 2, 3, 4, 5].map(slot => ({ slot, rank: 14, suit: '♠', state: 'weird', coolUntil: 'no' }));
+  const g4 = migrate({ ...newProgress(), hand: { hour: 497000, cards: weird } });
+  assert.equal(g4.hand.cards.length, CARD.hand); assert.equal(g4.hand.cards[0].state, 'up'); assert.equal(g4.hand.cards[0].coolUntil, 0);
+  const ok = [1, 2, 3, 4, 5].map(slot => ({ slot, rank: 14, suit: '♠', state: 'cool', coolUntil: 5 }));
+  const g5 = migrate({ ...newProgress(), hand: { hour: 497000, cards: ok } }); assert.equal(g5.hand.cards[0].state, 'cool'); assert.equal(g5.hand.cards[0].coolUntil, 5);
+});
+
+test('isHalloweenNight: 31.10 18:00 – 01.11 06:00 по Минску', () => {
+  assert.equal(isHalloweenNight(Date.UTC(2026, 9, 31, 14, 59)), false);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 9, 31, 15, 0)), true);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 10, 1, 2, 59)), true);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 10, 1, 3, 0)), false);
+  assert.equal(HALLOWEEN.xpMul, 2);
+});
+
+test('addPoints: ночью Хэллоуина плюс удваивается, минус нет', () => {
+  const night = Date.UTC(2026, 9, 31, 20, 0), day = Date.UTC(2026, 9, 30, 20, 0);
+  const g = newProgress(); assert.equal(addPoints(g, 5, day), 5); assert.equal(addPoints(g, 5, night), 15); assert.equal(addPoints(g, -1, night), 14);
 });
