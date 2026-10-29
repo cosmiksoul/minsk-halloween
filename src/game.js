@@ -1,7 +1,8 @@
 // Игровая логика: игрок управляет своим скелетом кликами по карте, собирает конфеты,
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
-import { rollDice, hideDice, OUTCOMES } from './dice.js';
+import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
+import { CAPS, POINTS, PURSUIT, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel } from './rules.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
@@ -10,7 +11,10 @@ import { ARCANA, ARCANA_BY_ID, drawArcana, drawCardBack } from './tarot.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clock = () => { const d = new Date(); return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'); };
-export const BASE_HP = 3, MAX_HP = 6, SHIELD_SEC = 20, SHIELD_MAX = 3, CANDY_N = 40;
+export const BASE_HP = CAPS.baseHearts, MAX_HP = CAPS.hearts, SHIELD_SEC = 20, SHIELD_MAX = 3, CANDY_N = 40;
+const firstName = s => String(s || '').split(' ')[0];
+// время записи: старые записи хранят «ЧЧ:ММ», новые ISO; сегодняшние показываем временем, прочие с датой
+export const fmtAt = at => { if (!at) return ''; if (/^\d\d:\d\d$/.test(at)) return at; const d = new Date(at); if (isNaN(d)) return String(at); const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); return d.toDateString() === new Date().toDateString() ? hm : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')} ${hm}`; };
 
 // --- конфеты и монетки на дорогах
 function coinCanvas() {
@@ -58,7 +62,7 @@ export class Game {
   constructor(sim, scene, opts) {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.restored = false; this.shields = [];
-    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.respawnAt = 0;
+    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null;
     const ringG = new THREE.RingGeometry(0.7, 1, 24); ringG.rotateX(-Math.PI / 2);
     this.ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.9, depthWrite: false })); this.ring.visible = false; this.ring.position.y = 0.55; scene.add(this.ring);
     this.dest = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false })); this.dest.visible = false; this.dest.position.y = 0.56; scene.add(this.dest); this.destT = 0;
@@ -88,27 +92,28 @@ export class Game {
   setPlayer(a) {
     if (this.player === a) return;
     if (this.player) { this.sim.unsetPlayer(this.player); this.player.def.player = false; this.select(false); }
+    this.hunters?.reset(true); // смена скелета: охотники прежнего расходятся без записей, угроза остаётся в его прогрессе
     this.player = a; a.def.player = true; this.sim.setPlayer(a);
-    if (!a.def.game) a.def.game = { hp: BASE_HP, maxHp: BASE_HP, skulls: [], friends: [], visits: [], deaths: 0, kills: 0 };
-    const g = a.def.game; g.maxHp = Math.min(MAX_HP, Math.max(BASE_HP, g.maxHp || BASE_HP)); g.hp = Math.min(g.maxHp, Math.max(0, g.hp ?? BASE_HP)); if (g.hp <= 0) g.hp = BASE_HP;
-    g.skulls ||= []; g.friends ||= []; g.visits ||= []; g.deaths ||= 0; g.kills ||= 0; g.tarot ||= []; g.coins ||= 0; g.tokens ||= 0; g.shared ||= null;
+    const g = a.def.game = migrate(a.def.game); // старый прогресс один раз превращается в v2: счёт, хвост, журнал
+    if (g.hp <= 0) g.hp = g.maxHp; // сохранились мёртвым: собираемся заново с полным здоровьем
     if (this.tarot) { this.tarot.reset(); for (const t of g.tarot) this.tarot.markDone(t.id); }
     this.shields = []; this.pending = null; this.closeDialog();
     this.restore(); this.save(); this.renderHUD();
   }
   clearPlayer() {
     if (!this.player) return;
-    const p = this.player; this.select(false); this.pending = null; this.closeDialog();
+    const p = this.player; this.select(false); this.pending = null; this.closeDialog(); this.hunters?.reset(true);
     for (const f of [...(p.followers || [])]) this.sim.unfriend(f);
     this.sim.unsetPlayer(p); p.def.player = false; this.player = null; this.shields = []; this.candies.clear(); if (this.tarot) this.tarot.reset(); this.renderHUD();
   }
-  // после перезагрузки: убитые снова призраки, друзья снова идут следом
+  // после перезагрузки: убитые из журнала снова призраки, хвост снова идёт следом
   restore() {
     const g = this.g; if (!g) return;
     const byUid = new Map(); for (const a of this.sim.agents) if (a.uid) byUid.set(a.uid, a);
-    for (const s of g.skulls) { const a = byUid.get(s.uid); if (a && !a.ghost && a.bio.name === s.name) this.sim.ghostify(a); }
-    for (const f of g.friends) {
-      let a = byUid.get(f.uid); if (a && (a.leader || a.ghost || a.player || a.bio.name !== f.name)) a = null;
+    for (const e of g.log) { if (e.kind !== 'kill' || e.boss) continue; const a = byUid.get(e.uid); if (a && !a.ghost && a.bio.name === e.name) this.sim.ghostify(a); }
+    for (const f of g.tail) {
+      let a = byUid.get(f.uid); if (a && a.leader === this.player) continue; // уже идёт следом (вернулись к этому скелету)
+      if (a && (a.leader || a.ghost || a.player || a.bio.name !== f.name)) a = null;
       if (!a && f.name && f.arch) a = this.sim.spawnFriend(f, this.player.x, this.player.z);
       if (a) { this.sim.befriend(a, this.player); a.x = this.player.x + (Math.random() - 0.5) * 6; a.z = this.player.z + (Math.random() - 0.5) * 6; }
     }
@@ -130,6 +135,8 @@ export class Game {
   clickGround(x, z) {
     if (!this.selected || !this.player || this.busy || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
+    // клик рядом с меткой арканы ведёт точно в точку подбора: иначе соседний узел в 20 м оставляет карту неподобранной
+    if (this.tarot) { let best = null, bd = 25 * 25; for (const it of this.tarot.items) { if (it.done || it.node < 0) continue; const d = (it.nx - x) ** 2 + (it.nz - z) ** 2; if (d < bd) { bd = d; best = it; } } if (best) { x = best.nx; z = best.nz; } }
     if (this.sim.moveTo(this.player, x, z)) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
     this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
@@ -183,15 +190,19 @@ export class Game {
   }
   // --- заведения: щит на 20 секунд, до трёх мест
   visit(v) {
-    const g = this.g; const now = this.sim.time; this.shields = this.shields.filter(s => s.until > now);
+    const g = this.g, me = this.player; const now = this.sim.time; this.shields = this.shields.filter(s => s.until > now);
+    // +1 очко и запись в журнал только за первое посещение под управлением: заходы на автопилоте бонус не тратят
+    const first = !g.visits.some(x => x.id === v.id && !x.auto);
     g.visits.unshift({ name: v.name, at: clock(), id: v.id }); if (g.visits.length > 40) g.visits.length = 40;
     v.visits++;
     const have = this.shields.find(s => s.id === v.id);
-    if (have) { have.until = now + SHIELD_SEC; this.sim.say(this.player, '🎃 щит обновлён', 'beer', 2); }
-    else if (this.shields.length < SHIELD_MAX) { this.shields.push({ id: v.id, name: v.name, until: now + SHIELD_SEC }); this.sim.say(this.player, `🎃 +щит (${this.shields.length}/${SHIELD_MAX})`, 'beer', 2.2); }
-    else this.sim.say(this.player, '🎃 щитов уже три', 'beer', 2);
-    this.player.state = 'drink'; this.player.timer = 2.2; this.sim.enterVenue(this.player, v);
-    this.save(); this.renderHUD(); this.o.showCard(this.player, true);
+    if (have) { have.until = now + SHIELD_SEC; this.sim.say(me, '🎃 щит обновлён', 'beer', 2); }
+    else if (this.shields.length < SHIELD_MAX) { this.shields.push({ id: v.id, name: v.name, until: now + SHIELD_SEC }); this.sim.say(me, `🎃 +щит (${this.shields.length}/${SHIELD_MAX})`, 'beer', 2.2); }
+    else this.sim.say(me, '🎃 щитов уже три', 'beer', 2);
+    if (first) { this.points(POINTS.visit); this.log('visit', { name: v.name, id: v.id }); setTimeout(() => this.player === me && this.sim.say(me, `★ +${POINTS.visit} за новое место`, 'beer', 1.8), 2300); }
+    me.state = 'drink'; me.timer = 2.2; this.sim.enterVenue(me, v);
+    this.hunters?.resetAtVenue('venue');
+    this.save(); this.renderHUD(); this.o.showCard(me, true);
   }
   // --- урон и лечение
   damage(n) {
@@ -201,19 +212,49 @@ export class Game {
     if (absorbed) this.sim.say(this.player, `🎃 щит принял ${absorbed}`, 'beer', 2);
     if (n > 0) { g.hp = Math.max(0, g.hp - n); if (g.hp <= 0) this.die(); }
   }
-  heal(n, raiseMax = false) { const g = this.g; if (raiseMax) g.maxHp = Math.min(MAX_HP, g.maxHp + n); g.hp = Math.min(g.maxHp, g.hp + n); }
+  heal(n, raiseMax = false) { const g = this.g; if (raiseMax) g.maxHp = Math.min(CAPS.hearts, g.maxHp + n); g.hp = Math.min(g.maxHp, g.hp + n); }
+  // охотник ест стак: щиты поглощают позиции, потом убегает последний друг из хвоста, потом уходит сердце насовсем.
+  // tailOnly: только хвост (крит-провал с прохожим). Возвращает 'dead', если укус добил
+  eat(n, by, tailOnly = false) {
+    const g = this.g, me = this.player; if (!g || !me || me.state === 'dead') return me && me.state === 'dead' ? 'dead' : 'alive';
+    const now = this.sim.time; this.shields = this.shields.filter(s => s.until > now);
+    let absorbed = 0; while (n > 0 && this.shields.length) { this.shields.sort((a, b) => a.until - b.until).shift(); n--; absorbed++; }
+    if (absorbed) this.sim.say(me, `🎃 щит принял ${absorbed}`, 'beer', 2);
+    if (tailOnly) n = Math.min(n, g.tail.length);
+    const lost = n > 0 ? eatStack(g, n) : [];
+    lost.forEach((l, i) => {
+      const say = text => setTimeout(() => this.player === me && this.sim.say(me, text, 'boo', 2.4), 400 + i * 1300);
+      if (l.kind === 'friend') {
+        const f = l.who; const a = (me.followers || []).find(x => x.uid === f.uid);
+        if (a) { this.sim.unfriend(a); this.sim.say(a, 'ай', 'boo', 2); }
+        say(`💚 ${firstName(f.name)} убежал${f.gender === 'f' ? 'а' : ''}`);
+      } else say('❤ −1 насовсем');
+    });
+    this.renderHUD();
+    if (g.hp <= 0) { this.die(); return 'dead'; }
+    return 'alive';
+  }
   die() {
-    const g = this.g; g.deaths++; this.pending = null; this.pendingVenue = null; this.closeDialog();
-    const p = this.player; this.sim.stop(p); p.state = 'dead'; p.timer = 1e9; p.sprite.material.opacity = 0.35; p.sprite.material.transparent = true;
+    const g = this.g, p = this.player; if (!p || p.state === 'dead') return;
+    g.deaths++; this.pending = null; this.pendingVenue = null; this.closeDialog();
+    // стак рассыпается вместе с костями: хвост разбегается, максимум сердец −2 (не ниже трёх), угроза и охотники обнуляются
+    for (const f of [...(p.followers || [])]) { this.sim.unfriend(f); this.sim.say(f, 'ой', 'boo', 1.6); }
+    g.tail = []; g.maxHp = Math.max(CAPS.baseHearts, g.maxHp - 2); g.hp = 0;
+    this.log('death'); this.hunters?.reset();
+    this.sim.stop(p); p.state = 'dead'; p.timer = 1e9; p.sprite.material.opacity = 0.35; p.sprite.material.transparent = true;
     this.sim.say(p, 'рассыпался на кости…', 'boo', 3); this.respawnAt = performance.now() + 3500;
   }
   respawn() {
-    const p = this.player, g = this.g; g.hp = BASE_HP; this.shields = [];
+    const p = this.player, g = this.g; g.hp = g.maxHp; this.shields = [];
     // встаём у ближайшего заведения, если оно рядом, иначе на том же месте
     let best = null, bd = 400 * 400; for (const v of this.sim.active) { const d = (v.x - p.x) ** 2 + (v.z - p.z) ** 2; if (d < bd) { bd = d; best = v; } }
     this.sim.teleport(p, best ? best.node : this.sim.nodeOf(p)); p.to = p.from; p.state = 'idle'; p.trail = []; p.sprite.material.opacity = 1;
     this.sim.say(p, 'собрался заново', '', 2.2); this.save(); this.renderHUD(); this.o.showCard(p, true);
   }
+  // счёт-накопитель: победа +2, поражение −1, аркана +5, новое заведение +1, не ниже нуля
+  points(n) { const s = addPoints(this.g, n); this.save(); this.renderHUD(); return s; }
+  // запись в журнал персонажа: вид, улица, время и всё, что передали; новые сверху, хранится 200
+  log(kind, extra = {}) { const e = logPush(this.g, { kind, street: this.sim.streetOf(this.player), ...extra }); if (this.o.onLog) this.o.onLog(); return e; }
   // --- бросок кубика и его исход
   async roll() {
     const p = this.pending; if (!p) return; p.rolling = true; this.busy = true; this.sim.stop(this.player);
@@ -233,22 +274,88 @@ export class Game {
     this.resolve(p.action, npc, res);
   }
   resolve(action, npc, res) {
-    const g = this.g, me = this.player; const info = { uid: npc.uid, name: npc.bio.name, age: npc.bio.age, gender: npc.bio.gender, job: npc.bio.job, arch: npc.arch, ck: npc.ck, at: clock(), street: this.sim.streetOf(npc), roll: res.n };
-    if (res.kind === 'critfail') {
+    const g = this.g, me = this.player;
+    const info = { uid: npc.uid, name: npc.bio.name, age: npc.bio.age, gender: npc.bio.gender, job: npc.bio.job, arch: npc.arch, ck: npc.ck, roll: res.n, action, at: new Date().toISOString() };
+    const later = (text, kind, ms) => setTimeout(() => this.player === me && this.sim.say(me, text, kind, 2.2), ms);
+    if (res.kind === 'fail' || res.kind === 'critfail') {
+      // провал ранит здоровье, которое лечится; крит-провал ещё пугает последнего друга из хвоста
       this.sim.release(npc); this.sim.say(npc, pick(npc.rng, LINES.mock), 'boo', 2.4);
-      if (action === 'kill' && g.skulls.length) { g.skulls.pop(); this.sim.say(me, '−2 ❤ и −1 💀', 'boo', 2.6); }
-      else if (action === 'friend' && g.friends.length) { const f = g.friends.pop(); const a = this.sim.agents.find(x => x.uid === f.uid && x.leader === me); if (a) { this.sim.unfriend(a); this.sim.say(a, 'Ну и дружи сам', 'boo', 2.4); } this.sim.say(me, '−2 ❤ и −1 💚', 'boo', 2.6); }
-      else this.sim.say(me, '−2 ❤', 'boo', 2.4);
-      this.damage(2);
-    } else if (res.kind === 'fail') {
-      this.sim.release(npc); this.sim.say(npc, pick(npc.rng, LINES.mock), 'boo', 2.4); this.sim.say(me, '−1 ❤', 'boo', 2); this.damage(1);
+      const dmg = res.kind === 'critfail' ? 2 : 1;
+      g.losses++; this.points(POINTS.loss); this.log('fail', info);
+      this.sim.say(me, `−${dmg} ❤ · ★ −${-POINTS.loss}`, 'boo', 2.4);
+      this.damage(dmg);
+      if (res.kind === 'critfail' && me.state !== 'dead' && g.tail.length) this.eat(1, 'critfail', true);
     } else {
-      if (action === 'kill') { this.sim.say(npc, pick(npc.rng, LINES.scared), 'boo', 2.4); this.sim.ghostify(npc); g.skulls.push(info); g.kills++; this.sim.say(me, '💀 +1 череп', '', 2.4); }
-      else { this.sim.befriend(npc, me); this.sim.say(npc, pick(npc.rng, LINES.yes), 'music', 2.4); g.friends.push(info); this.sim.say(me, '💚 новый друг', '', 2.4); }
-      const coins = res.kind === 'crit' ? 4 : 2; g.coins += coins; setTimeout(() => this.player === me && this.sim.say(me, `🪙 +${coins}`, 'beer', 2), 2600);
-      if (res.kind === 'crit') { this.heal(1, true); setTimeout(() => this.player === me && this.sim.say(me, '❤ +1 за крит', 'music', 2.2), 1200); }
+      if (action === 'kill') {
+        this.sim.say(npc, pick(npc.rng, LINES.scared), 'boo', 2.4); this.sim.ghostify(npc);
+        g.kills++; const grew = growHearts(g);
+        this.sim.say(me, grew ? '💀 +1 череп · ❤ +1' : '💀 +1 череп', '', 2.4);
+        this.log('kill', info); this.hunters?.gain('kill');
+      } else {
+        // хвост до десяти: одиннадцатый остаётся другом в городе, в журнал и очки попадает, следом не идёт
+        const inTail = g.tail.length < CAPS.tail;
+        this.sim.say(npc, pick(npc.rng, LINES.yes), 'music', 2.4);
+        if (inTail) { this.sim.befriend(npc, me); g.tail.push({ ...info }); this.sim.say(me, `💚 новый друг · хвост ${g.tail.length}/${CAPS.tail}`, '', 2.4); }
+        else { this.sim.release(npc); this.sim.say(me, '💚 друзей уже десять, помашет из толпы', '', 2.8); }
+        this.log('friend', { ...info, inTail }); this.hunters?.gain('friend');
+      }
+      g.wins++; this.points(POINTS.win);
+      const coins = res.kind === 'crit' ? 4 : 2; g.coins += coins; later(`🪙 +${coins} · ★ +${POINTS.win}`, 'beer', 2600);
+      if (res.kind === 'crit') { this.heal(1); later('❤ +1 за крит', 'music', 1200); }
     }
     this.save(); this.renderHUD(); this.o.showCard(me, true);
+  }
+  // --- дуэль с охотником: встречный бросок d20 против d20 с бонусами. null, если сейчас нельзя начать
+  // (идёт другой бросок, игрок мёртв, открыта модалка): охотник подождёт и повторит
+  async duel(h) {
+    const g = this.g, me = this.player;
+    if (!g || !me || this.busy || me.state === 'dead' || !$('shop').hidden || !$('deck').hidden || !$('tarot').hidden || !$('share').hidden) return null;
+    this.busy = true; this.dropPending(); this.closeDialog(); this.sim.stop(me);
+    const a = h.a, name = a.bio.name, fb = h.bonus || 0, tb = tailBonus(g.tail.length);
+    const titleFoe = (h.intent === 'kill' ? '⚔ ' : '🤝 ') + name + (fb ? ' +' + fb : ''), titleMe = 'ты' + (tb ? ' +' + tb : '');
+    const won = x => x.bio.gender === 'f' ? 'выиграла' : 'выиграл';
+    const cmp = (foe, m) => `${foe}${fb ? '+' + fb : ''} против ${m}${tb ? '+' + tb : ''}`;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    let foe = 0, my = 0, r = { winner: 'tie', crit: false, eat: 0 }, saveOffered = false;
+    try {
+      for (let i = 0; i < 10; i++) {
+        foe = (await rollDice(titleFoe, this.debugRollFoe ?? undefined, true, { plain: true })).n;
+        my = (await rollDice(titleMe, this.debugRoll ?? undefined, true, { plain: true })).n;
+        r = duel(foe, fb, my, tb);
+        // жетон спас-броска: после сравнения, перебрасывает только кубик игрока, один раз за дуэль
+        if (r.winner === 'foe' && !saveOffered && g.tokens > 0) {
+          saveOffered = true; showDuelResult(cmp(foe, my) + ' · ' + firstName(name) + ' ' + won(a), 'fail', true);
+          const again = await this.offerSave({ n: my });
+          if (again) { g.tokens--; this.save(); this.renderHUD(); my = (await rollDice('🎟 Спас-бросок · ' + titleMe, this.debugRoll2 ?? undefined, true, { plain: true })).n; r = duel(foe, fb, my, tb); }
+        }
+        if (r.winner !== 'tie') break;
+        showDuelResult(cmp(foe, my) + ' · ничья, ещё раз', 'tie', true); await sleep(900);
+      }
+    } catch (e) { console.warn(e); hideDice(); this.busy = false; return null; }
+    if (r.winner === 'tie') r = { winner: 'me', crit: false, eat: 0 }; // десять ничьих подряд: считаем победой игрока
+    if (this.player !== me) { hideDice(); this.busy = false; return null; }
+    h.rolls = [foe, fb, my + tb]; // для записи набега в базу: кубик охотника, его бонус, кубик игрока с бонусом
+    showDuelResult(cmp(foe, my) + ' · ' + (r.winner === 'me' ? 'ты ' + won(me) : firstName(name) + ' ' + won(a)), r.winner === 'me' ? (r.crit ? 'crit' : 'success') : (r.crit ? 'critfail' : 'fail'));
+    const base = { uid: a.uid, name, age: a.bio.age, gender: a.bio.gender, job: a.bio.job, arch: a.arch, ck: a.ck, boss: true, intent: h.intent, owner: h.owner ? h.owner.id : null, ghoul: !!(a.def && a.def.ghoul), foe, bonus: fb, roll: my, meBonus: tb, level: this.hunters ? this.hunters.level : 0 };
+    const later = (text, kind, ms) => setTimeout(() => this.player === me && this.sim.say(me, text, kind, 2.2), ms);
+    let outcome;
+    if (r.winner === 'me') {
+      // босс-трофей: тип по намерению охотника, +1 к максимуму сердец, при крите ещё +1 здоровья
+      outcome = h.intent === 'kill' ? 'skull' : 'heart';
+      const grew = growHearts(g); if (r.crit) this.heal(1);
+      g.coins += 4; g.wins++; this.points(POINTS.win);
+      this.log('win', base); this.hunters?.gain('raidWin');
+      this.sim.say(me, (h.intent === 'kill' ? '👑💀 босс-череп' : '👑💚 босс-сердечко') + (grew ? ' · ❤ +1' : ''), 'music', 2.8);
+      later(`🪙 +4 · ★ +${POINTS.win}`, 'beer', 2600);
+    } else {
+      // укус: позиция стака насовсем (две при крите), −1 очко; если здоровье кончилось — смерть
+      g.losses++; this.points(POINTS.loss);
+      this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
+      this.log('bit', { ...base, ate: r.eat });
+      outcome = this.eat(r.eat, 'hunter') === 'dead' ? 'killed' : 'bit';
+    }
+    this.save(); this.renderHUD(); this.busy = false; this.o.showCard(me, true);
+    return outcome;
   }
   // --- каждый кадр
   update(dt, t) {
@@ -278,7 +385,8 @@ export class Game {
     const g = this.g; if (!g || it.done || this.busy || !this.player) return;
     if (g.tarot.some(t => t.id === it.a.id)) { this.tarot.markDone(it.a.id); return; }
     g.tarot.push({ id: it.a.id, at: clock() }); this.tarot.markDone(it.a.id);
-    this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name}`, 'music', 3);
+    this.points(POINTS.tarot); this.log('tarot', { id: it.a.id, name: it.a.name }); this.hunters?.gain('tarot');
+    this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name} · ★ +${POINTS.tarot}`, 'music', 3);
     this.save(); this.renderHUD(); this.o.showCard(this.player, true);
     // на автопилоте карта ложится в колоду молча: модалка посреди чужих дел только мешает
     if (!this.player.auto) this.showTarot(it.a, true);
@@ -338,6 +446,7 @@ export class Game {
     else { let id = randomItem(kind, p.rng); for (let i = 0; i < 5 && id === c[kind]; i++) id = randomItem(kind, p.rng); c[kind] = id; got = CATALOG[kind][id]; }
     drawPortrait(p.costume, $('shBefore')); this.sim.recostume(p, c); p.def.costume = c; drawPortrait(c, $('shAfter'));
     $('shMsg').textContent = `выпало: ${got} (−${price} 🪙)`; this.sim.say(p, `🛍 ${got}`, 'music', 2.4);
+    this.log('buy', { kind, item: got }); this.hunters?.resetAtVenue('costume'); // новый костюм: маскировка, след теряют все
     this.save(); this.renderHUD(); this.renderShop(); this.o.showCard(p, true);
   }
   takeOff(kind) {
@@ -347,40 +456,52 @@ export class Game {
   }
   // --- интерфейс
   hearts(g) { let s = ''; for (let i = 0; i < g.maxHp; i++) s += i < g.hp ? '<i class="hp on">♥</i>' : '<i class="hp">♥</i>'; return s; }
+  // индикатор угрозы: надгробия по уровню, мигает, когда охотник ближе 300 м
+  threatHtml() {
+    const h = this.hunters, p = this.player; const lvl = h ? h.level : 0; const near = h && p ? h.nearest() : null;
+    const hot = !!near && Math.hypot(near.a.x - p.x, near.a.z - p.z) < PURSUIT.nearWarn;
+    return `<span class="thr${lvl ? ' on' : ''}${hot ? ' hot' : ''}" title="угроза ${h ? Math.round(h.heat) : 0}/100${lvl ? ` · уровень ${lvl}${hot ? ' · охотник рядом' : ''}` : ''}">${'🪦'.repeat(lvl)}${'·'.repeat(5 - lvl)}</span>`;
+  }
   renderHUD() {
     const hud = $('hud'); const p = this.player; const own = this.o.own ? this.o.own() : [];
     if (!p) { hud.innerHTML = `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`; hud.classList.remove('has'); return; }
-    const g = this.g; const now = this.sim.time; const sh = this.shields.filter(s => s.until > now);
+    const g = this.g; const now = this.sim.time; const sh = this.shields.filter(s => s.until > now); const st = statsOf(g);
     hud.classList.add('has');
     const avatars = own.length > 1 || own.length < 5 ? `<div class="hudOwn">${own.map(o => `<canvas class="av${o.agent === p ? ' cur' : ''}" width="24" height="36" data-seed="${o.def.seed}" title="${esc(o.def.name)}"></canvas>`).join('')}${own.length < 5 ? '<button class="avAdd" title="ещё скелет (до пяти)">+</button>' : ''}</div>` : '';
     hud.innerHTML = `<div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
       <div class="hudRow">${this.hearts(g)}${sh.map(s => `<span class="sh" title="${esc(s.name)}">🎃<small>${Math.ceil(s.until - now)}</small></span>`).join('')}</div>
-      <div class="hudRow"><span class="skc">💀 ${g.skulls.length}</span><span class="frc">💚 ${g.friends.length}</span><span class="vc">🎃 ${g.visits.length}</span><span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span><span class="cn">🪙 ${g.coins}</span>${g.tokens ? `<span class="tk">🎟 ${g.tokens}</span>` : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
+      <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="счёт: победа +2, поражение −1, аркана +5, новое заведение +1">★ ${g.score}</span>${this.threatHtml()}</div>
+      <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc">🎃 ${g.visits.length}</span><span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span><span class="cn">🪙 ${g.coins}</span>${g.tokens ? `<span class="tk">🎟 ${g.tokens}</span>` : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
   }
   // блок в карточке скелета
   cardHtml(a) {
     if (a === this.player) {
-      const g = this.g;
+      const g = this.g, st = statsOf(g); const lvl = this.hunters?.level || 0;
       return `<div class="gm"><div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span></div>
-        <div class="line"><span class="skc">💀 ${g.skulls.length}</span> · <span class="frc">💚 ${g.friends.length}</span> · <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc">🎃 ${g.visits.length}</span> · <span class="cn">🪙 ${g.coins}</span>${g.tokens ? ` · <span class="tk">🎟 ${g.tokens}</span>` : ''}</div></div>`;
+        <div class="line"><span class="pts">★ ${g.score}</span> · ❤ max ${g.maxHp} · <span class="tl">💚 хвост ${g.tail.length}/${CAPS.tail}</span>${lvl ? ` · <span class="thr on" title="угроза">${'🪦'.repeat(lvl)}</span>` : ''}</div>
+        <div class="line"><span class="skc">💀 ${st.kills}</span> · <span class="frc">🤝 ${st.friends}</span> · <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc">🎃 ${g.visits.length}</span> · <span class="cn">🪙 ${g.coins}</span>${g.tokens ? ` · <span class="tk">🎟 ${g.tokens}</span>` : ''}</div></div>`;
     }
-    if (a.custom && !a.def.guest && a.def.game) { const g = a.def.game; return `<div class="gm"><div class="line muted">💀 ${g.skulls.length} · 💚 ${g.friends.length} · 🃏 ${g.tarot.length}/${ARCANA.length} · 🎃 ${g.visits.length} · гуляет сам</div></div>`; }
-    if (a.ghost) { const s = this.g && this.g.skulls.find(x => x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(s.at)}` : ''}</div></div>`; }
-    if (this.player && a.leader === this.player) { const f = this.g && this.g.friends.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(f.at)}` : ''} · идёт следом</div></div>`; }
+    if (a.custom && !a.def.guest && a.def.game) { const st = statsOf(a.def.game); return `<div class="gm"><div class="line muted">★ ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}/${ARCANA.length} · гуляет сам</div></div>`; }
+    if (a.ghost) { const s = this.g && this.g.log.find(x => x.kind === 'kill' && x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(fmtAt(s.at))}` : ''}</div></div>`; }
+    if (this.player && a.leader === this.player) { const f = this.g && this.g.tail.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(fmtAt(f.at))}` : ''} · идёт следом</div></div>`; }
     return '';
   }
-  // окно профиля своего скелета: статистика, черепа и друзья с подсказками, посещения
+  // окно профиля своего скелета: стак и счёт, черепа и друзья из журнала с подсказками, посещения
   profileHtml(a) {
-    const g = a.def.game; if (!g) return '<div class="hint">этот скелет ещё не играл</div>';
+    const g = a.def.game ? migrate(a.def.game) : null; if (!g) return '<div class="hint">этот скелет ещё не играл</div>';
     let id = 0; this.tips = {};
     const who = s => `<b>${esc(s.name)}</b><br>${s.age} ${ageWord(s.age)} · ${s.gender === 'm' ? 'мужчина' : 'женщина'}<br>при жизни: ${esc(s.job)}`;
-    const sk = g.skulls.map(s => { const k = 's' + id++; this.tips[k] = `${who(s)}<br>убит в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="sk" data-tip="${k}">💀</span>`; }).join('');
-    const fr = g.friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>подружились в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="fr" data-tip="${k}">💚</span>`; }).join('');
+    const when = s => `${esc(fmtAt(s.at))}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`;
+    const kills = g.log.filter(e => e.kind === 'kill' || (e.kind === 'win' && e.intent === 'kill')).slice(0, 30);
+    const friends = g.log.filter(e => e.kind === 'friend' || (e.kind === 'win' && e.intent === 'friend')).slice(0, 30);
+    const sk = kills.map(s => { const k = 's' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}убит в ${when(s)}`; return `<span class="sk${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? '👑' : '💀'}</span>`; }).join('');
+    const fr = friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}подружились в ${when(s)}${s.kind === 'friend' && !s.inTail ? ' · машет из толпы' : ''}`; return `<span class="fr${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? '👑' : '💚'}</span>`; }).join('');
     const vis = g.visits.slice(0, 10).map(v => `<div class="vis">${esc(v.at)} · 🎃 ${esc(v.name)}${v.auto ? ' <span class="muted">(сам)</span>' : ''}</div>`).join('');
     return `<div class="pf">
-      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span></div>
+      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span> · <span class="pts">★ ${g.score}</span> <span class="muted">· побед ${g.wins} · поражений ${g.losses}</span></div>
+      <div class="line">хвост: <span class="tl">💚 ${g.tail.length}/${CAPS.tail}</span>${g.tail.length ? ' <span class="muted">· ' + g.tail.map(f => esc(firstName(f.name))).join(', ') + '</span>' : ''}</div>
       <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
       <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>
       <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.slice(-8).map(t => esc(ARCANA_BY_ID[t.id].roman)).join(' ') : ''}</div>
