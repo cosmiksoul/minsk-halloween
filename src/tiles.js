@@ -1,7 +1,8 @@
 // Ленивая подгрузка тайлов карты: грузим только то, что попадает в кадр (плюс запас),
 // выгружаем далёкое. Сетка улиц для скелетов при этом общая и загружена целиком.
 import * as THREE from 'three';
-import { buildTile, buildBig, disposeGroup, pointInPoly } from './city.js';
+import { buildTile, buildBig, disposeGroup } from './city.js';
+import { pointInPoly, segDist2 } from './geo.js';
 import { animateRoofs } from './landmarks.js';
 
 export class TileManager {
@@ -97,8 +98,4 @@ export class TileManager {
     }
     return best ? { ...best, hit: h.point } : { n: null, hit: h.point, h: 0 };
   }
-}
-function segDist2(px, pz, ax, az, bx, bz) {
-  const dx = bx - ax, dz = bz - az; const l2 = dx * dx + dz * dz || 1e-9; let t = ((px - ax) * dx + (pz - az) * dz) / l2; t = Math.max(0, Math.min(1, t));
-  const qx = ax + dx * t, qz = az + dz * t; return (px - qx) ** 2 + (pz - qz) ** 2;
 }

@@ -1,6 +1,8 @@
 // Сборка города из запечённых OSM-данных по тайлам: здания, дороги, вода, парки,
 // деревья, тыквы у подъездов, фонари. Каждый тайл — своя группа, которую можно выгрузить.
 import * as THREE from 'three';
+import { pointInPoly } from './geo.js'; // геометрия живёт в geo.js без three, чтобы гоняться тестами
+export { pointInPoly };
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fixFor, addRoof, SKIP_NAMES } from './landmarks.js';
 
@@ -109,14 +111,6 @@ function buildingMaterial() {
   return m;
 }
 
-export function pointInPoly(x, z, p) {
-  let inside = false;
-  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
-    const xi = p[i], zi = p[i + 1], xj = p[j], zj = p[j + 1];
-    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
 function polyArea(p) { let a = 0; for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) a += (p[j] * p[i + 1] - p[i] * p[j + 1]); return a / 2; }
 
 // --- маркеры заведений: оранжевая пиксельная тыква парит над крышей
