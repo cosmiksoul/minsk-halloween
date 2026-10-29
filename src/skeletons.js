@@ -12,6 +12,19 @@ const CLOTH = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12', '#16a085',
 const DARK = '#1b1326';
 
 export const ACID = '#4df21e';
+// каталог вещей: id → название (для магазинов и карточки)
+export const CATALOG = {
+  hat: { witch: 'шляпа ведьмы', top: 'цилиндр', party: 'праздничный колпак', beanie: 'шапка-бини', crown: 'корона', cowboy: 'ковбойская шляпа', hard: 'каска', chef: 'колпак повара', bandana: 'бандана', horns: 'рожки', halo: 'нимб', cat: 'кошачьи ушки', viking: 'шлем викинга', cap: 'кепка', beret: 'берет', ushanka: 'ушанка', kerchief: 'платок', pumpkin: 'тыква на голову', wizard: 'колпак мага', sombrero: 'сомбреро', headphones: 'наушники', santa: 'колпак Санты', cone: 'дорожный конус', bunny: 'заячьи уши', bucket: 'ведро', tiara: 'диадема', helmet: 'шлем космонавта', fez: 'феска', flowers: 'венок из цветов', antlers: 'рога оленя', propeller: 'кепка с пропеллером', mohawk: 'ирокез' },
+  body: { hoodie: 'худи', shirtTie: 'рубашка с галстуком', coat: 'белый халат', dress: 'платье', robe: 'мантия звездочёта', vest: 'жилет дорожника', stripes: 'тельняшка', suit: 'костюм', apron: 'фартук', tracksuit: 'спортивка', scarf: 'шарф', cape: 'плащ', capeRed: 'плащ вампира', tshirt: 'футболка с принтом', jersey: 'игровая футболка', armor: 'латы', kimono: 'кимоно', sweater: 'свитер с узором', leather: 'косуха', overalls: 'комбинезон', tux: 'смокинг', poncho: 'пончо', cassock: 'ряса' },
+  prop: { phone: 'телефон', balloon: 'шарик', guitar: 'гитара', umbrella: 'зонт', laptop: 'ноутбук', flower: 'цветок', broom: 'метла', sword: 'меч', bag: 'сумка', torch: 'факел', cane: 'трость', book: 'книга', lantern: 'фонарь', mic: 'микрофон', camera: 'фотоаппарат', coffee: 'стакан кофе', scythe: 'коса', lollipop: 'леденец', flag: 'флажок', cat: 'кот на руках' },
+  pattern: { stripes: 'полоски', dots: 'горошек', checks: 'клетка', star: 'звезда', heart: 'сердце' },
+  face: { glasses: 'очки', shades: 'тёмные очки', paint: 'боевой раскрас', mask: 'маска-домино', mustache: 'усы', monocle: 'монокль' },
+  extra: { wings: 'крылья', batwings: 'крылья летучей мыши', tail: 'хвост чёрта', necklace: 'цепочка', badge: 'значок' },
+};
+export const SHOP_KINDS = { hat: 'шляпа', body: 'одежда', prop: 'предмет в руке', pattern: 'узор на одежде', face: 'лицо', extra: 'аксессуар', colors: 'перекраска' };
+export const PALETTE = CLOTH.concat(['#ffffff', '#111111', '#ff5fa2', '#5ad8ff', '#ffd23a', '#9dff7a', '#8e1b1b', '#3d1f6b']);
+export const randomItem = (kind, rng) => { const keys = Object.keys(CATALOG[kind]); return keys[Math.floor(rng() * keys.length)]; };
+export const CLOTH_BODIES = new Set(['hoodie', 'tshirt', 'jersey', 'sweater', 'tracksuit', 'dress', 'apron', 'kimono', 'overalls', 'poncho']);
 export function randomCostume(rng, arch) {
   const c = {
     hat: pick(rng, arch.hats), body: pick(rng, arch.bodies), prop: pick(rng, arch.props),
@@ -19,6 +32,11 @@ export function randomCostume(rng, arch) {
     c1: pick(rng, CLOTH), c2: pick(rng, CLOTH), c3: pick(rng, CLOTH),
   };
   if (arch.id === 'raver') { const g = rng() < 0.5; c.c1 = g ? ACID : '#141414'; c.c2 = g ? '#141414' : ACID; c.c3 = ACID; c.eye = ACID; c.bone = '#e6f0d8'; }
+  // редкие детали, чтобы толпа была разнообразнее
+  c.pattern = rng() < 0.15 ? randomItem('pattern', rng) : 'none';
+  c.face = rng() < 0.12 ? randomItem('face', rng) : 'none';
+  c.extra = rng() < 0.06 ? randomItem('extra', rng) : 'none';
+  c.shoes = rng() < 0.3 ? pick(rng, CLOTH) : null;
   return c;
 }
 
@@ -70,11 +88,17 @@ export function drawFrame(ctx, ox, f, C) {
     R(8, 16, 8, 2, col);
   }
   if (C.prop === 'bag' && P.prop) R(5, 17, 3, 7, C.c3);
+  if (C.extra === 'wings' || C.extra === 'batwings') {
+    const col = C.extra === 'wings' ? '#f4f1e3' : '#2d1b4e';
+    R(3, 18, 5, 1, col); R(2, 19, 5, 1, col); R(2, 20, 4, 1, col); R(3, 21, 3, 1, col); R(16, 18, 5, 1, col); R(17, 19, 5, 1, col); R(18, 20, 4, 1, col); R(18, 21, 3, 1, col);
+    if (C.extra === 'batwings') { R(1, 18, 1, 1, col); R(22, 18, 1, 1, col); R(1, 21, 1, 1, col); R(22, 21, 1, 1, col); }
+  }
+  if (C.extra === 'tail') { L(14, 26, 20, 30, C.extraColor || '#8e1b1b', 1); R(20, 29, 2, 2, '#e8303a'); }
 
   // --- ноги
   L(10, 27, P.lk[0], P.lk[1], bone); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1], bone);
   L(13, 27, P.rk[0], P.rk[1], bone); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1], bone);
-  R(P.lf[0] - 1, P.lf[1], 3, 1, bone); R(P.rf[0], P.rf[1], 3, 1, bone);
+  R(P.lf[0] - 1, P.lf[1], 3, 1, C.shoes || bone); R(P.rf[0], P.rf[1], 3, 1, C.shoes || bone);
   if (C.body === 'tracksuit') { L(10, 27, P.lk[0], P.lk[1], C.c1); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1] - 1, C.c1); L(13, 27, P.rk[0], P.rk[1], C.c1); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1] - 1, C.c1); }
 
   // --- таз, позвоночник, рёбра
@@ -95,12 +119,35 @@ export function drawFrame(ctx, ox, f, C) {
     case 'apron': R(8, 17, 8, 2, bone); R(9, 19, 6, 11, C.c1); R(9, 24, 6, 1, shade(C.c1)); break;
     case 'tracksuit': R(8, 17, 8, 9, C.c1); R(8, 17, 1, 9, '#f2f2f2'); R(15, 17, 1, 9, '#f2f2f2'); break;
     case 'scarf': R(8, 15, 8, 3, C.c1); R(14, 18, 2, 6, C.c1); R(14, 20, 2, 1, shade(C.c1)); break;
+    case 'tshirt': R(8, 17, 8, 9, C.c1); R(10, 19, 4, 3, C.c2); R(11, 20, 2, 1, C.c3); break;
+    case 'jersey': R(8, 17, 8, 9, C.c1); R(8, 17, 1, 9, C.c2); R(15, 17, 1, 9, C.c2); R(11, 19, 2, 4, '#f2f2f2'); R(10, 20, 1, 1, '#f2f2f2'); break;
+    case 'armor': R(7, 17, 10, 10, '#8a8f9a'); R(12, 17, 1, 10, '#5a5f6a'); R(8, 19, 8, 1, '#5a5f6a'); R(11, 22, 2, 2, '#ffd23a'); break;
+    case 'kimono': for (let y = 17; y <= 30; y++) { const w = Math.min(14, 8 + Math.floor((y - 17) * 0.5)); R(12 - w / 2, y, w, 1, C.c1); } R(11, 17, 2, 6, C.c2); R(8, 23, 8, 2, C.c3); break;
+    case 'sweater': R(8, 17, 8, 9, C.c1); R(8, 20, 8, 1, C.c2); R(8, 23, 8, 1, C.c2); for (const x of [9, 11, 13, 15]) { R(x, 21, 1, 1, C.c2); R(x, 25, 1, 1, C.c2); } break;
+    case 'leather': R(8, 17, 8, 10, '#1f1f2a'); R(11, 17, 2, 10, '#3a3a4a'); R(9, 18, 1, 1, '#aaa'); R(14, 18, 1, 1, '#aaa'); R(8, 25, 8, 1, '#8a6a2a'); break;
+    case 'overalls': R(8, 19, 8, 12, C.c1); R(9, 17, 1, 3, C.c1); R(14, 17, 1, 3, C.c1); R(10, 21, 4, 3, shade(C.c1)); break;
+    case 'tux': R(8, 17, 8, 10, '#111118'); R(11, 17, 2, 6, '#f2f2f2'); R(10, 17, 4, 1, '#c0392b'); R(11, 18, 2, 1, '#c0392b'); break;
+    case 'poncho': for (let y = 17; y <= 28; y++) { const w = Math.min(16, 8 + Math.floor((y - 17) * 0.8)); R(12 - w / 2, y, w, 1, y % 2 ? C.c1 : C.c2); } break;
+    case 'cassock': for (let y = 17; y <= 32; y++) { const w = Math.min(14, 8 + Math.floor((y - 17) * 0.45)); R(12 - w / 2, y, w, 1, '#1b1326'); } R(11, 17, 2, 8, '#f2f2f2'); R(11, 21, 2, 2, '#ffd23a'); break;
   }
+  if (C.pattern && C.pattern !== 'none' && CLOTH_BODIES.has(C.body)) {
+    const pc = C.c2 === C.c1 ? shade(C.c1) : C.c2;
+    switch (C.pattern) {
+      case 'stripes': for (const y of [18, 20, 22, 24]) R(8, y, 8, 1, shade(C.c1)); break;
+      case 'dots': for (const y of [18, 21, 24]) for (const x of [9, 12, 15]) R(x, y, 1, 1, pc); break;
+      case 'checks': for (let y = 17; y <= 25; y++) for (let x = 8; x < 16; x++) if (((x >> 1) + (y >> 1)) % 2) R(x, y, 1, 1, shade(C.c1)); break;
+      case 'star': R(11, 19, 2, 1, pc); R(10, 20, 4, 1, pc); R(11, 21, 2, 1, pc); R(10, 22, 1, 1, pc); R(13, 22, 1, 1, pc); break;
+      case 'heart': R(10, 19, 2, 1, pc); R(13, 19, 2, 1, pc); R(10, 20, 5, 1, pc); R(11, 21, 3, 1, pc); R(12, 22, 1, 1, pc); break;
+    }
+  }
+  if (C.extra === 'necklace') { R(10, 16, 4, 1, '#ffd23a'); R(11, 17, 2, 1, '#ffd23a'); }
+  if (C.extra === 'badge') R(9, 18, 2, 2, '#ffd23a');
 
   // --- руки
   L(8, 17, P.lh[0], P.lh[1], bone); L(15, 17, P.rh[0], P.rh[1], bone);
-  if (C.body === 'hoodie' || C.body === 'tracksuit' || C.body === 'coat' || C.body === 'suit' || C.body === 'shirtTie') {
-    const col = C.body === 'coat' ? '#f4f4f4' : C.body === 'shirtTie' ? '#f2f2f2' : C.body === 'suit' ? '#262633' : C.c1;
+  const SLEEVE = { hoodie: C.c1, tracksuit: C.c1, coat: '#f4f4f4', suit: '#262633', shirtTie: '#f2f2f2', tshirt: C.c1, jersey: C.c1, sweater: C.c1, leather: '#1f1f2a', tux: '#111118', armor: '#8a8f9a', kimono: C.c1, cassock: '#1b1326' };
+  if (SLEEVE[C.body]) {
+    const col = SLEEVE[C.body];
     L(8, 17, Math.round((8 + P.lh[0]) / 2), Math.round((17 + P.lh[1]) / 2), col); L(15, 17, Math.round((15 + P.rh[0]) / 2), Math.round((17 + P.rh[1]) / 2), col);
   }
 
@@ -115,6 +162,14 @@ export function drawFrame(ctx, ox, f, C) {
     R(9, 8 + hd, 2, 2, DARK); R(13, 8 + hd, 2, 2, DARK); R(11, 11 + hd, 2, 1, shade(bone));
     R(10, 9 + hd, 1, 1, C.eye); R(14, 9 + hd, 1, 1, C.eye);
     R(10, 14 + hd, 1, 1, shade(bone)); R(12, 14 + hd, 1, 1, shade(bone)); R(14, 14 + hd, 1, 1, shade(bone));
+    switch (C.face) {
+      case 'glasses': R(9, 8 + hd, 3, 1, '#333'); R(13, 8 + hd, 3, 1, '#333'); R(9, 9 + hd, 1, 1, '#333'); R(11, 9 + hd, 1, 1, '#333'); R(13, 9 + hd, 1, 1, '#333'); R(15, 9 + hd, 1, 1, '#333'); R(12, 8 + hd, 1, 1, '#333'); break;
+      case 'shades': R(9, 8 + hd, 3, 2, '#111'); R(13, 8 + hd, 3, 2, '#111'); R(12, 8 + hd, 1, 1, '#111'); R(10, 8 + hd, 1, 1, '#5ad8ff'); break;
+      case 'paint': R(9, 11 + hd, 2, 1, C.c1); R(13, 11 + hd, 2, 1, C.c1); R(8, 7 + hd, 1, 3, C.c2); R(15, 7 + hd, 1, 3, C.c2); break;
+      case 'mask': R(8, 8 + hd, 8, 2, C.c2); R(10, 9 + hd, 1, 1, C.eye); R(14, 9 + hd, 1, 1, C.eye); R(9, 8 + hd, 1, 1, shade(C.c2)); break;
+      case 'mustache': R(10, 12 + hd, 4, 1, '#3a2410'); R(9, 13 + hd, 1, 1, '#3a2410'); R(14, 13 + hd, 1, 1, '#3a2410'); break;
+      case 'monocle': R(13, 8 + hd, 3, 1, '#ffd23a'); R(13, 10 + hd, 3, 1, '#ffd23a'); R(13, 9 + hd, 1, 1, '#ffd23a'); R(15, 9 + hd, 1, 1, '#ffd23a'); L(16, 11 + hd, 17, 16, '#ffd23a', 1); break;
+    }
   }
 
   // --- шляпы
@@ -137,6 +192,20 @@ export function drawFrame(ctx, ox, f, C) {
     case 'beret': R(6, 4 + y0, 10, 2, C.c1); R(7, 3 + y0, 8, 1, C.c1); R(11, 2 + y0, 1, 1, shade(C.c1)); break;
     case 'ushanka': R(7, 2 + y0, 10, 5, '#6b5a4a'); R(6, 7 + y0, 2, 4, '#6b5a4a'); R(16, 7 + y0, 2, 4, '#6b5a4a'); R(8, 2 + y0, 8, 1, '#8c7a66'); break;
     case 'kerchief': R(7, 4 + y0, 10, 2, C.c1); R(6, 6 + y0, 12, 1, C.c1); R(7, 7 + y0, 1, 7, C.c1); R(16, 7 + y0, 1, 7, C.c1); R(10, 16, 4, 1, C.c1); R(9, 5 + y0, 1, 1, '#fff'); R(13, 4 + y0, 1, 1, '#fff'); break;
+    case 'wizard': R(5, 6 + y0, 14, 1, '#2a3d8e'); R(8, 5 + y0, 8, 1, '#2a3d8e'); R(9, 4 + y0, 6, 1, '#2a3d8e'); R(10, 3 + y0, 4, 1, '#2a3d8e'); R(10, 2 + y0, 3, 1, '#2a3d8e'); R(11, 1 + y0, 2, 1, '#2a3d8e'); R(12, 0 + y0, 1, 1, '#2a3d8e'); R(10, 4 + y0, 1, 1, '#ffd23a'); R(12, 2 + y0, 1, 1, '#ffd23a'); R(14, 5 + y0, 1, 1, '#ffd23a'); break;
+    case 'sombrero': R(3, 6 + y0, 18, 1, '#d9a441'); R(4, 5 + y0, 16, 1, '#d9a441'); R(8, 2 + y0, 8, 3, '#d9a441'); R(8, 4 + y0, 8, 1, '#c0392b'); R(9, 1 + y0, 6, 1, '#d9a441'); break;
+    case 'headphones': R(8, 4 + y0, 8, 1, '#222'); R(7, 5 + y0, 1, 1, '#222'); R(16, 5 + y0, 1, 1, '#222'); R(6, 7 + y0, 2, 4, C.c1); R(16, 7 + y0, 2, 4, C.c1); R(6, 6 + y0, 1, 1, '#222'); R(17, 6 + y0, 1, 1, '#222'); break;
+    case 'santa': R(8, 4 + y0, 8, 2, '#c0392b'); R(7, 6 + y0, 10, 1, '#fff'); R(9, 3 + y0, 6, 1, '#c0392b'); R(10, 2 + y0, 4, 1, '#c0392b'); R(12, 1 + y0, 2, 1, '#c0392b'); R(13, 0 + y0, 2, 1, '#fff'); break;
+    case 'cone': R(10, 0 + y0, 4, 1, '#ff7a1a'); R(9, 1 + y0, 6, 2, '#ff7a1a'); R(8, 3 + y0, 8, 2, '#fff'); R(7, 5 + y0, 10, 2, '#ff7a1a'); break;
+    case 'bunny': R(9, 0 + y0, 2, 6, '#f2f2f2'); R(13, 0 + y0, 2, 6, '#f2f2f2'); R(10, 1 + y0, 1, 4, '#ff9ac0'); R(14, 1 + y0, 1, 4, '#ff9ac0'); R(8, 5 + y0, 8, 1, '#f2f2f2'); break;
+    case 'bucket': R(7, 2 + y0, 10, 5, '#8a8f9a'); R(6, 6 + y0, 12, 1, '#5a5f6a'); R(8, 1 + y0, 8, 1, '#8a8f9a'); R(9, 3 + y0, 1, 2, '#b0b5c0'); break;
+    case 'tiara': R(8, 5 + y0, 8, 1, '#5ad8ff'); R(9, 4 + y0, 1, 1, '#5ad8ff'); R(11, 3 + y0, 2, 2, '#5ad8ff'); R(14, 4 + y0, 1, 1, '#5ad8ff'); R(11, 2 + y0, 2, 1, '#ff9ac0'); break;
+    case 'helmet': R(7, 3 + y0, 10, 3, '#dfe6ee'); R(7, 6 + y0, 1, 8, '#dfe6ee'); R(16, 6 + y0, 1, 8, '#dfe6ee'); R(8, 6 + y0, 8, 1, '#5ad8ff'); R(8, 13 + y0, 8, 1, '#5ad8ff'); break;
+    case 'fez': R(9, 2 + y0, 6, 4, '#c0392b'); R(9, 6 + y0, 6, 1, '#8e1b1b'); R(14, 1 + y0, 1, 2, '#1b1326'); R(15, 0 + y0, 1, 1, '#1b1326'); break;
+    case 'flowers': R(8, 6 + y0, 8, 1, '#3a9a3a'); R(8, 4 + y0, 2, 2, C.c1); R(11, 4 + y0, 2, 2, C.c2); R(14, 4 + y0, 2, 2, '#ffd23a'); R(9, 3 + y0, 1, 1, '#fff'); R(12, 3 + y0, 1, 1, '#fff'); R(15, 3 + y0, 1, 1, '#fff'); break;
+    case 'antlers': L(8, 5 + y0, 5, 0 + y0, '#8a5a2a', 1); L(16, 5 + y0, 19, 0 + y0, '#8a5a2a', 1); R(5, 2 + y0, 1, 1, '#8a5a2a'); R(18, 2 + y0, 1, 1, '#8a5a2a'); R(4, 1 + y0, 1, 1, '#8a5a2a'); R(19, 1 + y0, 1, 1, '#8a5a2a'); break;
+    case 'propeller': R(11, 1 + y0, 2, 3, '#555'); R(7, 0 + y0, 10, 1, C.c1); R(8, 4 + y0, 8, 2, C.c2); R(7, 6 + y0, 10, 1, shade(C.c2)); break;
+    case 'mohawk': R(11, 0 + y0, 2, 6, C.c1); R(10, 2 + y0, 4, 1, C.c1); R(10, 4 + y0, 4, 1, C.c1); break;
   }
 
   // --- предмет в руке
@@ -150,6 +219,17 @@ export function drawFrame(ctx, ox, f, C) {
     case 'flower': L(h[0] + 1, h[1], h[0] + 1, h[1] - 6, '#3a9a3a', 1); R(h[0], h[1] - 9, 3, 3, C.c2); R(h[0] + 1, h[1] - 8, 1, 1, '#ffd23a'); break;
     case 'broom': L(h[0] - 4, h[1] + 7, h[0] + 5, h[1] - 10, '#8a5a2a', 1); R(h[0] - 7, h[1] + 6, 5, 4, '#c9a24a'); break;
     case 'sword': L(h[0] + 1, h[1] - 1, h[0] + 1, h[1] - 12, '#cfd6e0', 1); R(h[0] - 1, h[1] - 2, 5, 1, '#8a6a2a'); R(h[0] + 1, h[1] - 12, 1, 1, '#fff'); break;
+    case 'torch': L(h[0] + 1, h[1], h[0] + 1, h[1] - 7, '#8a5a2a', 1); R(h[0], h[1] - 10, 3, 3, '#ff7a1a'); R(h[0] + 1, h[1] - 11, 1, 1, '#ffd23a'); R(h[0] + 1, h[1] - 9, 1, 1, '#ffd23a'); break;
+    case 'cane': L(h[0] + 1, h[1], h[0] + 1, h[1] + 10, '#2a1a10', 1); R(h[0], h[1] - 1, 3, 1, '#ffd23a'); break;
+    case 'book': R(h[0] - 1, h[1] - 3, 5, 4, C.c2); R(h[0] + 1, h[1] - 3, 1, 4, '#f2f2f2'); R(h[0], h[1] - 2, 1, 1, '#ffd23a'); break;
+    case 'lantern': L(h[0] + 1, h[1], h[0] + 1, h[1] - 3, '#555', 1); R(h[0] - 1, h[1] - 8, 5, 5, '#8a8f9a'); R(h[0], h[1] - 7, 3, 3, '#ffd23a'); break;
+    case 'mic': R(h[0], h[1] - 6, 3, 3, '#555'); R(h[0] + 1, h[1] - 3, 1, 3, '#222'); R(h[0] + 1, h[1] - 5, 1, 1, '#888'); break;
+    case 'camera': R(h[0] - 2, h[1] - 4, 6, 4, '#333'); R(h[0], h[1] - 3, 2, 2, '#5ad8ff'); R(h[0] + 3, h[1] - 5, 1, 1, '#ff3a3a'); break;
+    case 'coffee': R(h[0], h[1] - 4, 3, 4, '#f2f2f2'); R(h[0], h[1] - 5, 3, 1, '#8a5a2a'); R(h[0] + 3, h[1] - 3, 1, 2, '#f2f2f2'); R(h[0] + 1, h[1] - 2, 1, 1, C.c2); break;
+    case 'scythe': L(h[0] + 1, h[1] + 6, h[0] + 1, h[1] - 12, '#8a5a2a', 1); R(h[0] - 6, h[1] - 13, 8, 1, '#cfd6e0'); R(h[0] - 7, h[1] - 12, 2, 1, '#cfd6e0'); R(h[0] - 8, h[1] - 11, 1, 1, '#cfd6e0'); break;
+    case 'lollipop': L(h[0] + 1, h[1], h[0] + 1, h[1] - 6, '#f2f2f2', 1); R(h[0] - 1, h[1] - 10, 5, 4, C.c2); R(h[0], h[1] - 9, 1, 1, '#fff'); R(h[0] + 2, h[1] - 8, 1, 1, '#fff'); break;
+    case 'flag': L(h[0] + 1, h[1], h[0] + 1, h[1] - 12, '#8a5a2a', 1); R(h[0] + 2, h[1] - 12, 6, 4, C.c2); R(h[0] + 2, h[1] - 10, 6, 1, C.c3); break;
+    case 'cat': R(h[0] - 1, h[1] - 4, 4, 3, '#333'); R(h[0] - 1, h[1] - 5, 1, 1, '#333'); R(h[0] + 2, h[1] - 5, 1, 1, '#333'); R(h[0], h[1] - 3, 1, 1, '#ffd23a'); R(h[0] + 2, h[1] - 3, 1, 1, '#ffd23a'); R(h[0] + 3, h[1] - 2, 2, 1, '#333'); break;
   }
   if (P.mug) { const m = P.mug; R(m[0], m[1], 4, 5, '#f0a020'); R(m[0], m[1] - 1, 4, 1, '#fff6e0'); R(m[0] + 4, m[1] + 1, 1, 3, '#f0a020'); R(m[0], m[1] + 1, 1, 3, '#ffd060'); }
 }

@@ -152,10 +152,17 @@ export class Sim {
   spawnCustom(def, nearX, nearZ) {
     const rng = makeRng((def.seed || 1) * 2654435761 + 7);
     const arch = ARCHETYPES.find(a => a.id === def.arch) || pickArchetype(rng);
-    const costume = randomCostume(rng, arch);
+    const costume = def.costume ? { ...def.costume } : randomCostume(rng, arch);
     const bio = { name: def.name, gender: def.gender, age: def.age, job: def.job, status: makeBio(makeRng(def.seed || 1), arch).status };
     let from = nearX != null ? this.graph.nearest(nearX, nearZ, 300) : -1; if (from < 0) from = this.spawnNode(rng)[0];
     const a = this.addAgent(arch, costume, this.makeTexture(drawStrip(costume)), bio, rng, from, true); a.def = def; return a;
+  }
+  // новый костюм для своего скелета (после покупки в магазине)
+  recostume(a, costume) {
+    if (a.ghost) return;
+    a.costume = costume; const base = this.makeTexture(drawStrip(costume)); const oldTex = a.tex, oldBase = a.base;
+    a.tex = base.clone(); a.base = base; a.sprite.material.map = a.tex; a.sprite.material.needsUpdate = true;
+    oldTex.dispose(); if (oldBase) oldBase.dispose();
   }
   spawnNode(rng) {
     const g = this.graph;
