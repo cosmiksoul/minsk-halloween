@@ -479,6 +479,7 @@ export class Sim {
       }
       if (a.face > 0) { a.tex.repeat.x = 1 / NF; a.tex.offset.x = f / NF; } else { a.tex.repeat.x = -1 / NF; a.tex.offset.x = (f + 1) / NF; }
       a.sprite.position.y = a.ghost ? 1.5 + Math.sin(a.anim * 2.5) * this.H * 0.08 + this.H * 0.1 : a.state === 'dance' ? 0.5 + (Math.floor(a.anim * 4) % 2) * this.H * 0.07 : 0.5;
+      if (a.tipsy) a.sprite.position.x = a.x + Math.sin(this.time * 6) * this.H * 0.04; // «штормит»: скелет идёт шатаясь
     }
     this.meetTimer -= dt;
     if (this.meetTimer <= 0) {

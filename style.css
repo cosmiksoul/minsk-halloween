@@ -104,9 +104,17 @@ i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
 .bub.tag.fr { font-size:9px; padding:2px 3px; }
 body.playing #c { cursor:crosshair; }
 
-#ask { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
-#ask[hidden] { display:none; }
-#askPic { image-rendering:pixelated; background:#1b1326; border:1px solid var(--line); border-radius:4px; align-self:flex-start; }
+#ask, #host { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
+#ask[hidden], #host[hidden] { display:none; }
+/* плашка хозяина: жесты крупно, полоска времени, результат партии */
+#host { border-color:#ffd23a; box-shadow:3px 3px 0 #ffd23a; }
+#host .askTitle { color:#ffd23a; }
+#host button.throw { font-size:18px; padding:4px 10px; } #host button.throw:disabled { opacity:.5; }
+#host .bar { height:4px; background:#1b1326; border-radius:2px; overflow:hidden; margin-top:4px; } #host .bar i { display:block; height:100%; width:100%; background:#ffd23a; transition:width .1s linear; }
+#host #hostRes .vs { font-size:26px; letter-spacing:6px; text-align:center; padding:4px 0; } #host #hostRes[hidden] { display:none; }
+#host #hostText { text-align:center; } #host.won #hostText { color:var(--green); } #host.lost #hostText { color:#ff8a8a; }
+.dbf { background:#2a1a08; border:1px solid #ff8a2a; border-radius:4px; padding:0 4px; font-size:11px; color:#ffb070; white-space:nowrap; }
+#askPic, #hostPic { image-rendering:pixelated; background:#1b1326; border:1px solid var(--line); border-radius:4px; align-self:flex-start; }
 .askBody { display:flex; flex-direction:column; gap:4px; flex:1; }
 .askTitle { font-family:"Press Start 2P", monospace; font-size:9px; color:var(--accent); line-height:1.5; }
 .askBtns { display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
@@ -136,7 +144,7 @@ button.trick { background:var(--green); color:var(--black); border-color:var(--g
   #hud { max-width:calc(100vw - 110px); padding:6px 8px; }
   .hudHint { display:none; }
   #card { right:12px; }
-  #ask { bottom:12px; }
+  #ask, #host { bottom:12px; }
   #dice { top:34%; }
 }
 
@@ -273,5 +281,5 @@ body.drawerOpen #card { left:344px; }
   body.drawerOpen #card { left:12px; }
   body.drawerOpen #card { display:none; }
   #card { bottom:64px; }
-  #ask { bottom:64px; }
+  #ask, #host { bottom:64px; }
 }

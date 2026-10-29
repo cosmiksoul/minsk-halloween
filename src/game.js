@@ -2,7 +2,8 @@
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
-import { CAPS, POINTS, PURSUIT, RPS, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins } from './rules.js';
+import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins } from './rules.js';
+import { hostOf } from './hosts.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
@@ -63,6 +64,9 @@ export class Game {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.restored = false; this.modal = null;
     this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1;
+    // игра с хозяином заведения и дебаффы: плашка, откат по заведению, «штормит» и «засветился» по сим-времени (не переживают перезагрузку)
+    this.host = null; this.hostTimer = null; this.lastPlay = new Map(); this.tipsyUntil = 0; this.seenUntil = 0; this.debugThrow = null; this.ikAt = 0; this.hadDebuff = false;
+    $('hostRock').onclick = () => this.playRps('rock'); $('hostScissors').onclick = () => this.playRps('scissors'); $('hostPaper').onclick = () => this.playRps('paper'); $('hostNo').onclick = () => { if (this.modal === 'host') this.closeHost(); };
     const ringG = new THREE.RingGeometry(0.7, 1, 24); ringG.rotateX(-Math.PI / 2);
     this.ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.9, depthWrite: false })); this.ring.visible = false; this.ring.position.y = 0.55; scene.add(this.ring);
     this.dest = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false })); this.dest.visible = false; this.dest.position.y = 0.56; scene.add(this.dest); this.destT = 0;
@@ -114,7 +118,7 @@ export class Game {
     if (this.player === a) return;
     if (this.player) { this.sim.unsetPlayer(this.player); this.player.def.player = false; this.select(false); }
     this.hunters?.reset(true); // смена скелета: охотники прежнего расходятся без записей, угроза остаётся в его прогрессе
-    this.player = a; a.def.player = true; this.lastPerished = null; this.sim.setPlayer(a);
+    this.player = a; a.def.player = true; this.lastPerished = null; this.tipsyUntil = 0; this.seenUntil = 0; this.sim.setPlayer(a);
     const g = a.def.game = migrate(a.def.game); // старый прогресс один раз превращается в v2: счёт, хвост, журнал
     if (g.hp <= 0) g.hp = g.maxHp; // сохранились мёртвым: собираемся заново с полным здоровьем
     if (this.tarot) { this.tarot.reset(); for (const t of g.tarot) this.tarot.markDone(t.id); }
@@ -154,6 +158,7 @@ export class Game {
   }
   // --- клики
   clickGround(x, z) {
+    if (this.modal === 'host') this.closeHost();
     if (!this.selected || !this.player || this.busy || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
     // клик рядом с меткой арканы ведёт точно в точку подбора: иначе соседний узел в 20 м оставляет карту неподобранной
@@ -162,6 +167,7 @@ export class Game {
     this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
   clickAgent(a) {
+    if (this.modal === 'host') this.closeHost();
     if (!this.player || !this.selected || this.busy) return false;
     if (this.modal && this.modal !== 'ask' && this.modal !== 'host') return false; // поверх меню, колоды и кубика диалог не открываем
     if (a === this.player) return false;
@@ -169,12 +175,14 @@ export class Game {
     this.openDialog(a); return true;
   }
   clickVenue(v) {
+    if (this.modal === 'host') this.closeHost();
     if (!this.selected || !this.player || this.busy || v.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.closeDialog();
     if (this.sim.moveTo(this.player, v.x, v.z)) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   clickShop(sh) {
+    if (this.modal === 'host') this.closeHost();
     if (!this.selected || !this.player || this.busy || sh.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
     if (this.sim.moveTo(this.player, sh.x, sh.z)) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
@@ -202,11 +210,11 @@ export class Game {
   inReach(npc, mult = 0.8) { return (npc.x - this.player.x) ** 2 + (npc.z - this.player.z) ** 2 < Math.max(5, this.sim.H * mult) ** 2; }
   onArrive(a, node) {
     if (a !== this.player) return;
-    const v = this.sim.venueNode.get(node);
-    if (v && (this.pendingVenue === v || !this.pendingVenue)) this.visit(v);
+    const v = this.sim.venueNode.get(node); const explicitV = !!v && this.pendingVenue === v;
+    if (v && (explicitV || !this.pendingVenue)) { this.visit(v); if (explicitV) this.offerGame(v, 'bar'); } // плашка хозяина только при явном визите
     this.pendingVenue = null;
     const sh = this.shops && this.shops.byNode.get(node);
-    if (sh && (this.pendingShop === sh || !this.pendingShop)) this.openShop(sh);
+    if (sh && this.pendingShop === sh) this.offerGame(sh, 'shop', () => this.openShop(sh)); // случайный проход через узел магазина меню не открывает
     this.pendingShop = null;
     const p = this.pending;
     if (p && !p.rolling && !this.inReach(p.npc)) { if (p.tries++ < 3 && p.npc.state === 'wait') this.sim.moveTo(this.player, p.npc.x, p.npc.z); else { this.sim.release(p.npc); this.pending = null; this.sim.say(this.player, 'ушёл…', 'boo', 1.4); } }
@@ -221,6 +229,73 @@ export class Game {
     else this.sim.say(me, `🎃 ${v.name}`, 'beer', 1.6);
     me.state = 'drink'; me.timer = 2.2; this.sim.enterVenue(me, v);
     this.save(); this.renderHUD(); this.o.showCard(me, true);
+  }
+  // --- игра с хозяином: плашка при явном визите, партия в камень-ножницы-бумагу за ставку по уровню розыска
+  seenActive() { return this.sim.time < this.seenUntil; }
+  offerGame(place, kind, onDone = null) {
+    const g = this.g, p = this.player;
+    if (!g || !this.controlled || this.modal !== null) { if (onDone) onDone(); return; }
+    const host = hostOf(kind, place); const stake = stakeOf(this.hunters ? this.hunters.level : 0, kind);
+    if (g.coins < stake) { this.sim.say(p, `🎲 ставка ${stake} 🪙, не хватает`, 'boo', 2.4); if (onDone) onDone(); return; }
+    if (this.sim.time - (this.lastPlay.get(host.key) ?? -1e9) < RPS.cooldown) { this.sim.say(p, '🎲 только что играли', '', 2); if (onDone) onDone(); return; }
+    this.host = { place, kind, host, stake, ties: 0, onDone, busy: false };
+    this.setModal('host'); $('host').className = '';
+    drawPortrait(host.costume, $('hostPic')); $('hostName').textContent = host.name; $('hostMeta').textContent = `${host.age} ${ageWord(host.age)} · ${host.job} · ${place.name}`;
+    $('hostAsk').textContent = `сыграем за ${stake} 🪙?`; $('hostFav').textContent = g.hosts[host.key] ? `любит ${THROW_NAME[g.hosts[host.key]]}` : '';
+    $('hostRes').hidden = true; $('hostBtns').hidden = false; for (const b of $('hostBtns').querySelectorAll('button')) b.disabled = false;
+    // плашка гаснет сама через 10 с: тонкая полоска времени по настенным часам
+    this.stopHostTimer(); const t0 = performance.now(); $('hostBar').style.width = '100%';
+    this.hostTimer = setInterval(() => { const left = 1 - (performance.now() - t0) / (RPS.promptSec * 1000); $('hostBar').style.width = Math.max(0, left * 100) + '%'; if (left <= 0) this.closeHost(); }, 100);
+  }
+  stopHostTimer() { if (this.hostTimer) { clearInterval(this.hostTimer); this.hostTimer = null; } }
+  // закрыть плашку или результат партии; отказ ничего не стоит; для магазина onDone открывает меню покупок
+  closeHost() {
+    if (this.modal !== 'host' && this.modal !== 'rps') return;
+    this.stopHostTimer(); const h = this.host; this.host = null; this.setModal(null);
+    if (h && h.onDone) h.onDone();
+  }
+  playRps(mine) {
+    const h = this.host, g = this.g, p = this.player;
+    if (!h || !g || !p || (this.modal !== 'host' && this.modal !== 'rps') || h.busy || !THROWS.includes(mine)) return;
+    this.setModal('rps'); this.stopHostTimer(); h.busy = true; $('hostBar').style.width = '0%';
+    const theirs = THROWS.includes(this.debugThrow) ? this.debugThrow : hostThrow(h.host.fav, Math.random);
+    const btns = $('hostBtns').querySelectorAll('button'); for (const b of btns) b.disabled = true;
+    $('hostRes').hidden = false; $('hostVs').textContent = `${THROW_ICON[mine]} ${THROW_ICON[theirs]}`;
+    const fem = p.bio.gender === 'f';
+    if (mine === theirs) {
+      h.ties++;
+      if (h.ties >= RPS.maxTies) { $('hostText').textContent = 'хозяин машет рукой: без ставки'; setTimeout(() => this.closeHost(), 1500); return; }
+      $('hostText').textContent = 'ничья, ещё раз'; setTimeout(() => { if (this.host === h) { h.busy = false; for (const b of btns) b.disabled = false; } }, 900); return;
+    }
+    const won = rpsBeats(mine, theirs); const { place, kind, stake } = h; const key = h.host.key;
+    g.coins -= stake; let bonus, bubble;
+    if (kind === 'bar') { if (g.shields < RPS.shieldMax) { g.shields++; bonus = 'shield'; bubble = '🎃 +щит'; } else { g.coins += stake; bonus = 'refund'; bubble = '🪙 ставка обратно'; } }
+    else {
+      // случайная вещь из каталога бесплатно: случайный вид, не совпадающая с надетой
+      const kk = pick(Math.random, Object.keys(SHOP_KINDS).filter(k => k !== 'colors'));
+      let id = randomItem(kk, p.rng); for (let i = 0; i < 5 && id === p.costume[kk]; i++) id = randomItem(kk, p.rng);
+      const c = { ...p.costume, [kk]: id }; this.sim.recostume(p, c); p.def.costume = c; bonus = CATALOG[kk][id]; bubble = `🛍 ${bonus}`;
+    }
+    const amount = resetAmount(kind, won); if (this.hunters) this.hunters.resetAtVenue(amount);
+    if (!won) {
+      this.tipsyUntil = this.sim.time + RPS.tipsy.sec;
+      if (kind === 'shop') { const wasSeen = this.seenActive(); this.seenUntil = this.sim.time + RPS.seen.sec; if (!wasSeen && this.hunters) this.hunters.extra(); } // повтор продлевает срок, второго лишнего не зовёт
+    }
+    g.hosts[key] = h.host.fav; this.lastPlay.set(key, this.sim.time);
+    this.log('rps', { place: place.name, venueKind: kind, host: h.host.name, hostGender: h.host.gender, mine, theirs, won, bonus, reset: amount });
+    $('host').className = won ? 'won' : 'lost';
+    $('hostText').textContent = (won ? `выиграл${fem ? 'а' : ''}` : `проиграл${fem ? 'а' : ''}`) + ` · −${stake} 🪙` + (won ? '' : kind === 'shop' ? ' · 🍺 штормит · 👀 засветился' : ' · 🍺 штормит');
+    const heat = this.hunters ? this.hunters.heat : 0;
+    this.sim.say(p, bubble, 'beer', 2.2); setTimeout(() => this.player === p && this.sim.say(p, heat <= 0 ? '🪦 чист' : `🪦 розыск −${amount / 20}`, 'beer', 2.2), 1400);
+    setTimeout(() => { if (this.host === h) this.closeHost(); }, 1500);
+    this.save(); this.renderHUD();
+  }
+  // чипы дебаффов в HUD: «🍺 0:38», «👀 1:12»
+  chipsHtml() {
+    const now = this.sim.time; const mmss = s => `${Math.floor(s / 60)}:${String(Math.ceil(s % 60)).padStart(2, '0')}`; let s = '';
+    if (now < this.tipsyUntil) s += `<span class="dbf" title="штормит: скорость ×0,65">🍺 ${mmss(this.tipsyUntil - now)}</span>`;
+    if (now < this.seenUntil) s += `<span class="dbf" title="засветился: лишний охотник с +1">👀 ${mmss(this.seenUntil - now)}</span>`;
+    return s;
   }
   // --- урон и лечение
   // щит 🎃 из запаса (g.shields, до трёх, переживает смерть) принимает одну рану; остаток бьёт по здоровью
@@ -269,7 +344,7 @@ export class Game {
   // пермасмерть: без монет скелет рассыпается навсегда — вечный призрак в городе, dead в прогрессе и в базе, управлять им нельзя
   perish() {
     const g = this.g, p = this.player; if (!p) return;
-    g.deaths++; this.dropPending(); this.pendingVenue = null; this.pendingShop = null; this.setModal(null); this.dialogNpc = null; this.shopAt = null;
+    g.deaths++; this.dropPending(); this.pendingVenue = null; this.pendingShop = null; this.stopHostTimer(); this.host = null; this.setModal(null); this.dialogNpc = null; this.shopAt = null; this.tipsyUntil = 0; this.seenUntil = 0;
     for (const f of [...(p.followers || [])]) { this.sim.unfriend(f); this.sim.say(f, 'ой', 'boo', 1.6); }
     g.tail = []; g.hp = 0;
     this.log('rip', {}); this.hunters?.reset();
@@ -400,7 +475,11 @@ export class Game {
   update(dt, t) {
     const p = this.player, H = this.sim.H;
     if (p) {
-      p.speedMul = this.speedMul; // «штормит» живёт отдельным множителем: охотники и хвост считают скорость от базовой
+      // «штормит» живёт отдельным множителем: охотники и хвост считают скорость от базовой
+      this.speedMul = this.sim.time < this.tipsyUntil ? RPS.tipsy.speed : 1; p.speedMul = this.speedMul; p.tipsy = this.speedMul < 1;
+      if (p.tipsy && this.sim.time - this.ikAt > 10) { this.ikAt = this.sim.time; if (!p.bubble) this.sim.say(p, 'ик', 'beer', 1.4); }
+      const dbf = this.sim.time < this.tipsyUntil || this.sim.time < this.seenUntil; this.hudAcc += dt;
+      if ((dbf || this.hadDebuff) && this.hudAcc > 1) { this.hudAcc = 0; this.hadDebuff = dbf; this.renderHUD(); }
       if (this.ring.visible) { this.ring.position.set(p.x, 0.55, p.z); const s = H * 0.42; this.ring.scale.set(s, 1, s); }
       if (this.dest.visible) { this.destT -= dt * 1.2; const s = H * 0.3 * (1 + (1 - Math.max(0, this.destT)) * 0.8); this.dest.scale.set(s, 1, s); this.dest.material.opacity = Math.max(0, this.destT); if (this.destT <= 0) this.dest.visible = false; }
       if (p.state === 'dead' && performance.now() >= this.respawnAt) this.respawn();
@@ -511,7 +590,7 @@ export class Game {
     const avatars = own.length > 1 || own.length < 5 ? `<div class="hudOwn">${own.map(o => `<canvas class="av${o.agent === p ? ' cur' : ''}" width="24" height="36" data-seed="${o.def.seed}" title="${esc(o.def.name)}"></canvas>`).join('')}${own.length < 5 ? '<button class="avAdd" title="ещё скелет (до пяти)">+</button>' : ''}</div>` : '';
     hud.innerHTML = `<div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
       <div class="hudRow">${this.hearts(g)}${'<span class="sh" title="щит: примет одну рану или укус">🎃</span>'.repeat(Math.max(0, g.shields | 0))}</div>
-      <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="счёт: победа +2, поражение −1, аркана +5, новое заведение +1">★ ${g.score}</span>${this.threatHtml()}</div>
+      <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="счёт: победа +2, поражение −1, аркана +5, новое заведение +1">★ ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
       <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span><span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span><span class="cn">🪙 ${g.coins}</span>${g.tokens ? `<span class="tk">🎟 ${g.tokens}</span>` : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }

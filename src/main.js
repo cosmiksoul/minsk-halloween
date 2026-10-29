@@ -10,7 +10,8 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, migrate, logPush } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush } from './rules.js';
+import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
@@ -229,7 +230,7 @@ function renderProfile(a) {
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
 // --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
-const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠' };
+const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
 function logText(e, fem) {
   const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
@@ -250,6 +251,7 @@ function logText(e, fem) {
     case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
     case 'death': return `рассыпал${v('ся', 'ась')}${e.coinsLost ? `, −${e.coinsLost} 🪙` : ''}`;
     case 'rip': return `упокоен${v('', 'а')} навсегда`;
+    case 'rps': { const bonus = e.bonus === 'shield' ? '+щит' : e.bonus === 'refund' ? 'ставка обратно' : '+' + esc(e.bonus || ''); const reset = e.reset >= 100 ? 'чист' : `−${(e.reset || 0) / 20}`; return `сыграл${v('', 'а')} с ${esc(e.host || '?')} в «${esc(e.place || '?')}»: ${THROW_ICON[e.mine] || '?'} против ${THROW_ICON[e.theirs] || '?'}, ${e.won ? 'выиграл' : 'проиграл'}${v('', 'а')} · ${bonus} · розыск ${reset}`; }
     default: return esc(e.kind);
   }
 }
@@ -283,11 +285,13 @@ $('profile').addEventListener('click', e => { const el = e.target.closest('[data
 let popupVenue = null, popupTarot = null, popupShop = null, popupBld = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtDate = d => ({ '2026-10-29': '29 октября', '2026-10-30': '30 октября', '2026-10-31': '31 октября', '2026-11-01': '1 ноября', '2026-11-02': '2 ноября' }[d] || d);
-function resetPopup() { popupVenue = popupTarot = popupShop = popupBld = null; for (const id of ['pType', 'pAddr', 'pHours', 'pRate', 'pInside']) $(id).textContent = ''; $('pEvents').innerHTML = ''; $('pWeb').innerHTML = ''; $('popup').hidden = false; }
+function resetPopup() { popupVenue = popupTarot = popupShop = popupBld = null; for (const id of ['pType', 'pAddr', 'pHours', 'pRate', 'pInside', 'pHost']) $(id).textContent = ''; $('pEvents').innerHTML = ''; $('pWeb').innerHTML = ''; $('popup').hidden = false; }
 function closePopup() { $('popup').hidden = true; popupVenue = popupTarot = popupShop = popupBld = null; }
 const nearCount = (x, z, r = 60) => sim.agents.filter(a => !a.ghost && (a.x - x) ** 2 + (a.z - z) ** 2 < r * r).length;
+// хозяин заведения: имя всегда, любимый жест после первой партии (его помнит прогресс)
+function hostLine(kind, place) { const h = hostOf(kind, place); const fav = game.g && game.g.hosts && game.g.hosts[h.key]; return `хозяин: ${h.name}` + (fav ? ` · любит ${THROW_NAME[fav]}` : ''); }
 function showShopPopup(sh) {
-  resetPopup(); popupShop = sh;
+  resetPopup(); popupShop = sh; $('pHost').textContent = hostLine('shop', sh);
   $('pName').textContent = sh.name; $('pType').textContent = 'магазин одежды' + (sh.node < 0 ? ' · вне пешеходной сети' : ''); $('pAddr').textContent = sh.addr ? 'адрес: ' + sh.addr : '';
   $('pInside').textContent = 'случайная вещь за монетки: шляпы, одежда, предметы, узоры, аксессуары';
   $('pGo').hidden = !(game.player && sh.node >= 0); $('pGo').textContent = '🛍 зайти своим скелетом';
@@ -303,7 +307,7 @@ function showTarotMarker(it) {
   $('pGo').hidden = !(game.player && it.node >= 0 && !done); $('pGo').textContent = '🃏 дойти своим скелетом';
 }
 function showVenue(v) {
-  resetPopup(); popupVenue = v; $('pGo').textContent = '🎃 зайти своим скелетом';
+  resetPopup(); popupVenue = v; $('pGo').textContent = '🎃 зайти своим скелетом'; $('pHost').textContent = hostLine('bar', v);
   $('pName').textContent = v.name;
   $('pType').textContent = (VENUE_TYPES[v.type] || v.type) + (v.node < 0 ? ' · вне пешеходной сети' : '');
   $('pAddr').textContent = v.addr ? 'адрес: ' + v.addr : '';
