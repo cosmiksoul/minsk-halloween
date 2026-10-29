@@ -9,7 +9,7 @@ import { ageWord, ARCHETYPES, makeRng } from './bio.js';
 import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game } from './game.js';
-import { local, makeRemote } from './store.js';
+import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { buildLandmarks } from './landmarks.js';
 import { Tarot } from './tarot.js';
 import { Shops } from './shops.js';
@@ -84,7 +84,7 @@ if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location
 const game = new Game(sim, scene, {
   tarot, shops, save: saveMine,
   showCard: (a, refresh) => showCard(a, refresh),
-  onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } },
+  onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
 });
 for (const def of mine) sim.spawnCustom(def, def.game?.x, def.game?.z);
 if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.name)) { const a = sim.spawnCustom(fromLink); setTimeout(() => { showCard(a); flyTo(a.x, a.z); }, 300); }
@@ -109,7 +109,11 @@ $('bReset').onclick = () => location.reload();
 $('bRot').onclick = () => { rotateTo = (rotateTo ?? controls.getAzimuthalAngle()) + Math.PI / 2; };
 $('bParty').onclick = () => { sim.party(controls.target.x, controls.target.z, 160); };
 $('bRand').onclick = () => { const a = sim.agents[Math.floor(Math.random() * sim.agents.length)]; if (a) { showCard(a); flyTo(a.x, a.z); } };
-$('bMe').onclick = () => { if (game.player) { game.select(true); showCard(game.player); flyTo(game.player.x, game.player.z); follow = game.player; $('bFollow').classList.add('on'); } else openTab('mine'); };
+$('bMe').onclick = () => { if (game.player) { game.select(true); showCard(game.player); flyTo(game.player.x, game.player.z); follow = game.player; $('bFollow').classList.add('on'); } else openMine(); };
+$('bNew').onclick = () => openMine();
+$('mnClose').onclick = () => closeMine();
+$('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('mine').hidden) closeMine(); });
 $('hud').onclick = () => $('bMe').onclick();
 $('bClose').onclick = () => { $('card').hidden = true; follow = null; hideTip(); };
 $('bFollow').onclick = () => { follow = follow ? null : cardAgent; $('bFollow').classList.toggle('on', !!follow); };
@@ -120,7 +124,10 @@ $('bSelect').onclick = () => { game.select(!game.selected); showCard(cardAgent);
 $('bDeck').onclick = () => game.openDeck();
 $('bShareCard').onclick = () => openShare();
 $('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; previewMine(); };
-function openTab(name) { for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.tab === name); for (const id of ['places', 'events', 'mine']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id; if (isMobile) $('right').classList.add('showFeed'); }
+function openTab(name) { for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.tab === name); for (const id of ['places', 'events', 'board']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id; if (isMobile) $('right').classList.add('showFeed'); if (name === 'board') renderBoard(true); }
+// окно создания своего скелета: отдельно от ленты, открывается из HUD и кнопок панели
+function openMine() { $('mine').hidden = false; renderMine(); previewMine(); if (!isMobile) setTimeout(() => $('mName').focus(), 50); }
+function closeMine() { $('mine').hidden = true; }
 for (const t of document.querySelectorAll('.tab')) t.onclick = () => openTab(t.dataset.tab);
 addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.code === 'Space') { e.preventDefault(); $('bMe').onclick(); } });
 function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
@@ -232,27 +239,38 @@ $('mineForm').onsubmit = e => {
   const a = sim.spawnCustom(def, controls.target.x, controls.target.z);
   game.setPlayer(a); game.select(true);
   showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on');
-  mineSeed = Math.floor(Math.random() * 1e9); previewMine(); renderMine(); $('mAbout').value = '';
-  if (isMobile) $('right').classList.remove('showFeed');
+  mineSeed = Math.floor(Math.random() * 1e9); previewMine(); renderMine(); $('mAbout').value = ''; $('mName').value = ''; $('mJob').value = '';
+  closeMine();
 };
 function renderMine() {
   $('mineList').innerHTML = mine.length ? '<div class="day">ваши скелеты</div>' + mine.map((d, i) => `<div class="item${d.player ? ' cur' : ''}" data-i="${i}"><span class="n">${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.player ? '<span class="k">играет</span>' : `<button class="play" data-p="${i}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? ` · 💀 ${d.game.skulls.length} · 💚 ${d.game.friends.length}` : ''}</span></div>`).join('') : '';
-  renderBoard();
+  renderBoard(false);
 }
 $('mineList').onclick = e => {
   const pb = e.target.closest('.play'); const it = e.target.closest('.item'); if (!it) return;
   const def = mine[+it.dataset.i]; const a = sim.agents.find(x => x.def === def); if (!a) return;
   if (pb) { game.setPlayer(a); game.select(true); follow = a; $('bFollow').classList.add('on'); renderMine(); }
-  showCard(a); flyTo(a.x, a.z);
+  showCard(a); flyTo(a.x, a.z); closeMine();
 };
-renderMine();
 
-// --- сеть: чужие скелеты и доска почёта (если настроен Supabase)
-async function renderBoard() {
-  if (!remote) return;
-  const top = await remote.top(10); if (!top) return;
-  $('board').innerHTML = '<div class="day">доска почёта</div>' + top.map((r, i) => `<div class="item"><span class="n">${i + 1}. ${esc(r.name)}</span><span class="r">💀 ${r.kills} · 💚 ${r.friends}</span><span class="s">${esc(r.job)} · заведений: ${r.visits}${r.deaths ? ` · смертей: ${r.deaths}` : ''}</span></div>`).join('');
+// --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
+let boardRows = null;
+const SCORE_HINT = 'счёт: 💀 и 💚 по 3, 🃏 по 5, 🎃 по 1';
+function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+function renderBoard(fetchRemote = true) {
+  const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
+  const localRows = mine.filter(d => !d.guest).map(d => { const g = d.game || {}; return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: (g.skulls || []).length, friends: (g.friends || []).length, tarot: (g.tarot || []).length, visits: (g.visits || []).length, deaths: g.deaths || 0, score: scoreOf(g) }; }).sort((a, b) => b.score - a.score);
+  const list = (rows, empty) => rows.length ? rows.map((r, i) => boardRow(r, i, r.id === myId)).join('') : `<div class="hint">${empty}</div>`;
+  if (!remote) {
+    body.innerHTML = '<div class="day">скелеты в этом браузере</div>' + list(localRows, 'пока никого: создай своего скелета') + `<div class="hint">${SCORE_HINT}. Общий рейтинг всех игроков появится, когда в config.js будет вписан Supabase (README, раздел «База»)</div>`;
+    return;
+  }
+  const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; };
+  if (boardRows) draw(boardRows); else body.innerHTML = '<div class="hint">загружаем…</div>';
+  if (fetchRemote) remote.top(20).then(rows => { if (rows) { boardRows = rows; draw(rows); } else draw(boardRows || localRows, 'сервер недоступен, показаны ' + (boardRows ? 'последние данные' : 'только свои скелеты')); });
 }
+setInterval(() => { if (remote && !$('tabBoard').hidden) renderBoard(true); }, 30000);
+renderMine();
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true }); } });
 
 // --- поделиться карточкой персонажа
@@ -332,8 +350,8 @@ function drawBubbles() {
     if (a.bubble && a.bubble.until < sim.time) a.bubble = null;
     if (a.bubble) place(a, a.bubble.text, 'bub ' + a.bubble.kind, 0.8);
     else if (a.custom) place(a, a.bio.name.split(' ')[0], 'bub tag' + (a === game.player ? ' me' : ''), 0.4);
-    else if (a.leader === game.player) place(a, '💚', 'bub tag fr', 0.4);
-    else if (a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
+    else if (game.player && a.leader === game.player) place(a, '💚', 'bub tag fr', 0.4);
+    else if (game.player && a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }
   for (let i = n; i < pool.length; i++) pool[i].style.display = 'none';
   const pt = popupVenue || popupTarot || popupShop;

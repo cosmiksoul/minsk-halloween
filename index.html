@@ -32,34 +32,41 @@
       <label>пиксель <input type="range" id="pix" min="1" max="5" step="1" value="2"><span id="pixV">2</span></label>
       <div class="btns">
         <button id="bMe" title="к своему скелету (пробел)">🦴 мой скелет</button>
+        <button id="bNew" title="создать нового скелета">➕ новый скелет</button>
         <button id="bRot" title="повернуть камеру">⟲ поворот</button>
         <button id="bRand">случайный</button>
         <button id="bParty">🎃 вечеринка</button>
-        <button id="bReset">сброс</button>
+        <button id="bReset" title="перезагрузить страницу">сброс</button>
       </div>
       <div class="hint">перетаскивай · колесо — зум · правая кнопка — поворот · клик по скелету — кто это · клик по тыкве — заведение · свой скелет: клик по нему, потом по карте — идёт; по чужому скелету — сладость или гадость</div>
     </div>
   </div>
 
   <div id="feed">
-    <div class="tabs"><button class="tab on" data-tab="places">Места</button><button class="tab" data-tab="events">Афиша</button><button class="tab" data-tab="mine">Свой скелет</button></div>
+    <div class="tabs"><button class="tab on" data-tab="places">Места</button><button class="tab" data-tab="events">Афиша</button><button class="tab" data-tab="board">Лидеры</button></div>
     <div class="tabBody" id="tabPlaces"></div>
     <div class="tabBody" id="tabEvents" hidden></div>
-    <div class="tabBody" id="tabMine" hidden>
+    <div class="tabBody" id="tabBoard" hidden></div>
+  </div>
+</div>
+
+<div id="mine" hidden>
+  <div class="dBox mnBox">
+    <div class="dTitle">🦴 СВОЙ СКЕЛЕТ<button class="x" id="mnClose">×</button></div>
+    <div class="mnRow">
+      <canvas id="minePic" width="72" height="108"></canvas>
       <form id="mineForm">
         <label class="f">имя <input id="mName" maxlength="40" placeholder="Алесь Костюк" required></label>
         <label class="f">пол <select id="mGender"><option value="m">мужчина</option><option value="f">женщина</option></select></label>
         <label class="f">возраст <input id="mAge" type="number" min="18" max="120" value="30" required></label>
         <label class="f">занятие <input id="mJob" maxlength="60" placeholder="тестировщик в ПВТ" required></label>
         <label class="f">костюм <select id="mArch"></select></label>
-        <label class="f">о себе <textarea id="mAbout" maxlength="240" rows="3" placeholder="пару слов о скелете (необязательно)"></textarea></label>
-        <div class="btns"><button type="button" id="bGen" class="gen">🎲 нагенерить</button><button type="submit" class="green">запустить на карту</button><button type="button" id="bReroll">другой костюм</button></div>
+        <label class="f">о себе <textarea id="mAbout" maxlength="240" rows="2" placeholder="пару слов о скелете (необязательно)"></textarea></label>
+        <div class="btns"><button type="button" id="bGen" class="gen">🎲 нагенерить</button><button type="button" id="bReroll">другой костюм</button><button type="submit" class="green">запустить на карту</button></div>
       </form>
-      <canvas id="minePic" width="72" height="108"></canvas>
-      <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. По городу спрятаны 22 аркана таро — дома с зелёной аурой. У скелета 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» даёт адрес, по которому его увидят друзья.</div>
-      <div id="mineList"></div>
-      <div id="board"></div>
     </div>
+    <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. По городу спрятаны 22 аркана таро — дома с зелёной аурой. У скелета 3 сердца: конфеты на дорогах лечат, тыквы над барами дают щит на 20 секунд (до трёх), а бросок d20 решает, станет ли встречный скелет другом или призраком. Кнопка «ссылка» в карточке даёт адрес, по которому его увидят друзья.</div>
+    <div id="mineList"></div>
   </div>
 </div>
 

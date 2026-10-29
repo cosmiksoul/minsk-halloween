@@ -1,10 +1,13 @@
 // Особые здания, которые рисуются всегда и не зависят от тайлов. Пока одно:
-// башня «Футурис» на Независимости, 173 с LED-фасадом, как в жизни: диодные колонки,
-// зелёная и красная грани, бегущая буква B и логотип на торцах.
+// башня «Футурис» на Независимости, 173 с зелёным LED-фасадом: диодные колонки,
+// бегущие волны света, буква B на фасаде и логотип на торцах; раз в цикл фасад
+// гаснет на миг, и остаётся одна B. Координаты и размеры — по контуру здания из OSM.
 import * as THREE from 'three';
 
 export const LANDMARKS = [
-  { id: 'futuris', name: 'Башня «Футурис»', lat: 53.9452, lon: 27.6853, w: 48, d: 30, h: 104, rot: -0.414, zone: 55 },
+  // башня — квадратный блок в северном конце контура «БЦ Футурис», к югу от неё низкое крыло
+  { id: 'futuris', name: 'Башня «Футурис»', lat: 53.94120, lon: 27.66725, w: 40, d: 40, h: 104, rot: -0.07, zone: 110,
+    wing: { dx: 0, dz: 74, w: 28, d: 108, h: 22 } },
 ];
 
 function pixTex(w, h, draw) {
@@ -35,14 +38,14 @@ void main(){
   float led = step(0.32, fract(vUv.x * n));
   float rows = 0.8 + 0.2 * step(0.3, fract(vUv.y * n * 2.2));
   float phase = fract(time / 16.0);
-  vec3 green = vec3(0.12, 0.95, 0.30), red = vec3(1.0, 0.16, 0.10);
-  float k = smoothstep(0.48, 0.52, phase) * (1.0 - smoothstep(0.97, 1.0, phase));
-  vec3 base = mix(green, red, side ? 1.0 - k : k);
-  float wave = 0.7 + 0.3 * sin(vUv.y * 26.0 - time * 2.5);
+  vec3 green = vec3(0.12, 0.95, 0.30);
+  // волна света бежит снизу вверх по колонкам, поверх — медленное дыхание всего фасада
+  float wave = 0.6 + 0.4 * sin(vUv.y * 26.0 - time * 2.5);
+  float breath = 0.85 + 0.15 * sin(time * 0.8);
   float mask;
   if (side) mask = texture2D(tLogo, vUv).r;
   else mask = texture2D(tB, vec2(vUv.x, fract(vUv.y - time * 0.045))).r;
-  vec3 col = mix(base * 0.42 * wave, vec3(0.96, 0.98, 1.0), mask);
+  vec3 col = mix(green * 0.45 * wave * breath, vec3(0.96, 0.98, 1.0), mask);
   // раз в цикл фасад гаснет на миг, и остаётся одна буква B — как в легенде
   float blink = 1.0 - smoothstep(0.0, 0.025, abs(phase - 0.25));
   col = mix(col, vec3(0.02, 0.02, 0.04) + vec3(0.96, 0.98, 1.0) * mask, blink * 0.95);
@@ -52,16 +55,22 @@ void main(){
 export function buildLandmarks(center) {
   const group = new THREE.Group(); const [lat0, lon0] = center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
   const mats = []; const zones = []; const items = [];
+  const dark = new THREE.MeshLambertMaterial({ color: 0x241838 });
   for (const lm of LANDMARKS) {
     const x = (lm.lon - lon0) * kx, z = -(lm.lat - lat0) * kz;
     const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: { time: { value: 0 }, tB: { value: pixTex(24, 52, letterB) }, tLogo: { value: pixTex(16, 52, logo) }, cols: { value: lm.w / 0.8 }, colsSide: { value: lm.d / 0.8 } } });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(lm.w, lm.h, lm.d), mat); mesh.position.set(x, lm.h / 2, z); mesh.rotation.y = lm.rot;
-    // тёмный цоколь и красные маяки на крыше
-    const base = new THREE.Mesh(new THREE.BoxGeometry(lm.w + 6, 3, lm.d + 6), new THREE.MeshLambertMaterial({ color: 0x241838 })); base.position.set(x, 1.5, z); base.rotation.y = lm.rot;
-    const pts = []; for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const px = sx * lm.w / 2 * 0.9, pz = sz * lm.d / 2 * 0.9; pts.push(x + px * Math.cos(lm.rot) + pz * Math.sin(lm.rot), lm.h + 2, z - px * Math.sin(lm.rot) + pz * Math.cos(lm.rot)); }
+    // тёмный цоколь и зелёные маяки на крыше
+    const base = new THREE.Mesh(new THREE.BoxGeometry(lm.w + 6, 3, lm.d + 6), dark); base.position.set(x, 1.5, z); base.rotation.y = lm.rot;
+    // смещение в локальных осях башни -> мировые координаты
+    const loc = (dx, dz) => [x + dx * Math.cos(lm.rot) + dz * Math.sin(lm.rot), z - dx * Math.sin(lm.rot) + dz * Math.cos(lm.rot)];
+    const pts = []; for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const [px, pz] = loc(sx * lm.w / 2 * 0.9, sz * lm.d / 2 * 0.9); pts.push(px, lm.h + 2, pz); }
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    const beacons = new THREE.Points(lg, new THREE.PointsMaterial({ color: 0xff2a2a, size: 3, sizeAttenuation: false }));
-    group.add(mesh, base, beacons); mats.push(mat); zones.push([x, z, lm.zone]); items.push({ ...lm, x, z, mesh, beacons });
+    const beacons = new THREE.Points(lg, new THREE.PointsMaterial({ color: 0x4df21e, size: 3, sizeAttenuation: false }));
+    group.add(mesh, base, beacons);
+    // низкое крыло здания (по контуру из OSM), без подсветки
+    if (lm.wing) { const w = lm.wing; const [wx, wz] = loc(w.dx, w.dz); const wing = new THREE.Mesh(new THREE.BoxGeometry(w.w, w.h, w.d), dark); wing.position.set(wx, w.h / 2, wz); wing.rotation.y = lm.rot; group.add(wing); }
+    mats.push(mat); zones.push([x, z, lm.zone]); items.push({ ...lm, x, z, mesh, beacons });
   }
   return { group, zones, items, update(t) { for (const m of mats) m.uniforms.time.value = t; for (const it of items) it.beacons.visible = Math.floor(t * 1.5) % 2 === 0; } };
 }

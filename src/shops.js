@@ -1,17 +1,18 @@
 // Магазины одежды на карте: торговые центры Минска. Внутри за монетки выпадает случайная вещь.
+// Координаты — центры зданий из OSM (data/map), чтобы вешалка висела над самим торговым центром.
 import * as THREE from 'three';
 
 export const SHOPS = [
-  { id: 'gum', name: 'ГУМ', addr: 'пр. Независимости, 21', lat: 53.9018, lon: 27.5595 },
+  { id: 'gum', name: 'ГУМ', addr: 'пр. Независимости, 21', lat: 53.90056, lon: 27.55761 },
   { id: 'cum', name: 'ЦУМ', addr: 'пр. Независимости, 54', lat: 53.9160, lon: 27.5838 },
-  { id: 'galleria', name: 'Galleria Minsk', addr: 'пр. Победителей, 9', lat: 53.9105, lon: 27.5485 },
+  { id: 'galleria', name: 'Galleria Minsk', addr: 'пр. Победителей, 9', lat: 53.90849, lon: 27.54828 },
   { id: 'stolica', name: 'ТЦ «Столица»', addr: 'пл. Независимости', lat: 53.8958, lon: 27.5465 },
   { id: 'nemiga3', name: 'ТЦ «Немига 3»', addr: 'ул. Немига, 3', lat: 53.9028, lon: 27.5510 },
-  { id: 'korona', name: 'Корона Сити', addr: 'ул. Кальварийская, 24', lat: 53.9068, lon: 27.5177 },
+  { id: 'korona', name: 'Корона Сити', addr: 'ул. Кальварийская, 24', lat: 53.90799, lon: 27.52742 },
   { id: 'zybitskaya', name: 'Секонд на Зыбицкой', addr: 'ул. Зыбицкая', lat: 53.9043, lon: 27.5600 },
-  { id: 'arena', name: 'Arena City', addr: 'пр. Победителей, 84', lat: 53.9290, lon: 27.5160 },
-  { id: 'dana', name: 'Dana Mall', addr: 'ул. Петра Мстиславца, 11', lat: 53.9345, lon: 27.6515 },
-  { id: 'expobel', name: 'Экспобел', addr: 'Логойский тракт, 37', lat: 53.9455, lon: 27.6208 },
+  { id: 'arena', name: 'Arena City', addr: 'пр. Победителей, 84', lat: 53.93790, lon: 27.48878 },
+  { id: 'dana', name: 'Dana Mall', addr: 'ул. Петра Мстиславца, 11', lat: 53.93355, lon: 27.65168 },
+  { id: 'expobel', name: 'Экспобел', addr: 'Логойский тракт, 37', lat: 53.96416, lon: 27.62399 },
 ];
 export const PRICES = { hat: 3, body: 4, prop: 3, pattern: 2, face: 2, extra: 3, colors: 1 };
 
@@ -29,7 +30,7 @@ export class Shops {
     const [lat0, lon0] = center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
     const tex = shopTexture();
     this.items = SHOPS.map(s => {
-      const x = (s.lon - lon0) * kx, z = -(s.lat - lat0) * kz; const node = sim.graph.nearest(x, z, 160);
+      const x = (s.lon - lon0) * kx, z = -(s.lat - lat0) * kz; const node = sim.graph.nearest(x, z, 220);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(x, 14, z); sp.userData.phase = Math.random() * 6;
       const it = { ...s, x, z, node, sp }; sp.userData.shop = it; this.group.add(sp); return it;
     });

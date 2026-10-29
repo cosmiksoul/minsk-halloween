@@ -130,7 +130,6 @@ button.trick { background:var(--green); color:var(--black); border-color:var(--g
 #mineList .item.cur { border-color:var(--green); }
 #mineList .item .play { padding:2px 6px; font-size:9px; align-self:start; }
 #mineList .item .k { background:var(--green); }
-#board .item { grid-template-columns:1fr auto; cursor:default; }
 #pGo { margin-top:4px; }
 
 @media (max-width: 700px) {
@@ -193,3 +192,23 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 #diceSave { pointer-events:auto; display:flex; flex-direction:column; align-items:center; gap:6px; background:var(--black); border:2px solid #ff5fa2; border-radius:6px; padding:8px 10px; margin-top:4px; box-shadow:3px 3px 0 #ff5fa2; }
 #diceSave[hidden] { display:none; } #diceSave button { font-size:11px; padding:6px 10px; } #diceSave .hint { font-family:"JetBrains Mono", monospace; text-shadow:none; }
 .tk { color:#ff5fa2; } .cn { color:var(--gold, #ffd23a); }
+
+/* --- свой скелет: окно создания и список своих скелетов */
+#mine { position:fixed; inset:0; z-index:9; display:flex; align-items:center; justify-content:center; background:rgba(8,4,16,.72); padding:12px; }
+#mine[hidden] { display:none; }
+.mnBox { border-color:var(--green); box-shadow:4px 4px 0 var(--green); width:min(560px, 100%); } .mnBox .dTitle { color:var(--green); } .mnBox .dTitle .x { color:var(--green); }
+.mnRow { display:flex; gap:12px; align-items:flex-start; }
+.mnRow form { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.mnBox #minePic { width:96px; height:144px; align-self:flex-start; flex:0 0 auto; }
+.mnBox #mineList { display:flex; flex-direction:column; gap:6px; max-height:28vh; overflow:auto; }
+.mnBox #mineList:empty { display:none; }
+#hud .hudNew { font-size:11px; padding:7px 10px; align-self:flex-start; }
+#hud:not(.has) { cursor:default; }
+@media (max-width: 700px) { .mnRow { flex-direction:column; align-items:center; } .mnBox { max-height:calc(100vh - 24px); overflow:auto; } }
+
+/* --- лидеры */
+#tabBoard .item { grid-template-columns:auto 1fr auto; cursor:default; align-items:center; }
+#tabBoard .item.me { border-color:var(--green); background:rgba(77,242,30,.08); }
+#tabBoard .rank { font-family:"Press Start 2P", monospace; font-size:9px; color:var(--accent); min-width:22px; }
+#tabBoard .item.me .rank { color:var(--green); }
+#tabBoard .sc { color:var(--green); font-weight:700; white-space:nowrap; }
