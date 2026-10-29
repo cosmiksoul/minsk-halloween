@@ -51,6 +51,8 @@ export class Graph {
     }
     return best;
   }
+  // ближайший проходимый узел без ограничения радиуса: линейный проход, для запасных случаев (nearest с огромным радиусом перебирал бы всю сетку)
+  nearestAny(x, z) { let best = -1, bd = Infinity; for (const n of this.walkable) { const d = (this.x[n] - x) ** 2 + (this.z[n] - z) ** 2; if (d < bd) { bd = d; best = n; } } return best; }
   // все проходимые узлы в радиусе
   within(x, z, R) {
     const out = []; const c = this.cell, r = Math.ceil(R / c); const cx = Math.floor(x / c), cz = Math.floor(z / c);

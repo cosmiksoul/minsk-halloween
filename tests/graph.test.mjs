@@ -9,6 +9,8 @@ test('nearestEdgePoint: проекция на середину ребра и nul
   const ep = g.nearestEdgePoint(50, 7); assert.ok(Math.abs(ep.t - 0.5) < 1e-6); assert.ok(Math.abs(ep.d - 7) < 1e-6); assert.ok(Math.abs(ep.x - 50) < 1e-6); assert.ok(Math.abs(ep.z) < 1e-6);
   assert.equal(g.nearestEdgePoint(50, 500, 140), null);
 });
+test('nearestAny: ближайший узел с любого расстояния', () => { assert.equal(g.nearestAny(5000, 4900), g.nearest(100, 100, 1)); assert.equal(g.nearestAny(-3, 2), g.nearest(0, 0, 1)); });
+
 test('nearestNamed: имя соседней улицы, null далеко', () => { assert.equal(g.nearestNamed(100, 60, 150), 'Ленина'); assert.equal(g.nearestNamed(100, 1000, 150), null); });
 test('planRoute: до точки на ребре с stopT и ценой', () => {
   const pos = { from: g.nearest(0, 0), to: g.nearest(0, 0), t: 0, len: 1 };

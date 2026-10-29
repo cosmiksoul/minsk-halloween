@@ -240,7 +240,7 @@ export class Sim {
     const g = this.graph; const P = g.nearestEdgePoint(a.x, a.z, CUT.snapR);
     a.free = false; a.cut = null; a.lastLeg = null; if (a.state === 'cut') a.state = 'idle';
     if (P) { a.from = P.from; a.to = P.to; a.t = P.t; a.len = Math.hypot(g.x[P.to] - g.x[P.from], g.z[P.to] - g.z[P.from]) || 0.1; this.place(a); }
-    else this.teleport(a, g.nearest(a.x, a.z, 1e9));
+    else this.teleport(a, g.nearestAny(a.x, a.z));
   }
   // запасной путь: вернуться в точку начала срезки (она на графе по построению) и встать на ребро там
   snapBack(a) { if (a.cutFrom) { a.x = a.cutFrom.x; a.z = a.cutFrom.z; } this.snap(a); }
