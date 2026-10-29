@@ -225,7 +225,7 @@ export class Sim {
   nodeOf(a) { return a.t < 0.5 ? a.from : a.to; }
   streetOf(a) { const g = this.graph; return g.names[a.from] || g.names[a.to] || ''; }
   // поставить скелета в узел графа
-  teleport(a, node) { const g = this.graph; a.from = node; const e = pick(a.rng, g.adj[node]); a.to = e ? e.to : node; a.len = e ? e.len : 1; a.t = 0; a.path = null; a.target = null; this.place(a); }
+  teleport(a, node) { const g = this.graph; a.from = node; const e = pick(a.rng, g.adj[node]); a.to = e ? e.to : node; a.len = e ? e.len : 1; a.t = 0; a.path = null; a.stopT = null; a.target = null; this.place(a); }
 
   startTalk(a, b) {
     a.state = b.state = 'talk'; a.partner = b; b.partner = a;
@@ -290,7 +290,7 @@ export class Sim {
   setAuto(a, on) {
     if (a.state === 'dead') { a.auto = on; return; } // мёртвый лежит до респауна, что бы ни нажимали
     if (a.auto === on) return;
-    a.auto = on; a.path = null; a.target = null; a.dest = null; a.script = null;
+    a.auto = on; a.path = null; a.stopT = null; a.target = null; a.dest = null; a.script = null;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
     this.leaveVenue(a); a.waitFor = null;
     if (on) { a.state = 'walk'; a.cooldown = 4; a.thirst = 30 + a.rng() * 120; if (a.from === a.to) this.teleport(a, a.from); }
@@ -300,13 +300,33 @@ export class Sim {
   drive(a, on) {
     a.driven = !!on;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
-    this.leaveVenue(a); a.script = null; a.path = null; a.target = null; a.waitFor = null; a.dest = null;
+    this.leaveVenue(a); a.script = null; a.path = null; a.stopT = null; a.target = null; a.waitFor = null; a.dest = null;
     if (on) a.state = 'idle'; else { a.state = 'walk'; a.cooldown = 6; if (a.from === a.to) this.teleport(a, a.from); }
   }
+  // точка на ребре у узла node, ближайшая к (x, z): { to, t } или null, если цель по сути в самом узле.
+  // Прохожие и конфеты стоят посреди рёбер, а узлы бывают в десятках метров: до узла дойти мало
+  edgePoint(node, x, z) {
+    const g = this.graph; let best = null, bd = 20 * 20;
+    for (const e of g.adj[node]) {
+      const ax = g.x[node], az = g.z[node], dx = g.x[e.to] - ax, dz = g.z[e.to] - az; const l2 = dx * dx + dz * dz; if (l2 < 1) continue;
+      const t = ((x - ax) * dx + (z - az) * dz) / l2; if (t < 0.03 || t > 0.97) continue;
+      const d2 = (x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2;
+      if (d2 < bd) { bd = d2; best = { to: e.to, t }; }
+    }
+    return best;
+  }
+  // идти к точке (x, z): по графу до ближайшего узла, а если точка лежит на ребре рядом — до самой точки (a.stopT)
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
-    // после прямого подхода агент стоит вне ребра: сначала ставим его на ближайший узел
+    // после прямого подхода (охотник) агент стоит вне ребра: сначала ставим его на ближайший узел
     if (a.state === 'approach' || (a.from === a.to && Math.hypot(a.x - g.x[a.from], a.z - g.z[a.from]) > 3)) { const n = g.nearest(a.x, a.z, 140); if (n >= 0) this.teleport(a, n); if (a.state === 'approach') a.state = 'idle'; }
+    const ep = this.edgePoint(node, x, z); a.stopT = null;
+    // точка на текущем ребре: дойти до неё или развернуться, не бегая через узлы
+    if (ep && a.from !== a.to && ((a.from === node && a.to === ep.to) || (a.from === ep.to && a.to === node))) {
+      const s = a.from === node ? ep.t : 1 - ep.t;
+      if (a.t > s) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; a.stopT = 1 - s; } else a.stopT = s;
+      a.path = []; a.dest = node; a.state = 'walk'; a.timer = 0; a.routeCost = Math.abs(a.stopT - a.t) * a.len; return true;
+    }
     // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
     let best = null;
     const tryFrom = (start, pre, swap) => { const r = g.route(start, node); if (r && (!best || r.cost + pre < best.cost)) best = { nodes: r.nodes, cost: r.cost + pre, swap }; };
@@ -314,13 +334,19 @@ export class Sim {
     else { tryFrom(a.to, (1 - a.t) * a.len, false); tryFrom(a.from, a.t * a.len, true); }
     if (!best) return false;
     if (best.swap) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; }
-    a.path = best.nodes; a.dest = node; a.state = 'walk'; a.timer = 0;
+    a.path = best.nodes; a.dest = node; a.state = 'walk'; a.timer = 0; a.routeCost = best.cost;
+    if (ep) {
+      // по какому ребру приходим в узел: если по тому, где лежит точка, встать на ней; иначе дойти до узла и свернуть к точке
+      const n = a.path.length, atNode = a.from === a.to;
+      const prev = n >= 2 ? a.path[n - 2] : n === 1 ? (atNode ? a.from : a.to) : (atNode ? -1 : a.from);
+      if (prev === ep.to) a.stopT = 1 - ep.t; else { a.path.push(ep.to); a.stopT = ep.t; }
+    }
     if (a.from === a.to) { if (a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; a.t = 0; } else { a.state = 'idle'; a.dest = null; } }
     return true;
   }
-  stop(a) { a.path = null; a.dest = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
+  stop(a) { a.path = null; a.stopT = null; a.dest = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
   // прямой подход вне графа (последние метры охотника к игроку, как у попутчиков): цель в метрах, путь не нужен
-  approach(a, x, z) { a.state = 'approach'; a.ax = x; a.az = z; a.path = null; a.dest = null; }
+  approach(a, x, z) { a.state = 'approach'; a.ax = x; a.az = z; a.path = null; a.stopT = null; a.dest = null; }
   // стоим на узле заведения?
   venueAt(a) { return a.from === a.to || a.t < 0.05 ? this.venueNode.get(a.from) : a.t > 0.95 ? this.venueNode.get(a.to) : null; }
 
@@ -329,6 +355,10 @@ export class Sim {
     if (a.state === 'walk') {
       if (a.from === a.to) { a.state = 'idle'; return; }
       a.t += a.speed * (a.speedMul || 1) * dt / a.len;
+      // цель посреди ребра (прохожий, конфета): встаём на точке, не доходя до узла; onArrive без узла, чтобы не «зайти» в бар в 30 м
+      if (a.stopT != null && !(a.path && a.path.length) && a.t >= a.stopT) {
+        a.t = a.stopT; a.stopT = null; a.state = 'idle'; a.dest = null; a.path = null; this.place(a); if (this.onArrive) this.onArrive(a, -1); return;
+      }
       while (a.t >= 1 && a.state === 'walk') {
         a.from = a.to; a.t = 0;
         if (a.path && a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; }
