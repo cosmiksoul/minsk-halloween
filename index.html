@@ -19,6 +19,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="bubbles"></div>
+<div id="hmark" hidden title="охотник">🪦</div>
 
 <!-- панель своего скелета: клик берёт управление, аватары переключают скелетов -->
 <div id="hud"></div>
@@ -132,6 +133,7 @@
       </div>
     </div>
     <div id="pfGame"></div>
+    <div id="journal" hidden></div>
     <div class="btns"><button id="pfSelect" class="green">управлять</button><button id="pfPlay" hidden>играть за него</button><button id="pfDeck">🃏 колода</button><button id="pfShare">📣 поделиться</button><button id="pfLink">🔗 ссылка</button><button id="pfDelete">удалить</button></div>
   </div>
 </div>
@@ -196,7 +198,7 @@
   <div id="diceSave" hidden><button id="dsYes" class="green">🎟 спас-бросок</button><button id="dsNo">оставить</button><div class="hint" id="dsHint"></div></div>
 </div>
 
-<div id="loading"><div class="skull">💀</div><div>собираем кости…</div></div>
+<div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,4 +1,7 @@
 // Бросок d20: пиксельный кубик крутится на оверлее, число мельтешит, потом замирает.
+// Режим plain (дуэль): без ярлыка исхода и нейтральным цветом; showDuelResult показывает экран сравнения.
+import { outcomeOf } from './rules.js';
+export { outcomeOf };
 const $ = id => document.getElementById(id);
 
 export const OUTCOMES = {
@@ -7,7 +10,6 @@ export const OUTCOMES = {
   success: { label: 'успех', color: '#4df21e' },
   crit: { label: 'КРИТИЧЕСКИЙ УСПЕХ', color: '#ffd23a' },
 };
-export function outcomeOf(n) { return n <= 1 ? 'critfail' : n <= 10 ? 'fail' : n <= 19 ? 'success' : 'crit'; }
 
 function drawD20(ctx, n, color, angle) {
   const S = ctx.canvas.width; ctx.clearRect(0, 0, S, S);
@@ -27,9 +29,9 @@ function drawD20(ctx, n, color, angle) {
 }
 
 // возвращает Promise с результатом броска, когда анимация закончилась
-export function hideDice() { const box = $('dice'); box.hidden = true; box.className = ''; }
-export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hold = false) {
-  const box = $('dice'), cv = $('diceCv'), ctx = cv.getContext('2d');
+export function hideDice() { const box = $('dice'); box.hidden = true; box.className = ''; $('diceCv').hidden = false; $('diceSave').hidden = true; }
+export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hold = false, opts = {}) {
+  const box = $('dice'), cv = $('diceCv'), ctx = cv.getContext('2d'); cv.hidden = false; const plain = !!opts.plain;
   box.hidden = false; box.className = 'rolling'; $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = ''; $('diceSave').hidden = true;
   const kind = outcomeOf(result), out = OUTCOMES[kind];
   return new Promise(resolve => {
@@ -40,12 +42,19 @@ export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hol
         if (now - last > 50 + (t / dur) * 90) { last = now; drawD20(ctx, 1 + Math.floor(Math.random() * 20), '#e9dff7', (t / 1000) * 9 + Math.random() * 0.5); }
         requestAnimationFrame(tick);
       } else {
-        drawD20(ctx, result, out.color, 0);
-        box.className = 'done ' + kind; $('diceRes').textContent = out.label; $('diceRes').style.color = out.color; $('diceNum').textContent = `выпало ${result}`;
+        if (plain) { drawD20(ctx, result, '#e9dff7', 0); box.className = 'done plain'; $('diceRes').textContent = ''; $('diceNum').textContent = `выпало ${result}`; }
+        else { drawD20(ctx, result, out.color, 0); box.className = 'done ' + kind; $('diceRes').textContent = out.label; $('diceRes').style.color = out.color; $('diceNum').textContent = `выпало ${result}`; }
         setTimeout(() => { resolve({ n: result, kind }); }, 700);
         if (!hold) setTimeout(() => { if (box.className.startsWith('done')) box.hidden = true; }, 2600);
       }
     };
     requestAnimationFrame(tick);
   });
+}
+// экран сравнения в дуэли: текст вместо кубика, цвет по исходу; без hold прячется через 2.6 с
+const VS = { success: ['победа', '#4df21e'], crit: ['КРИТ: победа', '#ffd23a'], fail: ['укус', '#ff8a2a'], critfail: ['КРИТ: укус', '#ff3a3a'], tie: ['ничья', '#e9dff7'] };
+export function showDuelResult(text, kind, hold = false) {
+  const box = $('dice'); box.hidden = false; box.className = 'done vs ' + kind; $('diceCv').hidden = true; $('diceSave').hidden = true;
+  const v = VS[kind] || VS.tie; $('diceTitle').textContent = text; $('diceRes').textContent = v[0]; $('diceRes').style.color = v[1]; $('diceNum').textContent = '';
+  if (!hold) setTimeout(() => { if (box.classList.contains('vs')) hideDice(); }, 2600);
 }
