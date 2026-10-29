@@ -3,7 +3,7 @@
 
 Переписывает index.html: в importmap для каждого src/*.js запись
 "./src/<name>.js": "./src/<name>.js?v=<rev>" (записи three остаются как есть),
-и src="src/main.js?v=<rev>" у стартового скрипта. rev по умолчанию —
+src="src/main.js?v=<rev>" у стартового скрипта и href="style.css?v=<rev>" у стилей. rev по умолчанию —
 git rev-parse --short HEAD. Карта применяется к уже разрешённым URL, поэтому
 относительные импорты внутри модулей тоже получают ?v=: после выкладки
 браузеры игроков берут новые файлы, а не кэш. Идемпотентен.
@@ -39,6 +39,9 @@ def main():
     html, n = re.subn(r'src="src/main\.js(\?v=[^"]*)?"', f'src="src/main.js?v={rev}"', html)
     if n != 1:
         sys.exit('index.html: нет <script type="module" src="src/main.js">')
+    html, n = re.subn(r'href="style\.css(\?v=[^"]*)?"', f'href="style.css?v={rev}"', html)  # стили тоже версионируем: иначе новый интерфейс приходит со старым CSS из кэша
+    if n != 1:
+        sys.exit('index.html: нет <link rel="stylesheet" href="style.css">')
     INDEX.write_text(html, encoding='utf-8')
     print(f'index.html: {sum(k.startswith("./src/") for k in imports)} модулей, v={rev}')
 
