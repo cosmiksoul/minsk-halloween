@@ -67,6 +67,8 @@ PUB = {'public', 'school', 'university', 'hospital', 'government', 'civic', 'tra
 IND = {'industrial', 'warehouse', 'garage', 'garages', 'shed', 'service', 'hangar', 'factory', 'storage_tank', 'roof', 'carport'}
 CHURCH = {'church', 'cathedral', 'chapel', 'temple', 'synagogue', 'mosque', 'monastery'}
 GREEN_F = {'forest', 'wood', 'cemetery'}
+# кладбища, из которых в игре выходят охотники: мемориалы жертв войны и места массовых захоронений исключены
+CEM_SKIP = ('мемориал', 'мемарыял', 'благовщин', 'благоўшчын', 'тростен', 'трасцян', 'узник', 'вязн', 'сожж', 'спален', 'жертв', 'ахвяр', 'яма', 'братск', 'немецк', 'нямецк', 'солдат', 'салдац')
 
 
 def project(center):
@@ -74,6 +76,13 @@ def project(center):
     kx = math.cos(lat0 * math.pi / 180) * 111320
     kz = 110574
     return lambda lat, lon: (round((lon - lon0) * kx, 1), round(-(lat - lat0) * kz, 1))
+
+
+def unproject(center):
+    lat0, lon0 = center
+    kx = math.cos(lat0 * math.pi / 180) * 111320
+    kz = 110574
+    return lambda x, z: (lat0 - z / kz, lon0 + x / kx)
 
 
 class BadChunk(Exception):
@@ -223,6 +232,7 @@ def main():
 
     seen = set()
     data = {'center': list(CENTER), 'buildings': [], 'roads': [], 'rails': [], 'river': [], 'green': [], 'water': [], 'trees': [], 'pois': []}
+    cemeteries = []  # кладбища отдельно: из них в игре выходят охотники
 
     lat = s0
     chunks = []
@@ -320,6 +330,12 @@ def main():
                 data['pois'].append({'x': round(cx, 1), 'z': round(cz, 1), 'n': tags.get('name'), 't': tags['amenity'], 'a': addr(tags), 'h': tags.get('opening_hours', ''), 'w': tags.get('website') or '', 'c': tags.get('cuisine')})
             else:
                 f = 1 if (tags.get('landuse') in GREEN_F or tags.get('natural') in GREEN_F) else 0
+                if tags.get('landuse') == 'cemetery' and outer:
+                    ring = max(outer, key=lambda r: abs(area(r)))
+                    cx, cz = poly_centroid(flat(ring))
+                    cname = tags.get('name:ru') or tags.get('name')
+                    if not any(s in (cname or '').lower() for s in CEM_SKIP):
+                        cemeteries.append({'name': cname, 'x': round(cx, 1), 'z': round(cz, 1), 'area': int(abs(area(ring)))})
                 for ring in outer:
                     g = {'p': flat(ring)}
                     if f:
@@ -346,6 +362,22 @@ def main():
     print('зданий', len(data['buildings']), 'дорог', len(data['roads']), 'зелени', len(data['green']), 'воды', len(data['water']), 'деревьев', len(data['trees']), 'заведений', len(data['pois']))
     index = write_outputs(data, args.out, tile=args.tile, source=f'OpenStreetMap, Overpass {time.strftime("%Y-%m-%d")}')
     print('тайлов:', len(index['tiles']), 'bbox:', index['bbox'])
+
+    # кладбища: центроид, площадь, координаты; мелкие (меньше 0,3 га) не нужны
+    un = unproject(CENTER)
+    items = []
+    for c in sorted(cemeteries, key=lambda c: -c['area']):
+        if c['area'] < 3000:
+            continue
+        lat, lon = un(c['x'], c['z'])
+        it = {}
+        if c['name']:
+            it['name'] = c['name']
+        it.update({'lat': round(lat, 5), 'lon': round(lon, 5), 'x': c['x'], 'z': c['z'], 'area': c['area']})
+        items.append(it)
+    with open(os.path.join(args.out, 'cemeteries.json'), 'w', encoding='utf-8') as f:
+        json.dump({'center': list(CENTER), 'items': items}, f, ensure_ascii=False, separators=(',', ':'))
+    print('кладбищ:', len(items), 'из', len(cemeteries))
 
 
 if __name__ == '__main__':
