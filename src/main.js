@@ -190,12 +190,31 @@ function takeControl(a) {
   game.select(true); showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on'); renderMine();
 }
 $('hud').onclick = e => {
+  if (isMobile && $('hud').classList.contains('has') && $('hud').classList.contains('min') && !e.target.closest('button, .hc, canvas.av')) { expandHud(); return; } // на телефоне первый тап по свёрнутой панели разворачивает её на 5 с
   if (e.target.closest('.deck')) { game.openDeck(); return; } // 🃏 на панели открывает колоду без взятия управления
   if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
   const hc = e.target.closest('.hc'); if (hc) { cards.flyTo(+hc.dataset.slot); return; } // карта в полосе руки: камера к боссу
   const av = e.target.closest('canvas.av'); if (av) { const o = own().find(x => String(x.def.seed) === av.dataset.seed); if (o) takeControl(o.agent); return; }
   if (game.player) takeControl(game.player);
 };
+// --- телефон: HUD свёрнут в строку (имя, сердца, XP), тап разворачивает на 5 с; нижняя панель дублирует главную кнопку
+let hudTimer = 0;
+function expandHud() { const hud = $('hud'); hud.classList.remove('min'); clearTimeout(hudTimer); hudTimer = setTimeout(() => { if (isMobile) hud.classList.add('min'); }, 5000); }
+if (isMobile) $('hud').classList.add('min');
+function updateMbar() {
+  if (!isMobile) return;
+  const act = $('mbAct'); const cardOpen = !$('card').hidden && cardAgent; const fb = $('bFight'), bs = $('bSelect'), bp = $('bPlay'), pg = $('pGo');
+  let label = 'создать', ic = 'dice', fn = openMine, dis = false;
+  if (cardOpen && !fb.hidden) { label = fb.disabled ? 'отдышись' : 'сразиться'; ic = 'boss'; fn = () => fb.click(); dis = fb.disabled; }
+  else if (cardOpen && !bp.hidden) { label = 'играть'; ic = 'hand'; fn = () => bp.click(); }
+  else if (cardOpen && !bs.hidden) { label = game.selected ? 'отпустить' : 'управлять'; ic = 'quest'; fn = () => bs.click(); }
+  else if (!$('popup').hidden && !pg.hidden) { label = 'зайти'; ic = 'places'; fn = () => pg.click(); }
+  else if (game.player) { label = game.selected ? 'отпустить' : 'управление'; ic = 'quest'; fn = () => { if (game.selected) { game.select(false); showCard(game.player); } else takeControl(game.player); }; }
+  const key = ic + '|' + label + '|' + dis; if (act.dataset.key !== key) { act.dataset.key = key; act.innerHTML = icon(ic, 2) + `<small>${label}</small>`; act.disabled = dis; }
+  act.onclick = fn;
+}
+$('mbHand').innerHTML = icon('hand', 2) + '<small>рука</small>'; $('mbHand').onclick = () => { const hud = $('hud'); hud.classList.toggle('handOpen'); if (hud.classList.contains('handOpen')) hud.classList.add('min'); };
+$('mbMap').innerHTML = icon('map', 2) + '<small>карта</small>'; $('mbMap').onclick = () => openDrawer('legend');
 $('mnClose').onclick = () => closeMine();
 $('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
 addEventListener('keydown', e => {
@@ -624,7 +643,7 @@ function frame() {
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
-  acc += dt; if (acc > 0.5) { acc = 0; $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
+  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;

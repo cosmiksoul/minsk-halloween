@@ -274,16 +274,31 @@ body.drawerOpen #card { left:344px; }
 .pfText { display:flex; flex-direction:column; gap:4px; min-width:0; }
 #pfGame { max-height:36vh; overflow:auto; }
 #pfGame .line { line-height:1.6; }
+/* телефон: шапка только иконками, нижняя панель #mbar, HUD в одну строку, карточка снизу над панелью */
+#mbar { display:none; }
 @media (max-width: 700px) {
-  #top { top:auto; bottom:12px; justify-content:flex-start; }
-  .tStats { font-size:9px; padding:5px 8px; white-space:normal; }
-  #menu { top:auto; bottom:52px; }
-  #drawer { width:calc(100vw - 24px); bottom:100px; }
-  body.drawerOpen #card { left:12px; }
-  body.drawerOpen #card { display:none; }
-  #card { bottom:64px; }
-  #ask, #host { bottom:64px; }
+  #top { top:8px; left:8px; right:8px; justify-content:flex-start; gap:4px; }
+  .tStats, .tbtn .tlabel { display:none; }
+  .tbtn { padding:6px; } .tbtn .ic { margin:0; }
+  #menu { top:48px; right:8px; }
+  #drawer { width:calc(100vw - 16px); left:8px; top:96px; bottom:76px; }
+  body.drawerOpen #card { left:0; display:none; }
+  #mbar { position:fixed; left:0; right:0; bottom:0; height:64px; z-index:6; display:flex; justify-content:space-around; align-items:center; padding:4px 8px; background:rgba(14,9,24,.96); border-top:2px solid var(--line); }
+  #mbar button { width:56px; height:56px; padding:2px 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-family:"Press Start 2P", monospace; font-size:8px; line-height:1; }
+  #mbar button .ic { margin:0; } #mbar button small { font-size:8px; }
+  #mbar button:disabled { opacity:.5; }
+  #card { left:0; right:0; bottom:64px; width:100%; max-width:100%; animation:slideUp .2s ease-out; }
+  @keyframes slideUp { from { transform:translateY(100%) } to { transform:none } }
+  #ask, #host { bottom:72px; }
+  #toasts { top:auto; bottom:72px; right:8px; left:8px; align-items:stretch; }
+  #hud { top:52px; left:8px; max-width:calc(100vw - 16px); padding:4px 8px; } /* под шапкой, чтобы кнопки шапки не перекрывали панель */
+  #hud.has.min .hudTop, #hud.has.min .hudRow, #hud.has.min .hand, #hud.has.min .hudQuest, #hud.has.min .hudHint { display:none; }
+  #hud .hudMini { display:none; align-items:center; gap:6px; font-size:11px; }
+  #hud.has.min .hudMini { display:flex; }
+  #hud.has.min.handOpen .hand { display:flex; }
+  #bmark, #hmark { font-size:20px; }
 }
+#hud .hudMini { display:none; }
 
 /* значок проезжей части у шкалы розыска */
 #hud .road { margin-left: 4px; filter: drop-shadow(0 0 3px #ffd23a); }

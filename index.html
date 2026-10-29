@@ -12,34 +12,34 @@
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "./src/bio.js": "./src/bio.js?v=801125a",
-  "./src/cards.js": "./src/cards.js?v=801125a",
-  "./src/city.js": "./src/city.js?v=801125a",
-  "./src/dice.js": "./src/dice.js?v=801125a",
-  "./src/districts.js": "./src/districts.js?v=801125a",
-  "./src/game.js": "./src/game.js?v=801125a",
-  "./src/gen.js": "./src/gen.js?v=801125a",
-  "./src/geo.js": "./src/geo.js?v=801125a",
-  "./src/graph.js": "./src/graph.js?v=801125a",
-  "./src/hosts.js": "./src/hosts.js?v=801125a",
-  "./src/hunters.js": "./src/hunters.js?v=801125a",
-  "./src/intro.js": "./src/intro.js?v=801125a",
-  "./src/landmarks.js": "./src/landmarks.js?v=801125a",
-  "./src/main.js": "./src/main.js?v=801125a",
-  "./src/poker.js": "./src/poker.js?v=801125a",
-  "./src/post.js": "./src/post.js?v=801125a",
-  "./src/quests.js": "./src/quests.js?v=801125a",
-  "./src/rules.js": "./src/rules.js?v=801125a",
-  "./src/sfx.js": "./src/sfx.js?v=801125a",
-  "./src/share.js": "./src/share.js?v=801125a",
-  "./src/shops.js": "./src/shops.js?v=801125a",
-  "./src/sim.js": "./src/sim.js?v=801125a",
-  "./src/skeletons.js": "./src/skeletons.js?v=801125a",
-  "./src/store.js": "./src/store.js?v=801125a",
-  "./src/tarot.js": "./src/tarot.js?v=801125a",
-  "./src/tiles.js": "./src/tiles.js?v=801125a",
-  "./src/ui.js": "./src/ui.js?v=801125a",
-  "./src/venues.js": "./src/venues.js?v=801125a"
+  "./src/bio.js": "./src/bio.js?v=6566703",
+  "./src/cards.js": "./src/cards.js?v=6566703",
+  "./src/city.js": "./src/city.js?v=6566703",
+  "./src/dice.js": "./src/dice.js?v=6566703",
+  "./src/districts.js": "./src/districts.js?v=6566703",
+  "./src/game.js": "./src/game.js?v=6566703",
+  "./src/gen.js": "./src/gen.js?v=6566703",
+  "./src/geo.js": "./src/geo.js?v=6566703",
+  "./src/graph.js": "./src/graph.js?v=6566703",
+  "./src/hosts.js": "./src/hosts.js?v=6566703",
+  "./src/hunters.js": "./src/hunters.js?v=6566703",
+  "./src/intro.js": "./src/intro.js?v=6566703",
+  "./src/landmarks.js": "./src/landmarks.js?v=6566703",
+  "./src/main.js": "./src/main.js?v=6566703",
+  "./src/poker.js": "./src/poker.js?v=6566703",
+  "./src/post.js": "./src/post.js?v=6566703",
+  "./src/quests.js": "./src/quests.js?v=6566703",
+  "./src/rules.js": "./src/rules.js?v=6566703",
+  "./src/sfx.js": "./src/sfx.js?v=6566703",
+  "./src/share.js": "./src/share.js?v=6566703",
+  "./src/shops.js": "./src/shops.js?v=6566703",
+  "./src/sim.js": "./src/sim.js?v=6566703",
+  "./src/skeletons.js": "./src/skeletons.js?v=6566703",
+  "./src/store.js": "./src/store.js?v=6566703",
+  "./src/tarot.js": "./src/tarot.js?v=6566703",
+  "./src/tiles.js": "./src/tiles.js?v=6566703",
+  "./src/ui.js": "./src/ui.js?v=6566703",
+  "./src/venues.js": "./src/venues.js?v=6566703"
 } }
 </script>
 <script src="config.js"></script>
@@ -50,6 +50,8 @@
 <div id="hmark" hidden title="охотник">🪦</div>
 <div id="bmark" hidden title="босс часа"></div>
 <div id="toasts"></div>
+<!-- телефон: нижняя панель — действие открытой карточки, рука, карта -->
+<div id="mbar"><button id="mbAct"></button><button id="mbHand"></button><button id="mbMap"></button></div>
 
 <!-- панель своего скелета: клик берёт управление, аватары переключают скелетов -->
 <div id="hud" class="panel"></div>
@@ -254,6 +256,6 @@
   </div>
 </div>
 <div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
-<script type="module" src="src/main.js?v=801125a"></script>
+<script type="module" src="src/main.js?v=6566703"></script>
 </body>
 </html>
