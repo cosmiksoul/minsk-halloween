@@ -33,7 +33,7 @@ export const ARCANA = [
   { id: 'hermit', num: 9, roman: 'IX', name: 'Отшельник', place: 'Пищаловский замок', lat: 53.89892, lon: 27.54807,
     why: 'Белый замок с четырьмя башнями построен в 1825 году и с тех пор ни разу не менял назначения — это тюрьма, знаменитая «Володарка». В 2008 году одна из башен частично обрушилась.',
     legend: 'Говорят, башня в 2008-м упала не сама: её столетний узник, которого никто не выпускал, потому что никто не помнил, за что он сидит, наконец закончил подкоп. С тех пор по ночам на Володарского ходит старик с фонарём и спрашивает у прохожих дорогу к дому, которого давно нет. Отвечать надо вежливо: кто рассмеётся, тому он отдаёт фонарь — и место на нарах.' },
-  { id: 'wheel', num: 10, roman: 'X', name: 'Колесо Фортуны', place: 'Колесо обозрения в парке Горького', lat: 53.9058, lon: 27.5742,
+  { id: 'wheel', num: 10, roman: 'X', name: 'Колесо Фортуны', place: 'Колесо обозрения в парке Горького', lat: 53.9055, lon: 27.5749,
     why: 'Парк Горького — старейший в Минске, заложен в 1800 году как губернаторский сад. Колесо обозрения высотой 54 метра стоит здесь с 2003 года и видно с половины центра.',
     legend: 'В ночь на 1 ноября колесо, выключенное на зиму, делает ровно один оборот. В тринадцатой кабинке сидит пассажир в пальто не по сезону и предлагает поспорить на что угодно. Выигравший спускается богатым. Проигравшему достаётся кабинка — до следующего Хэллоуина.' },
   { id: 'justice', num: 11, roman: 'XI', name: 'Справедливость', place: 'Дом масонов в Музыкальном переулке', lat: 53.90518, lon: 27.55949,
@@ -148,7 +148,9 @@ export class Tarot {
       // аркана на особом здании стоит ровно там, где само здание (landmarks.js), чтобы координаты не разъезжались
       const lmPos = a.landmark ? landmarks.find(l => l.id === a.landmark) : null;
       const x = lmPos ? lmPos.x : (a.lon - lon0) * kx, z = lmPos ? lmPos.z : -(a.lat - lat0) * kz;
-      const node = sim.graph.nearest(x, z, 160);
+      const node = sim.graph.nearest(x, z, 260);
+      // подбор срабатывает у ближайшей дороги: до центра большого здания (Комаровка, библиотека) с улицы не дойти
+      const nx = node >= 0 ? sim.graph.x[node] : x, nz = node >= 0 ? sim.graph.z[node] : z;
       const ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.55, depthWrite: false })); ring.position.set(x, 0.58, z); ring.scale.set(18, 1, 18);
       const beam = new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide })); beam.position.set(x, 0, z);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(x, 30, z); sp.userData.tarot = a; sp.userData.phase = Math.random() * 6;
@@ -156,7 +158,7 @@ export class Tarot {
       const lm = a.landmark ? landmarks.find(l => l.id === a.landmark) : null;
       if (lm) { sp.position.set(lm.x, lm.h + 6, lm.z); beam.visible = false; }
       this.group.add(ring, beam, sp);
-      return { a, x, z, node, ring, beam, sp, done: false, lm, baseY: lm ? lm.h + 6 : 24 };
+      return { a, x, z, nx, nz, node, ring, beam, sp, done: false, lm, baseY: lm ? lm.h + 6 : 24 };
     });
     this.byId = Object.fromEntries(this.items.map(it => [it.a.id, it]));
     this.pickables = this.items.map(it => it.sp); this.size = 7;
@@ -171,7 +173,7 @@ export class Tarot {
       if (it.done) continue;
       it.sp.position.y = it.baseY + Math.sin(t * 1.6 + it.sp.userData.phase) * 2.5; it.beam.material.opacity = 0.12 + 0.06 * Math.sin(t * 2 + it.sp.userData.phase);
       it.ring.scale.setScalar(18 + Math.sin(t * 2 + it.sp.userData.phase) * 1.2); it.ring.scale.y = 1;
-      if (player && player.state !== 'dead' && (it.x - player.x) ** 2 + (it.z - player.z) ** 2 < reach * reach) onCollect(it);
+      if (player && player.state !== 'dead' && ((it.nx - player.x) ** 2 + (it.nz - player.z) ** 2 < reach * reach || (it.x - player.x) ** 2 + (it.z - player.z) ** 2 < reach * reach)) onCollect(it);
     }
   }
 }

@@ -1,7 +1,8 @@
 // Ленивая подгрузка тайлов карты: грузим только то, что попадает в кадр (плюс запас),
 // выгружаем далёкое. Сетка улиц для скелетов при этом общая и загружена целиком.
 import * as THREE from 'three';
-import { buildTile, buildBig, disposeGroup } from './city.js';
+import { buildTile, buildBig, disposeGroup, pointInPoly } from './city.js';
+import { animateRoofs } from './landmarks.js';
 
 export class TileManager {
   constructor(scene, index, mats, base = 'data/map/') {
@@ -77,4 +78,27 @@ export class TileManager {
     return false;
   }
   get stats() { return { loaded: this.loaded.size, pending: this.pending.size, queued: this.queue.length, built: this.built, kb: this.bytes }; }
+  animate(t) { for (const g of this.loaded.values()) if (g.userData.anim) animateRoofs(g, t); }
+  // клик по зданию: луч против зданий ближних тайлов, потом ищем именованный контур под точкой попадания
+  pickBuilding(ray, gx, gz) {
+    const T = this.tile; const cands = [];
+    for (const [k, g] of this.loaded) {
+      const [ix, iz] = k.split('_').map(Number); const x0 = ix * T, z0 = iz * T;
+      if (gx < x0 - 300 || gx > x0 + T + 300 || gz < z0 - 300 || gz > z0 + T + 300) continue;
+      if (g.userData.buildingMesh) cands.push(g.userData.buildingMesh);
+    }
+    if (!cands.length) return null;
+    const hits = ray.intersectObjects(cands, false); if (!hits.length) return null;
+    const h = hits[0]; const x = h.point.x, z = h.point.z; const named = h.object.parent.userData.named || [];
+    let best = null, bd = 2.5 * 2.5;
+    for (const b of named) {
+      if (pointInPoly(x, z, b.p)) return { ...b, hit: h.point };
+      for (let i = 0; i < b.p.length - 2; i += 2) { const d = segDist2(x, z, b.p[i], b.p[i + 1], b.p[i + 2], b.p[i + 3]); if (d < bd) { bd = d; best = b; } }
+    }
+    return best ? { ...best, hit: h.point } : { n: null, hit: h.point, h: 0 };
+  }
+}
+function segDist2(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az; const l2 = dx * dx + dz * dz || 1e-9; let t = ((px - ax) * dx + (pz - az) * dz) / l2; t = Math.max(0, Math.min(1, t));
+  const qx = ax + dx * t, qz = az + dz * t; return (px - qx) ** 2 + (pz - qz) ** 2;
 }

@@ -105,6 +105,8 @@ export class Sim {
     this.camRight = new THREE.Vector3(1, 0, 0);
     this.pool = new Map(); this.ghostTex = null;
     this.onArrive = null; // колбэк игры: игрок дошёл до узла
+    this.onEnter = null;  // колбэк игры: скелет зашёл в заведение
+    this.density = 1; this.cap = 900; this.crowdTimer = 0; this.lastFp = null;
     // заведения привязываем к узлам графа
     this.venues = venues; this.venueNode = new Map();
     for (const v of venues) { v.node = this.graph.nearest(v.x, v.z, 80); if (v.node >= 0) this.venueNode.set(v.node, v); }
@@ -136,7 +138,7 @@ export class Sim {
     const e = pick(rng, g.adj[from]);
     const a = { id: this.seed++, uid: 0, arch: arch.id, costume, bio, tex, base: custom ? baseTex : null, sprite, rng, from, to: e.to, len: e.len, t: rng(), speed: WALK_SPEED * (0.8 + rng() * 0.5),
       state: 'walk', timer: 0, anim: rng() * 10, face: 1, cooldown: rng() * 10, thirst: 30 + rng() * 180, path: null, target: null, bubble: null, script: null, partner: null, x: 0, z: 0, lastDance: -100, venue: null, custom: !!custom,
-      player: false, ghost: false, leader: null, waitFor: null, home: null, dest: null, moving: false };
+      player: false, ghost: false, leader: null, waitFor: null, home: null, dest: null, moving: false, auto: false, ambient: false, ck: null, born: this.time };
     sprite.userData.agent = a;
     this.place(a); this.scene.add(sprite); this.agents.push(a); this.sprites.push(sprite);
     return a;
@@ -145,8 +147,29 @@ export class Sim {
     const uid = this.seed; const rng = makeRng(uid * 7919 + 13);
     const arch = pickArchetype(rng); const bio = makeBio(rng, arch);
     const [node, home] = this.spawnNode(rng);
-    const { costume, tex } = this.pooled(arch, Math.floor(rng() * COSTUMES_PER_ARCH));
-    const a = this.addAgent(arch, costume, tex, bio, rng, node, false); a.uid = uid; a.home = home; return a;
+    const ci = Math.floor(rng() * COSTUMES_PER_ARCH); const { costume, tex } = this.pooled(arch, ci);
+    const a = this.addAgent(arch, costume, tex, bio, rng, node, false); a.uid = uid; a.home = home; a.ck = arch.id + ':' + ci; return a;
+  }
+  // прохожий в заданном узле: для толпы вокруг камеры. Дом — ближайшее оживлённое место или сама точка
+  spawnAt(node) {
+    const uid = this.seed; const rng = makeRng(uid * 7919 + 13);
+    const arch = pickArchetype(rng); const bio = makeBio(rng, arch);
+    const ci = Math.floor(rng() * COSTUMES_PER_ARCH); const { costume, tex } = this.pooled(arch, ci);
+    const a = this.addAgent(arch, costume, tex, bio, rng, node, false); a.uid = uid; a.ck = arch.id + ':' + ci; a.ambient = true;
+    const g = this.graph; let home = null;
+    for (const h of this.hotspots) if ((h.x - g.x[node]) ** 2 + (h.z - g.z[node]) ** 2 < (h.r * 1.5) ** 2) { home = h; break; }
+    a.home = home || { x: g.x[node], z: g.z[node], r: 350 + rng() * 300 };
+    return a;
+  }
+  // друг игрока, которого воссоздаём после перезагрузки по записи в карточке
+  spawnFriend(rec, nearX, nearZ) {
+    const rng = makeRng((rec.uid || 1) * 7919 + 13);
+    const arch = ARCHETYPES.find(x => x.id === rec.arch) || pickArchetype(rng);
+    const [ck, ciStr] = (rec.ck || '').split(':'); const ci = ck === arch.id && ciStr ? +ciStr : Math.floor(rng() * COSTUMES_PER_ARCH);
+    const { costume, tex } = this.pooled(arch, ci);
+    const bio = { name: rec.name, gender: rec.gender, age: rec.age, job: rec.job, status: makeBio(rng, arch).status };
+    let node = this.graph.nearest(nearX, nearZ, 300); if (node < 0) node = this.spawnNode(rng)[0];
+    const a = this.addAgent(arch, costume, tex, bio, rng, node, false); a.uid = rec.uid || a.id; a.ck = arch.id + ':' + ci; return a;
   }
   // пользовательский скелет: имя, пол, возраст, работа, архетип и зерно для костюма
   spawnCustom(def, nearX, nearZ) {
@@ -186,9 +209,9 @@ export class Sim {
     if (a.leader) this.unfriend(a);
   }
   setPopulation(n) {
-    const count = () => this.agents.filter(a => !a.custom).length;
+    const count = () => this.agents.filter(a => !a.custom && !a.ambient).length;
     while (count() < n) this.spawn();
-    while (count() > n) { const a = [...this.agents].reverse().find(x => !x.custom && !x.leader && !x.ghost && x.state !== 'wait'); if (!a) break; this.remove(a); }
+    while (count() > n) { const a = [...this.agents].reverse().find(x => !x.custom && !x.ambient && !x.leader && !x.ghost && x.state !== 'wait'); if (!a) break; this.remove(a); }
   }
   setHeight(h) { this.H = h; for (const a of this.agents) a.sprite.scale.set(h * FW / FH, h, 1); }
 
@@ -212,12 +235,12 @@ export class Sim {
     a.script = [{ at: dur - 0.2, text: lines[0] }, { at: dur - 4.6, text: lines[2] }]; b.script = [{ at: dur - 2.4, text: lines[1] }];
     this.stats.meetings++;
   }
-  enterVenue(a, v) { if (!v) return; a.venue = v; v.inside++; v.visits++; }
+  enterVenue(a, v) { if (!v) return; a.venue = v; v.inside++; v.visits++; if (this.onEnter) this.onEnter(a, v); }
   leaveVenue(a) { if (a.venue) { a.venue.inside--; a.venue = null; } }
   startDance(a, dur, v) { a.state = 'dance'; a.timer = dur || 8 + a.rng() * 8; a.path = null; a.target = null; this.say(a, pick(a.rng, LINES.dance), 'music', 2.2); this.stats.dances++; a.lastDance = this.time; this.enterVenue(a, v); }
   startDrink(a, v) { a.state = 'drink'; a.timer = 6 + a.rng() * 7; a.path = null; a.target = null; this.say(a, pick(a.rng, LINES.beer), 'beer', 2.8); this.stats.beers++; a.thirst = 50 + a.rng() * 220; this.enterVenue(a, v); }
 
-  party(cx, cz, r) { for (const a of this.agents) if (a.state === 'walk' && !a.player && !a.ghost && (a.x - cx) ** 2 + (a.z - cz) ** 2 < r * r) this.startDance(a, 12 + a.rng() * 10); }
+  party(cx, cz, r) { for (const a of this.agents) if (a.state === 'walk' && (!a.player || a.auto) && !a.ghost && (a.x - cx) ** 2 + (a.z - cz) ** 2 < r * r) this.startDance(a, 12 + a.rng() * 10); }
 
   // --- игровые состояния
   // NPC останавливается и ждёт, пока к нему подойдут
@@ -253,8 +276,17 @@ export class Sim {
     a.state = 'walk'; a.cooldown = 10;
   }
   // --- игрок: путь по графу до точки на карте
-  setPlayer(a) { a.player = true; a.state = 'idle'; a.path = null; a.target = null; a.trail = a.trail || []; a.followers = a.followers || []; a.speed = WALK_SPEED * 1.3; a.dest = null; }
-  unsetPlayer(a) { a.player = false; a.state = 'walk'; a.dest = null; if (a.from === a.to) this.teleport(a, a.from); }
+  setPlayer(a) { a.player = true; a.trail = a.trail || []; a.followers = a.followers || []; a.speed = WALK_SPEED * 1.3; a.dest = null; this.setAuto(a, true); }
+  unsetPlayer(a) { this.setAuto(a, true); a.player = false; a.auto = false; a.speed = WALK_SPEED * (0.8 + a.rng() * 0.5); }
+  // автопилот: без управления свой скелет гуляет, пьёт и танцует как все
+  setAuto(a, on) {
+    if (a.auto === on && a.state !== 'dead') return;
+    a.auto = on; a.path = null; a.target = null; a.dest = null; a.script = null;
+    if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
+    this.leaveVenue(a); a.waitFor = null;
+    if (on) { a.state = 'walk'; a.cooldown = 4; a.thirst = 30 + a.rng() * 120; if (a.from === a.to) this.teleport(a, a.from); }
+    else { if (a.from === a.to) { a.state = 'idle'; } else if (a.state !== 'walk') { a.state = 'idle'; a.to = a.from; a.t = 0; this.place(a); } }
+  }
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 90); if (node < 0) return false;
     // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
@@ -349,6 +381,36 @@ export class Sim {
     if (p) { a.path = p; a.target = v.node; } else a.thirst = 40;
   }
 
+  // --- толпа вокруг камеры: прохожие есть везде, где смотрим; где-то мало, у оживлённых мест много
+  protectedAgent(a) { return a.custom || a.player || !!a.leader || a.state === 'wait' || a.ghost || (a.partner && (a.partner.custom || a.partner.leader)); }
+  crowd(fp, dt) {
+    this.crowdTimer -= dt; if (this.crowdTimer > 0 || !fp) return; this.crowdTimer = 0.4;
+    const g = this.graph; const m = 40; const x0 = fp[0] - m, z0 = fp[1] - m, x1 = fp[2] + m, z1 = fp[3] + m;
+    const areaKm2 = Math.min(10, Math.max(0.02, (x1 - x0) * (z1 - z0) / 1e6));
+    // вес оживлённых мест, попавших в кадр
+    let hot = 0; for (const h of this.hotspots) if (h.x > x0 - h.r && h.x < x1 + h.r && h.z > z0 - h.r && h.z < z1 + h.r) hot += h.w;
+    const target = Math.round(Math.min(this.cap * 0.8, (areaKm2 * 70 + hot * 5) * this.density));
+    let inside = 0; for (const a of this.agents) if (a.x > x0 && a.x < x1 && a.z > z0 && a.z < z1 && !a.ghost) inside++;
+    if (inside < target) {
+      // случайные ячейки сетки графа в кадре; при большом недоборе заполняем всё, иначе края, чтобы не появлялись на глазах
+      const c = g.cell; const cx0 = Math.floor(x0 / c), cx1 = Math.floor(x1 / c), cz0 = Math.floor(z0 / c), cz1 = Math.floor(z1 / c);
+      const need = Math.min(target - inside, inside < target * 0.5 ? 40 : 12); let tries = need * 12, made = 0;
+      const edge = inside >= target * 0.5;
+      while (made < need && tries-- > 0) {
+        let ix = cx0 + Math.floor(Math.random() * (cx1 - cx0 + 1)), iz = cz0 + Math.floor(Math.random() * (cz1 - cz0 + 1));
+        if (edge && Math.random() < 0.8) { const side = Math.random(); if (side < 0.25) ix = cx0; else if (side < 0.5) ix = cx1; else if (side < 0.75) iz = cz0; else iz = cz1; }
+        const l = g.grid.get(ix + ',' + iz); if (!l) continue;
+        const n = l[Math.floor(Math.random() * l.length)]; if (!g.adj[n].length) continue;
+        this.spawnAt(n); made++;
+      }
+    }
+    // лишних убираем далеко за кадром: сначала самых дальних прохожих
+    if (this.agents.length > this.cap) {
+      const far = this.agents.filter(a => a.ambient && !this.protectedAgent(a) && (a.x < x0 - 300 || a.x > x1 + 300 || a.z < z0 - 300 || a.z > z1 + 300));
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; far.sort((a, b) => ((b.x - cx) ** 2 + (b.z - cz) ** 2) - ((a.x - cx) ** 2 + (a.z - cz) ** 2));
+      for (const a of far.slice(0, Math.min(far.length, this.agents.length - this.cap + 20))) this.remove(a);
+    }
+  }
   // кого кликнули: сначала грубо по расстоянию до точки на земле, потом точный raycast по спрайту
   pickAgent(ray, gx, gz) {
     const R = (this.H * 3 + 4) ** 2; const hits = []; let best = null, bd = Infinity;
@@ -364,12 +426,13 @@ export class Sim {
     this.time += dt; const g = this.graph;
     for (const a of this.agents) {
       a.anim += dt; a.cooldown -= dt;
-      if (a.player) this.updatePlayer(a, dt);
+      if (a.player && !a.auto) this.updatePlayer(a, dt);
       else if (a.state === 'follow') this.updateFollower(a, dt);
       else if (a.state === 'walk') {
         a.t += a.speed * dt / a.len;
         while (a.t >= 1 && a.state === 'walk') { this.arrive(a); }
         if (a.state === 'walk') {
+          if (a.player) { const tr = a.trail; const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
           if (!a.ghost) { a.thirst -= dt; if (a.thirst <= 0 && !a.target) this.goDrink(a); }
           if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6);
           this.place(a);
@@ -404,7 +467,7 @@ export class Sim {
     this.meetTimer -= dt;
     if (this.meetTimer <= 0) {
       this.meetTimer = 0.25; const cell = 8, grid = new Map();
-      const free = a => a.state === 'walk' && a.cooldown <= 0 && !a.player && !a.ghost;
+      const free = a => a.state === 'walk' && a.cooldown <= 0 && (!a.player || a.auto) && !a.ghost;
       for (const a of this.agents) { if (!free(a)) continue; const k = Math.floor(a.x / cell) + ',' + Math.floor(a.z / cell); (grid.get(k) || grid.set(k, []).get(k)).push(a); }
       for (const a of this.agents) {
         if (!free(a)) continue;
