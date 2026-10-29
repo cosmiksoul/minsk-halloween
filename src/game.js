@@ -617,7 +617,7 @@ export class Game {
     const g = this.g; $('shCoins').innerHTML = `${icon('coin', 1)} ${g.coins}`;
     $('shopBtns').innerHTML = Object.entries(SHOP_KINDS).map(([k, label]) => `<button data-kind="${k}" ${g.coins < PRICES[k] ? 'disabled' : ''}>${label} · ${PRICES[k]} ${icon('coin', 1)}</button>`).join('')
       + `<button data-kind="token" ${canBuyToken(g) ? '' : 'disabled'}>${icon('token', 1)}спас-бросок · ${TOKEN.price} ${icon('coin', 1)}${(g.tokens | 0) >= TOKEN.cap ? ` · ${g.tokens | 0}/${TOKEN.cap}` : ''}</button>`; // жетон рядом с одеждой, потолок на покупку
-    const c = this.player.costume; const off = [['hat', 'снять шляпу'], ['prop', 'убрать предмет'], ['pattern', 'без узора'], ['face', 'снять с лица'], ['extra', 'снять аксессуар']].filter(([k]) => c[k] && c[k] !== 'none');
+    const c = this.player.costume; const off = [['hat', 'снять шляпу'], ['prop', 'убрать предмет'], ['pattern', 'без узора'], ['face', 'снять с лица'], ['extra', 'снять аксессуар'], ['pet', 'отпустить питомца']].filter(([k]) => c[k] && c[k] !== 'none');
     $('shopFree').innerHTML = off.map(([k, l]) => `<button data-off="${k}">${l}</button>`).join('');
   }
   buy(kind) {
