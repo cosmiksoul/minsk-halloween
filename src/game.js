@@ -1,8 +1,8 @@
 // Игровая логика: игрок управляет своим скелетом кликами по карте, собирает конфеты,
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
-import { rollDice, hideDice, OUTCOMES } from './dice.js';
-import { CAPS, POINTS, PURSUIT, migrate, addPoints, growHearts, eatStack, logPush, statsOf } from './rules.js';
+import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
+import { CAPS, POINTS, PURSUIT, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel } from './rules.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
@@ -62,7 +62,7 @@ export class Game {
   constructor(sim, scene, opts) {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.restored = false; this.shields = [];
-    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.respawnAt = 0;
+    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null;
     const ringG = new THREE.RingGeometry(0.7, 1, 24); ringG.rotateX(-Math.PI / 2);
     this.ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.9, depthWrite: false })); this.ring.visible = false; this.ring.position.y = 0.55; scene.add(this.ring);
     this.dest = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false })); this.dest.visible = false; this.dest.position.y = 0.56; scene.add(this.dest); this.destT = 0;
@@ -304,6 +304,58 @@ export class Game {
       if (res.kind === 'crit') { this.heal(1); later('❤ +1 за крит', 'music', 1200); }
     }
     this.save(); this.renderHUD(); this.o.showCard(me, true);
+  }
+  // --- дуэль с охотником: встречный бросок d20 против d20 с бонусами. null, если сейчас нельзя начать
+  // (идёт другой бросок, игрок мёртв, открыта модалка): охотник подождёт и повторит
+  async duel(h) {
+    const g = this.g, me = this.player;
+    if (!g || !me || this.busy || me.state === 'dead' || !$('shop').hidden || !$('deck').hidden || !$('tarot').hidden || !$('share').hidden) return null;
+    this.busy = true; this.dropPending(); this.closeDialog(); this.sim.stop(me);
+    const a = h.a, name = a.bio.name, fb = h.bonus || 0, tb = tailBonus(g.tail.length);
+    const titleFoe = (h.intent === 'kill' ? '⚔ ' : '🤝 ') + name + (fb ? ' +' + fb : ''), titleMe = 'ты' + (tb ? ' +' + tb : '');
+    const won = x => x.bio.gender === 'f' ? 'выиграла' : 'выиграл';
+    const cmp = (foe, m) => `${foe}${fb ? '+' + fb : ''} против ${m}${tb ? '+' + tb : ''}`;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    let foe = 0, my = 0, r = { winner: 'tie', crit: false, eat: 0 }, saveOffered = false;
+    try {
+      for (let i = 0; i < 10; i++) {
+        foe = (await rollDice(titleFoe, this.debugRollFoe ?? undefined, true, { plain: true })).n;
+        my = (await rollDice(titleMe, this.debugRoll ?? undefined, true, { plain: true })).n;
+        r = duel(foe, fb, my, tb);
+        // жетон спас-броска: после сравнения, перебрасывает только кубик игрока, один раз за дуэль
+        if (r.winner === 'foe' && !saveOffered && g.tokens > 0) {
+          saveOffered = true; showDuelResult(cmp(foe, my) + ' · ' + firstName(name) + ' ' + won(a), 'fail', true);
+          const again = await this.offerSave({ n: my });
+          if (again) { g.tokens--; this.save(); this.renderHUD(); my = (await rollDice('🎟 Спас-бросок · ' + titleMe, this.debugRoll2 ?? undefined, true, { plain: true })).n; r = duel(foe, fb, my, tb); }
+        }
+        if (r.winner !== 'tie') break;
+        showDuelResult(cmp(foe, my) + ' · ничья, ещё раз', 'tie', true); await sleep(900);
+      }
+    } catch (e) { console.warn(e); hideDice(); this.busy = false; return null; }
+    if (r.winner === 'tie') r = { winner: 'me', crit: false, eat: 0 }; // десять ничьих подряд: считаем победой игрока
+    if (this.player !== me) { hideDice(); this.busy = false; return null; }
+    h.rolls = [foe, fb, my + tb]; // для записи набега в базу: кубик охотника, его бонус, кубик игрока с бонусом
+    showDuelResult(cmp(foe, my) + ' · ' + (r.winner === 'me' ? 'ты ' + won(me) : firstName(name) + ' ' + won(a)), r.winner === 'me' ? (r.crit ? 'crit' : 'success') : (r.crit ? 'critfail' : 'fail'));
+    const base = { uid: a.uid, name, age: a.bio.age, gender: a.bio.gender, job: a.bio.job, arch: a.arch, ck: a.ck, boss: true, intent: h.intent, owner: h.owner ? h.owner.id : null, ghoul: !!(a.def && a.def.ghoul), foe, bonus: fb, roll: my, meBonus: tb, level: this.hunters ? this.hunters.level : 0 };
+    const later = (text, kind, ms) => setTimeout(() => this.player === me && this.sim.say(me, text, kind, 2.2), ms);
+    let outcome;
+    if (r.winner === 'me') {
+      // босс-трофей: тип по намерению охотника, +1 к максимуму сердец, при крите ещё +1 здоровья
+      outcome = h.intent === 'kill' ? 'skull' : 'heart';
+      const grew = growHearts(g); if (r.crit) this.heal(1);
+      g.coins += 4; g.wins++; this.points(POINTS.win);
+      this.log('win', base); this.hunters?.gain('raidWin');
+      this.sim.say(me, (h.intent === 'kill' ? '👑💀 босс-череп' : '👑💚 босс-сердечко') + (grew ? ' · ❤ +1' : ''), 'music', 2.8);
+      later(`🪙 +4 · ★ +${POINTS.win}`, 'beer', 2600);
+    } else {
+      // укус: позиция стака насовсем (две при крите), −1 очко; если здоровье кончилось — смерть
+      g.losses++; this.points(POINTS.loss);
+      this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
+      this.log('bit', { ...base, ate: r.eat });
+      outcome = this.eat(r.eat, 'hunter') === 'dead' ? 'killed' : 'bit';
+    }
+    this.save(); this.renderHUD(); this.busy = false; this.o.showCard(me, true);
+    return outcome;
   }
   // --- каждый кадр
   update(dt, t) {

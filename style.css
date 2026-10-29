@@ -119,6 +119,10 @@ button.trick { background:var(--green); color:var(--black); border-color:var(--g
 #dice.done #diceCv { animation:pop .35s ease-out; }
 #diceTitle { background:var(--black); padding:5px 8px; border-radius:4px; border:1px solid var(--line); font-size:8px; max-width:320px; text-align:center; line-height:1.5; }
 #diceRes { font-size:12px; } #diceNum { font-size:8px; color:var(--muted); }
+/* дуэль: тихий кубик без ярлыка и экран сравнения */
+#dice.plain #diceNum { color:#e9dff7; font-size:10px; } #diceCv[hidden] { display:none; }
+#dice.vs #diceTitle { font-size:11px; padding:10px 14px; border-width:2px; max-width:360px; }
+#dice.vs.tie #diceTitle { border-color:#e9dff7; } #dice.vs.success #diceTitle, #dice.vs.crit #diceTitle { border-color:#4df21e; } #dice.vs.fail #diceTitle, #dice.vs.critfail #diceTitle { border-color:#ff3a3a; }
 @keyframes shake { 0% { transform:translate(-3px,2px) rotate(-6deg) } 50% { transform:translate(3px,-2px) rotate(6deg) } 100% { transform:translate(-2px,-2px) rotate(-3deg) } }
 @keyframes pop { 0% { transform:scale(1.6) } 60% { transform:scale(0.9) } 100% { transform:scale(1) } }
 #mineList .item.cur { border-color:var(--green); }
