@@ -14,7 +14,7 @@ export const SHOPS = [
   { id: 'dana', name: 'Dana Mall', addr: 'ул. Петра Мстиславца, 11', lat: 53.93355, lon: 27.65168 },
   { id: 'expobel', name: 'Экспобел', addr: 'Логойский тракт, 37', lat: 53.96416, lon: 27.62399 },
 ];
-export const PRICES = { hat: 3, body: 4, prop: 3, pattern: 2, face: 2, extra: 3, colors: 1 };
+export const PRICES = { hat: 3, body: 4, prop: 3, pattern: 2, face: 2, extra: 3, pet: 4, colors: 1 };
 
 function shopTexture() {
   const cv = document.createElement('canvas'); cv.width = 16; cv.height = 16; const g = cv.getContext('2d');
