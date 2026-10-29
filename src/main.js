@@ -245,7 +245,7 @@ function renderProfile(a) {
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
 // --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
-const LOG_ICON = { card: '🎴', cardBit: '🩸', hand: '🏆', quest: '🎯', kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
+const LOG_ICON = { card: '🎴', cardBit: '🩸', hand: '🏆', quest: '🎯', kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲', chest: '🧰' };
 function logText(e, fem) {
   const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
@@ -271,6 +271,7 @@ function logText(e, fem) {
     case 'death': return `рассыпал${v('ся', 'ась')}${e.coinsLost ? `, −${e.coinsLost} 🪙` : ''}`;
     case 'rip': return `упокоен${v('', 'а')} навсегда`;
     case 'rps': { const bonus = e.bonus === 'shield' ? '+щит' : e.bonus === 'refund' ? 'ставка обратно' : '+' + esc(e.bonus || ''); const reset = e.reset >= 100 ? 'чист' : `−${(e.reset || 0) / 20}`; return `сыграл${v('', 'а')} с ${esc(e.host || '?')} в «${esc(e.place || '?')}»: ${THROW_ICON[e.mine] || '?'} против ${THROW_ICON[e.theirs] || '?'}, ${e.won ? 'выиграл' : 'проиграл'}${v('', 'а')} · ${bonus} · розыск ${reset}`; }
+    case 'chest': return e.outcome === 'locked' ? `сундук «${nm}» заперт` : e.outcome === 'mimic' ? `мимик в сундуке «${nm}»` : `сундук «${nm}»: +${e.coins ?? 0} 🪙${e.token ? ' · 🎟 +1' : ''}`;
     default: return esc(e.kind);
   }
 }
