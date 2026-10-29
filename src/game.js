@@ -130,6 +130,8 @@ export class Game {
   clickGround(x, z) {
     if (!this.selected || !this.player || this.busy || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
+    // клик рядом с меткой арканы ведёт точно в точку подбора: иначе соседний узел в 20 м оставляет карту неподобранной
+    if (this.tarot) { let best = null, bd = 25 * 25; for (const it of this.tarot.items) { if (it.done || it.node < 0) continue; const d = (it.nx - x) ** 2 + (it.nz - z) ** 2; if (d < bd) { bd = d; best = it; } } if (best) { x = best.nx; z = best.nz; } }
     if (this.sim.moveTo(this.player, x, z)) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
     this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
