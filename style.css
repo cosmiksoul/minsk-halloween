@@ -289,6 +289,10 @@ body.drawerOpen #card { left:344px; }
   #mbar button { width:56px; height:56px; padding:2px 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-family:"Press Start 2P", monospace; font-size:8px; line-height:1; }
   #mbar button .ic { margin:0; } #mbar button small { font-size:8px; }
   #mbar button:disabled { opacity:.5; }
+  #mbar button[hidden] { display:none; }
+  #mbar #mbRun { position:relative; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  #mbar #mbRun .stam { position:absolute; left:4px; bottom:3px; height:3px; width:calc(100% - 8px); max-width:calc(100% - 8px); background:var(--green); }
+  #mbar #mbRun.on { border-image-source:var(--btn-on); color:#1b1326; } #mbar #mbRun.ex .stam { background:#777; } #mbar #mbRun.ex { opacity:.6; }
   #card { left:0; right:0; bottom:64px; width:100%; max-width:100%; animation:slideUp .2s ease-out; }
   @keyframes slideUp { from { transform:translateY(100%) } to { transform:none } }
   #ask, #host { bottom:72px; }
@@ -377,7 +381,7 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 #topMe { margin-left:auto; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; } #topMe[hidden] { display:none; } #topMe .sep { color:var(--muted); }
 #menu { left:12px; right:auto; }
 #stats { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:4; white-space:nowrap; font-size:10px; max-width:calc(100vw - 24px); overflow:hidden; text-overflow:ellipsis; }
-#stats b { color:var(--accent); } #stats b#stCity { color:var(--green); }
+#stats b { color:var(--accent); } #stats b.city { color:var(--green); }
 @media (max-width: 700px) { #topMe { display:flex; font-size:9px; padding:5px 6px; } #menu { left:8px; right:8px; width:auto; } #stats { bottom:70px; font-size:8px; padding:3px 6px; } }
 /* карты колоды у строк доски: canvas 24×33 */
 #tabBoard canvas.bcv { width:24px; height:33px; image-rendering:pixelated; vertical-align:middle; margin-right:4px; }
@@ -442,3 +446,21 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
 /* --- подтверждение */
 #confirm { position:fixed; inset:0; z-index:11; display:flex; align-items:center; justify-content:center; background:rgba(8,4,16,.72); padding:12px; }
 #confirm[hidden] { display:none; } .cfBox { width:min(420px, 100%); } .cfBox .dTitle { color:#ff5fa2; } .cfBox .line { line-height:1.5; }
+
+/* --- легенда: список сундуков с перелётом, чип кольца трёх цветов; панель без скелета в одну строку */
+.chip.ring { background:linear-gradient(90deg, #4df21e 0 34%, #ff8a2a 34% 67%, #777 67% 100%); }
+.lgLink { color:#d8c2ff; cursor:pointer; text-decoration:underline dotted; white-space:nowrap; } .lgLink:hover { color:#fff; }
+#chestList { margin-top:5px; max-height:190px; overflow:auto; border:1px solid var(--line); background:rgba(27,19,38,.6); }
+#chestList .cl { display:flex; justify-content:space-between; gap:8px; padding:3px 7px; cursor:pointer; font-size:10px; line-height:1.4; }
+#chestList .cl:hover { background:rgba(216,194,255,.1); color:#fff; } #chestList .cl.open { color:var(--muted); }
+#hud:not(.has) { max-width:none; }
+
+/* --- форма «Свой скелет»: поля под пиксельный стиль (квадрат, вдавленная тень), кнопки одного размера сеткой, главная — во всю ширину */
+.f input, .f select, .f textarea { border-radius:0; border:2px solid var(--line); box-shadow:inset 2px 2px 0 #0b0b0b; padding:5px 7px; }
+.f input:focus, .f select:focus, .f textarea:focus { outline:none; border-color:#6d58a0; }
+.f select { appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position:calc(100% - 14px) 55%, calc(100% - 9px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; padding-right:26px; }
+#minePic { border-radius:0; border:2px solid var(--green); box-shadow:inset 2px 2px 0 #0b0b0b; }
+.mnRow form .btns { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:4px; }
+.mnRow form .btns button { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:36px; padding:0 8px; font-size:9px; white-space:nowrap; }
+.mnRow form .btns button .ic { margin:0; }
+.mnRow form .btns #mSubmit { grid-column:1 / -1; height:42px; font-size:11px; }

@@ -593,6 +593,7 @@ export class Game {
     const out = chestOutcome(res.n), loot = chestLoot(Math.random, out);
     if (loot.coins) g.coins += loot.coins; if (loot.token) g.tokens = (g.tokens | 0) + 1;
     if (out === 'mimic') { this.hunters?.gain('road'); this.hunters?.gain('road'); }
+    Sfx.play(out === 'locked' ? 'boo' : out === 'mimic' ? 'bite' : out === 'crit' ? 'token' : 'chest');
     const text = out === 'locked' ? 'заперто до следующего часа' : out === 'mimic' ? 'мимик! визг на весь район' : `+${loot.coins} 🪙${loot.token ? ' · 🎟 +1' : ''}`;
     showDuelResult(`🧰 ${c.name} · ${text}`, out === 'locked' ? 'fail' : out === 'mimic' ? 'critfail' : out === 'crit' ? 'crit' : 'success');
     this.log('chest', { name: c.name, roll: res.n, outcome: out, coins: loot.coins, token: loot.token });
