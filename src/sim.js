@@ -3,98 +3,11 @@
 import * as THREE from 'three';
 import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip, GHOSTS } from './skeletons.js';
 import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES } from './bio.js';
+import { Graph } from './graph.js';
+export { Graph };
 
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
 const COSTUMES_PER_ARCH = 28; // размер пула текстур на архетип: экономим память при тысячах скелетов
-
-class Heap {
-  constructor() { this.k = []; this.v = []; }
-  get size() { return this.k.length; }
-  push(key, val) { const k = this.k, v = this.v; k.push(key); v.push(val); let i = k.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (k[p] <= k[i]) break; [k[p], k[i]] = [k[i], k[p]]; [v[p], v[i]] = [v[i], v[p]]; i = p; } }
-  pop() { const k = this.k, v = this.v; const top = v[0]; const lk = k.pop(), lv = v.pop(); if (k.length) { k[0] = lk; v[0] = lv; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < k.length && k[l] < k[m]) m = l; if (r < k.length && k[r] < k[m]) m = r; if (m === i) break; [k[m], k[i]] = [k[i], k[m]]; [v[m], v[i]] = [v[i], v[m]]; i = m; } } return top; }
-}
-
-export class Graph {
-  constructor(roads) {
-    this.x = []; this.z = []; this.adj = []; this.names = [];
-    const idx = new Map();
-    const node = (x, z) => { const k = x + '|' + z; let i = idx.get(k); if (i === undefined) { i = this.x.length; idx.set(k, i); this.x.push(x); this.z.push(z); this.adj.push([]); this.names.push(null); } return i; };
-    for (const r of roads) {
-      if (r.k === 'major') continue;
-      let prev = -1;
-      for (let i = 0; i + 1 < r.p.length; i += 2) {
-        const n = node(r.p[i], r.p[i + 1]);
-        if (r.n && !this.names[n]) this.names[n] = r.n;
-        if (prev >= 0 && prev !== n) {
-          const len = Math.hypot(this.x[n] - this.x[prev], this.z[n] - this.z[prev]);
-          if (len > 0.05) { this.adj[prev].push({ to: n, len }); this.adj[n].push({ to: prev, len }); }
-        }
-        prev = n;
-      }
-    }
-    // оставляем самую большую компоненту связности
-    const comp = new Int32Array(this.x.length).fill(-1); let best = -1, bestN = 0;
-    for (let s = 0, c = 0; s < this.x.length; s++) {
-      if (comp[s] >= 0 || !this.adj[s].length) continue;
-      const st = [s]; comp[s] = c; let n = 0;
-      while (st.length) { const u = st.pop(); n++; for (const e of this.adj[u]) if (comp[e.to] < 0) { comp[e.to] = c; st.push(e.to); } }
-      if (n > bestN) { bestN = n; best = c; }
-      c++;
-    }
-    this.ok = comp.map(c => c === best);
-    this.walkable = []; for (let i = 0; i < this.x.length; i++) if (this.ok[i]) this.walkable.push(i);
-    this.cell = 40; this.grid = new Map();
-    for (const i of this.walkable) { const k = this.key(this.x[i], this.z[i]); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(i); }
-    const n = this.x.length; this.dist = new Float64Array(n); this.stamp = new Int32Array(n); this.closed = new Int32Array(n); this.prevN = new Int32Array(n); this.gen = 0;
-  }
-  key(x, z) { return Math.floor(x / this.cell) + ',' + Math.floor(z / this.cell); }
-  nearest(x, z, maxR = 120) {
-    let best = -1, bd = maxR * maxR; const c = this.cell, r = Math.ceil(maxR / c);
-    const cx = Math.floor(x / c), cz = Math.floor(z / c);
-    for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
-      const l = this.grid.get((cx + i) + ',' + (cz + j)); if (!l) continue;
-      for (const n of l) { const d = (this.x[n] - x) ** 2 + (this.z[n] - z) ** 2; if (d < bd) { bd = d; best = n; } }
-    }
-    return best;
-  }
-  // все проходимые узлы в радиусе
-  within(x, z, R) {
-    const out = []; const c = this.cell, r = Math.ceil(R / c); const cx = Math.floor(x / c), cz = Math.floor(z / c);
-    for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
-      const l = this.grid.get((cx + i) + ',' + (cz + j)); if (!l) continue;
-      for (const n of l) if ((this.x[n] - x) ** 2 + (this.z[n] - z) ** 2 < R * R) out.push(n);
-    }
-    return out;
-  }
-  // поиск в ширину для коротких прогулок до бара
-  path(from, to, maxHops = 110) {
-    if (from === to) return [];
-    const prev = new Map([[from, -1]]); let frontier = [from];
-    for (let h = 0; h < maxHops && frontier.length; h++) {
-      const next = [];
-      for (const u of frontier) for (const e of this.adj[u]) if (!prev.has(e.to)) { prev.set(e.to, u); if (e.to === to) { const p = []; let c = to; while (c !== from) { p.push(c); c = prev.get(c); } return p.reverse(); } next.push(e.to); }
-      frontier = next;
-    }
-    return null;
-  }
-  // A* для игрока: любой конец города
-  route(from, to, maxExpand = 450000) {
-    if (from === to) return { nodes: [], cost: 0 };
-    const gen = ++this.gen, dist = this.dist, stamp = this.stamp, closed = this.closed, prev = this.prevN;
-    const tx = this.x[to], tz = this.z[to]; const h = i => Math.hypot(this.x[i] - tx, this.z[i] - tz);
-    const heap = new Heap(); dist[from] = 0; stamp[from] = gen; prev[from] = -1; heap.push(h(from), from);
-    let expanded = 0;
-    while (heap.size) {
-      const u = heap.pop();
-      if (u === to) { const nodes = []; let c = to; while (c !== from) { nodes.push(c); c = prev[c]; } return { nodes: nodes.reverse(), cost: dist[to] }; }
-      if (closed[u] === gen) continue; closed[u] = gen;
-      if (++expanded > maxExpand) return null;
-      const du = dist[u];
-      for (const e of this.adj[u]) { const nd = du + e.len; if (stamp[e.to] !== gen || nd < dist[e.to]) { stamp[e.to] = gen; dist[e.to] = nd; prev[e.to] = u; heap.push(nd + h(e.to), e.to); } }
-    }
-    return null;
-  }
-}
 
 export class Sim {
   constructor(scene, net, venues, opts = {}) {
@@ -223,7 +136,8 @@ export class Sim {
   say(a, text, kind = '', dur = 2.6) { a.bubble = { text, kind, until: this.time + dur }; }
   // ближайший узел графа к скелету
   nodeOf(a) { return a.t < 0.5 ? a.from : a.to; }
-  streetOf(a) { const g = this.graph; return g.names[a.from] || g.names[a.to] || ''; }
+  // улица для журнала: имя узла, иначе ближайший именованный узел в 150 м, иначе «во дворах»
+  streetOf(a) { const g = this.graph; return g.names[a.from] || g.names[a.to] || g.nearestNamed(a.x, a.z, 150) || 'во дворах'; }
   // поставить скелета в узел графа
   teleport(a, node) { const g = this.graph; a.from = node; const e = pick(a.rng, g.adj[node]); a.to = e ? e.to : node; a.len = e ? e.len : 1; a.t = 0; a.path = null; a.stopT = null; a.target = null; this.place(a); }
 
@@ -303,18 +217,7 @@ export class Sim {
     this.leaveVenue(a); a.script = null; a.path = null; a.stopT = null; a.target = null; a.waitFor = null; a.dest = null;
     if (on) a.state = 'idle'; else { a.state = 'walk'; a.cooldown = 6; if (a.from === a.to) this.teleport(a, a.from); }
   }
-  // точка на ребре у узла node, ближайшая к (x, z): { to, t } или null, если цель по сути в самом узле.
-  // Прохожие и конфеты стоят посреди рёбер, а узлы бывают в десятках метров: до узла дойти мало
-  edgePoint(node, x, z) {
-    const g = this.graph; let best = null, bd = 20 * 20;
-    for (const e of g.adj[node]) {
-      const ax = g.x[node], az = g.z[node], dx = g.x[e.to] - ax, dz = g.z[e.to] - az; const l2 = dx * dx + dz * dz; if (l2 < 1) continue;
-      const t = ((x - ax) * dx + (z - az) * dz) / l2; if (t < 0.03 || t > 0.97) continue;
-      const d2 = (x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2;
-      if (d2 < bd) { bd = d2; best = { to: e.to, t }; }
-    }
-    return best;
-  }
+  edgePoint(node, x, z) { return this.graph.edgePoint(node, x, z); }
   // идти к точке (x, z): по графу до ближайшего узла, а если точка лежит на ребре рядом — до самой точки (a.stopT)
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
