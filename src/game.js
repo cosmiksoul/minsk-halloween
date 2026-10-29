@@ -2,6 +2,7 @@
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
+import { Sfx } from './sfx.js';
 import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
 import { cardLabel, isRed } from './poker.js';
 import { hostOf } from './hosts.js';
@@ -170,7 +171,7 @@ export class Game {
     // клик рядом с конфетой или монетой ведёт точно в её точку: радиус подбора меньше погрешности клика
     if (this.candies) { let best = null, bd = 12 * 12; for (const c of this.candies.items) { const d = (c.x - x) ** 2 + (c.z - z) ** 2; if (d < bd) { bd = d; best = c; } } if (best) { x = best.x; z = best.z; } }
     if (this.sim.moveTo(this.player, x, z, { cut: true })) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
-    this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
+    Sfx.play('boo'); this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
   clickAgent(a) {
     if (this.modal === 'host') this.closeHost();
@@ -185,7 +186,7 @@ export class Game {
     if (!this.selected || !this.player || this.busy || v.node < 0 || v.tx == null || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingBoss = null; this.closeDialog();
     if (this.sim.moveTo(this.player, v.tx, v.tz, { cut: true })) { this.pendingVenue = v; this.dest.position.set(v.tx, 0.56, v.tz); this.dest.visible = true; this.destT = 1; }
-    else this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
+    else Sfx.play('boo'); this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
     return true;
   }
   clickShop(sh) {
@@ -193,7 +194,7 @@ export class Game {
     if (!this.selected || !this.player || this.busy || sh.node < 0 || sh.tx == null || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.pendingBoss = null; this.closeDialog();
     if (this.sim.moveTo(this.player, sh.tx, sh.tz, { cut: true })) { this.pendingShop = sh; this.dest.position.set(sh.tx, 0.56, sh.tz); this.dest.visible = true; this.destT = 1; }
-    else this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
+    else Sfx.play('boo'); this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
     return true;
   }
   // --- диалог «сладость или гадость»
@@ -213,7 +214,7 @@ export class Game {
     this.sim.wait(npc, this.player, Math.min(150, 30 + dist / 2.5));
     this.pending = { npc, action, tries: 0 }; this.pendingVenue = null; this.pendingBoss = null;
     if (!this.inReach(npc)) {
-      if (!this.sim.moveTo(this.player, npc.x, npc.z, { cut: true })) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; }
+      if (!this.sim.moveTo(this.player, npc.x, npc.z, { cut: true })) { Sfx.play('boo'); this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; }
       else this.sim.wait(npc, this.player, Math.min(240, 30 + (this.player.routeCost || dist) / 3)); // ждёт по длине дороги, а не по прямой
     }
   }
@@ -320,7 +321,7 @@ export class Game {
   }
   damage(n) {
     const g = this.g; n -= this.useShields(n);
-    if (n > 0) { g.hp = Math.max(0, g.hp - n); if (g.hp <= 0) this.die(); }
+    if (n > 0) { g.hp = Math.max(0, g.hp - n); Sfx.play('bite'); if (g.hp <= 0) this.die(); }
   }
   heal(n, raiseMax = false) { const g = this.g; if (raiseMax) g.maxHp = Math.min(CAPS.hearts, g.maxHp + n); g.hp = Math.min(g.maxHp, g.hp + n); }
   // охотник ест стак: щиты поглощают позиции, потом убегает последний друг из хвоста, потом уходит сердце насовсем.
@@ -427,7 +428,7 @@ export class Game {
         else { this.sim.release(npc); this.sim.say(me, '💚 друзей уже десять, помашет из толпы', '', 2.8); }
         g.friendsTotal = (g.friendsTotal | 0) + 1; this.log('friend', { ...info, inTail }); this.hunters?.gain('friend'); this.quests?.onEvent('friend', POINTS.win);
       }
-      g.wins++; this.points(POINTS.win);
+      g.wins++; this.points(POINTS.win); Sfx.play('win');
       const coins = res.kind === 'crit' ? 4 : 2; g.coins += coins; later(`🪙 +${coins} · XP +${POINTS.win}`, 'beer', 2600);
       if (res.kind === 'crit') { this.heal(1); later('❤ +1 за крит', 'music', 1200); }
     }
@@ -477,7 +478,7 @@ export class Game {
       // босс-трофей: тип по намерению охотника; максимум сердец не растёт, при крите +1 здоровья
       outcome = h.intent === 'kill' ? 'skull' : 'heart';
       if (r.crit) this.heal(1);
-      g.coins += 4; g.wins++; this.points(POINTS.win);
+      g.coins += 4; g.wins++; this.points(POINTS.win); Sfx.play('win');
       this.log('win', base); this.hunters?.gain('raidWin'); this.quests?.onEvent('win', POINTS.win);
       this.sim.say(me, h.intent === 'kill' ? '👑💀 босс-череп' : '👑💚 босс-сердечко', 'music', 2.8);
       later(`🪙 +4 · XP +${POINTS.win}`, 'beer', 2600);
@@ -485,7 +486,7 @@ export class Game {
       // укус: позиция стака насовсем (две при крите), −1 очко; если здоровье кончилось — смерть
       g.losses++; this.points(POINTS.loss);
       this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
-      this.log('bit', { ...base, ate: r.eat });
+      this.log('bit', { ...base, ate: r.eat }); Sfx.play('bite');
       outcome = this.eat(r.eat, 'hunter') === 'dead' ? (this.player !== me && me.def.dead ? 'rip' : 'killed') : 'bit';
     }
     if (this.player !== me) { this.busy = false; return outcome; } // упокоен внутри дуэли: игрока уже нет
@@ -526,8 +527,8 @@ export class Game {
     if (this.tarot) this.tarot.update(t, p, 12, it => this.collect(it));
     this.candies.update(p, H, t, kind => {
       const g = this.g;
-      if (kind === 'coin') { g.coins++; this.sim.say(p, '🪙 +1', 'beer', 1.6); }
-      else if (g.hp < g.maxHp) { this.heal(1); this.sim.say(p, pick(p.rng, LINES.candy), 'beer', 1.6); } else this.sim.say(p, 'сладко, но сыт', 'beer', 1.4);
+      if (kind === 'coin') { g.coins++; Sfx.play('coin'); this.sim.say(p, '🪙 +1', 'beer', 1.6); }
+      else { Sfx.play('pick'); if (g.hp < g.maxHp) { this.heal(1); this.sim.say(p, pick(p.rng, LINES.candy), 'beer', 1.6); } else this.sim.say(p, 'сладко, но сыт', 'beer', 1.4); }
       this.save(); this.renderHUD(); this.quests?.onEvent(kind === 'coin' ? 'coin' : 'candy', 0); // конфеты и монеты журнал не пишут: квест отсюда
     });
   }
@@ -575,7 +576,7 @@ export class Game {
   onShared(net) {
     const g = this.g; if (!g) return false;
     this.quests?.onEvent('share', 0); // квест онбординга «карточка»: засчитывается любая публикация
-    if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; this.sim.say(this.player, '🎟 +1 спас-бросок', 'music', 3); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
+    if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; Sfx.play('token'); this.sim.say(this.player, '🎟 +1 спас-бросок', 'music', 3); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
     return false;
   }
   // --- магазин одежды
@@ -595,12 +596,12 @@ export class Game {
   buy(kind) {
     const g = this.g, p = this.player; if (!g || !p || this.modal !== 'shop') return;
     if (kind === 'token') {
-      if (!buyToken(g)) { $('shMsg').textContent = (g.tokens | 0) >= TOKEN.cap ? 'жетонов уже три' : 'не хватает монет'; return; }
-      $('shMsg').textContent = `спас-бросок в кармане (−${TOKEN.price} 🪙)`; this.sim.say(p, '🎟 +1', 'music', 2.4); this.log('buy', { kind: 'token', item: 'спас-бросок' });
+      if (!buyToken(g)) { Sfx.play('boo'); $('shMsg').textContent = (g.tokens | 0) >= TOKEN.cap ? 'жетонов уже три' : 'не хватает монет'; return; }
+      Sfx.play('token'); $('shMsg').textContent = `спас-бросок в кармане (−${TOKEN.price} 🪙)`; this.sim.say(p, '🎟 +1', 'music', 2.4); this.log('buy', { kind: 'token', item: 'спас-бросок' });
       this.save(); this.renderHUD(); this.renderShop(); this.o.showCard(p, true); return;
     }
-    const price = PRICES[kind]; if (g.coins < price) { $('shMsg').textContent = 'не хватает монет'; return; }
-    g.coins -= price; const c = { ...p.costume }; let got;
+    const price = PRICES[kind]; if (g.coins < price) { Sfx.play('boo'); $('shMsg').textContent = 'не хватает монет'; return; }
+    g.coins -= price; Sfx.play('coin'); const c = { ...p.costume }; let got;
     if (kind === 'colors') { c.c1 = pick(p.rng, PALETTE); c.c2 = pick(p.rng, PALETTE); c.c3 = pick(p.rng, PALETTE); c.shoes = p.rng() < 0.6 ? pick(p.rng, PALETTE) : null; got = 'новые цвета'; }
     else { let id = randomItem(kind, p.rng); for (let i = 0; i < 5 && id === c[kind]; i++) id = randomItem(kind, p.rng); c[kind] = id; got = CATALOG[kind][id]; }
     drawPortrait(p.costume, $('shBefore')); this.sim.recostume(p, c); p.def.costume = c; drawPortrait(c, $('shAfter'));

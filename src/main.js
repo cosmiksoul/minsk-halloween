@@ -11,6 +11,7 @@ import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
 import { Cards } from './cards.js';
 import { Quests } from './quests.js';
+import { Sfx } from './sfx.js';
 import { beaten } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
@@ -147,6 +148,9 @@ ui.pop.oninput = () => { $('popV').textContent = fmtX(ui.pop.value); sim.density
 ui.spd.oninput = () => { $('spdV').textContent = fmtX(ui.spd.value); };
 ui.pix.oninput = () => { $('pixV').textContent = ui.pix.value; pixel.setPixelSize(+ui.pix.value); };
 $('menuBtn').onclick = () => { const m = $('menu'); m.hidden = !m.hidden; $('menuBtn').classList.toggle('on', !m.hidden); };
+// звук: кнопка в шапке переключает все эффекты, флаг переживает перезагрузку
+const paintSnd = () => { $('sndBtn').textContent = Sfx.muted ? '🔇' : '🔊'; $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
+$('sndBtn').onclick = () => { Sfx.mute(!Sfx.muted); paintSnd(); if (!Sfx.muted) Sfx.play('coin'); }; paintSnd();
 $('bReset').onclick = () => location.reload();
 $('bRot').onclick = () => { rotateTo = (rotateTo ?? controls.getAzimuthalAngle()) + Math.PI / 2; };
 $('bNorth').onclick = () => { rotateTo = 0; };

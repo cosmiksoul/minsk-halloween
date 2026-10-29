@@ -7,6 +7,7 @@ import { CARD, TOKEN, POINTS, cardsFromDeck, dealHand, minskHour, hourLeft, hand
 import { cardLabel, cardName, beaten, isRed, handRank } from './poker.js';
 import { makeBio, makeRng, pickArchetype } from './bio.js';
 import { deviceId } from './store.js';
+import { Sfx } from './sfx.js';
 
 const mmss = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -130,10 +131,10 @@ export class Cards {
   fight(card) {
     const game = this.game, p = this.player; if (!p || !card) return false;
     if (game.busy || !game.controlled || game.modal !== null) return false; // не посреди броска, не мёртвым и не без управления, не из-под модалки
-    if (card.state !== 'up') { this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
+    if (card.state !== 'up') { Sfx.play('boo'); this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
     const a = this.agentOf(card); if (!a) return false;
     game.dropPending(); game.pendingVenue = null; game.pendingShop = null; game.closeDialog();
-    if (!this.sim.moveTo(p, a.x, a.z, { cut: true })) { this.sim.say(p, 'не дойти', 'boo', 1.4); game.pendingBoss = null; return false; }
+    if (!this.sim.moveTo(p, a.x, a.z, { cut: true })) { Sfx.play('boo'); this.sim.say(p, 'не дойти', 'boo', 1.4); game.pendingBoss = null; return false; }
     game.pendingBoss = { card, a }; game.dest.position.set(a.x, 0.56, a.z); game.dest.visible = true; game.destT = 1; return true;
   }
   // исход дуэли с боссом: победа кладёт карту, даёт XP по старшинству и розыск; поражение — укус и минута отката
@@ -141,7 +142,7 @@ export class Cards {
     const game = this.game, g = game.g, me = this.player, a = h.a, card = h.card;
     const base = { uid: a.uid, name: a.bio.name, age: a.bio.age, gender: a.bio.gender, job: a.bio.job, arch: a.arch, ck: a.ck, slot: card.slot, rank: card.rank, suit: card.suit, card: cardLabel(card.rank, card.suit), cardName: cardName(card.rank, card.suit), owner: card.owner || null, ghoul: !!card.ghoul, foe, bonus: fb, roll: my, meBonus: tb };
     if (r.winner === 'me') {
-      card.state = 'down'; card.coolUntil = 0; this.redraw(card);
+      card.state = 'down'; card.coolUntil = 0; this.redraw(card); Sfx.play('win');
       if (r.crit) game.heal(1);
       g.coins += 4; g.wins++; const xp = bossXp(card.rank); game.points(xp);
       game.log('card', base); this.hunters?.gain('boss'); game.quests?.onEvent('card', xp);
@@ -152,7 +153,7 @@ export class Cards {
     }
     g.losses++; game.points(POINTS.loss);
     game.log('cardBit', { ...base, ate: r.eat });
-    card.state = 'cool'; card.coolUntil = Date.now() + CARD.cooldown * 1000; this.redraw(card);
+    card.state = 'cool'; card.coolUntil = Date.now() + CARD.cooldown * 1000; this.redraw(card); Sfx.play('bite');
     this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
     const res = game.eat(r.eat, 'boss'); game.save();
     return res === 'dead' ? (game.player !== me && me.def.dead ? 'rip' : 'killed') : 'cardBit';
@@ -162,7 +163,7 @@ export class Cards {
     const game = this.game, g = game.g, hand = this.hand, me = this.player; if (!hand || !g) return;
     const hr = handRank(hand.cards); const xp = CARD.handBase * hr.mult; game.points(xp);
     g.hands = (g.hands | 0) + 1; if (!g.bestHand || hr.mult > g.bestHand.mult) g.bestHand = { key: hr.key, name: hr.name, mult: hr.mult };
-    g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot();
+    g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot(); Sfx.play('token');
     game.log('hand', { hand: hr.key, name: hr.name, mult: hr.mult, xp, cards: hand.cards.map(c => cardLabel(c.rank, c.suit)) });
     this.sim.say(me, `🃏 рука собрана: ${hr.name} · +${xp} XP · 🎟 +1${slotNew ? ' · 🦴 новый слот' : ''}`, 'music', 5);
     game.save(); game.renderHUD();
@@ -185,7 +186,7 @@ export class Cards {
     const now = Date.now(), hour = minskHour(now);
     if ((!hand || hand.hour !== hour) && !this.game.busy && !this.game.pendingBoss) {
       // старая рука закрывается без бонуса, боссы уходят; новая сдаётся вокруг текущего места после свежей колоды
-      const token = ++this.token; this.clearBosses(!!hand); this.dealing = true;
+      const token = ++this.token; if (hand) Sfx.play('hour'); this.clearBosses(!!hand); this.dealing = true;
       this.dealingFor = g; this.dealingHour = hour;
       this.loadDeck(hour).then(() => { if (token !== this.token) return; this.dealing = false; if (this.game.player !== p || this.game.g !== g) return; this.deal(minskHour(Date.now())); });
       return;

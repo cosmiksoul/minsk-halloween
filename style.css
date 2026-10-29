@@ -244,6 +244,7 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 #compassArrow { display:inline-block; transition:transform .2s; }
 #menuBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); }
 #menuBtn.on { border-color:var(--accent); color:var(--accent); }
+#sndBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); } #sndBtn.off { opacity:.6; }
 #menu { position:fixed; top:52px; right:12px; z-index:6; width:300px; max-width:calc(100vw - 24px); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; display:flex; flex-direction:column; gap:6px; backdrop-filter:blur(4px); }
 #menu[hidden] { display:none; }
 .mTitle { font-family:"Press Start 2P", monospace; font-size:7px; color:var(--accent); letter-spacing:.5px; margin-top:2px; }
