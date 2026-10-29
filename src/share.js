@@ -35,7 +35,7 @@ function icon(g, kind, x, y, s) {
 function statsOf(def) { const g = def.game || {}; return { ...progressStats(g), coins: g.coins || 0, tokens: g.tokens || 0 }; }
 const STAT_ROWS = [['skull', 'kills', 'черепов'], ['heart', 'friends', 'друзей'], ['card', 'tarot', 'арканов'], ['pumpkin', 'visits', 'заведений'], ['coin', 'coins', 'монет']];
 
-export function renderShareCard(canvas, { def, costume, friends = [], format = 'post', url = '' }) {
+export function renderShareCard(canvas, { def, costume, friends = [], format = 'post', url = '', myCard = null }) {
   const st = statsOf(def); const years = `${2026 - def.age} – 2026`;
   const meta = `${def.age} ${ageWord(def.age)} · ${def.gender === 'm' ? 'мужчина' : 'женщина'} · при жизни: ${def.job}`;
   const tarot = (def.game?.tarot || []).map(t => ARCANA_BY_ID[t.id]).filter(Boolean);
@@ -55,6 +55,9 @@ export function renderShareCard(canvas, { def, costume, friends = [], format = '
     for (const [ic, key, label] of STAT_ROWS) { g.fillStyle = C.bg2; g.fillRect(x, y, 160, 70); g.strokeStyle = C.line; g.lineWidth = 2; g.strokeRect(x, y, 160, 70); icon(g, ic, x + 14, y + 14, 4); g.fillStyle = C.ink; g.font = `26px ${PIX}`; g.fillText(String(st[key]), x + 62, y + 14); g.fillStyle = C.muted; g.font = `16px ${MONO}`; g.fillText(label, x + 62, y + 46); x += 172; }
     y = 392; x = 320; for (const a of tarot.slice(0, 11)) { const cv = document.createElement('canvas'); cv.width = 40; cv.height = 60; drawArcana(a.id, cv); g.drawImage(cv, x, y, 70, 105); x += 78; }
     if (!tarot.length) { g.fillStyle = C.muted; g.font = `18px ${MONO}`; g.fillText(`арканы таро: 0 из ${ARCANA.length}, всё впереди`, 320, 420); }
+    // карты часа: XP, собранные руки и своя карта в колоде
+    const handLine = `XP ${st.score}` + (st.hands ? ` · рук собрано ${st.hands} · лучшая: ${st.bestHand ? st.bestHand.name + ' ×' + st.bestHand.mult : '?'}` : '') + (myCard ? ` · карта ${myCard.label || ''}` : '');
+    g.fillStyle = C.muted; g.font = `18px ${MONO}`; g.fillText(handLine, 320, 516);
     g.fillStyle = C.green; g.font = `16px ${MONO}`; g.fillText('играй: ' + url, 56, 560); g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText('ночь на 1 ноября · Минск', W - 56, 560); g.textAlign = 'left';
   } else {
     // сцена: небо, луна, силуэты домов, земля, скелет с друзьями

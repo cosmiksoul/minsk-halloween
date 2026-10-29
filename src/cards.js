@@ -3,12 +3,13 @@
 // Здесь колода и сдача, расстановка по кольцу графа, боссы в городе с картой над головой, рука в прогрессе
 // скелета и смена часа. Бой, откат и бонус за руку — следующей задачей плана. Числа в rules.js.
 import * as THREE from 'three';
-import { CARD, cardsFromDeck, dealHand, minskHour, hourLeft, handSeed, rngOf, cardOfSlot } from './rules.js';
-import { cardLabel, isRed } from './poker.js';
+import { CARD, TOKEN, POINTS, cardsFromDeck, dealHand, minskHour, hourLeft, handSeed, rngOf, cardOfSlot, bossXp } from './rules.js';
+import { cardLabel, cardName, beaten, isRed, handRank } from './poker.js';
 import { makeBio, makeRng, pickArchetype } from './bio.js';
 import { deviceId } from './store.js';
 
 const mmss = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 export class Cards {
   constructor({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }) {
@@ -119,6 +120,54 @@ export class Cards {
   }
   redraw(card) { const b = this.bosses.find(b => b.card === card); if (!b) return; this.drawCard(b.sprite.material.map.image, card); b.sprite.material.map.needsUpdate = true; }
   placeSprite(b) { const H = this.sim.H; b.sprite.position.set(b.a.x, H * 1.05, b.a.z); b.sprite.scale.set(H * 0.42, H * 0.58, 1); }
+  // --- бой: только по явному «сразиться»; скелет идёт к боссу как к прохожему, дуэль стартует по приходу (Game.update)
+  fight(card) {
+    const game = this.game, p = this.player; if (!p || !card) return false;
+    if (card.state !== 'up') { this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
+    const a = this.agentOf(card); if (!a) return false;
+    game.dropPending(); game.pendingVenue = null; game.pendingShop = null; game.closeDialog();
+    if (!this.sim.moveTo(p, a.x, a.z, { cut: true })) { this.sim.say(p, 'не дойти', 'boo', 1.4); game.pendingBoss = null; return false; }
+    game.pendingBoss = { card, a }; game.dest.position.set(a.x, 0.56, a.z); game.dest.visible = true; game.destT = 1; return true;
+  }
+  // исход дуэли с боссом: победа кладёт карту, даёт XP по старшинству и розыск; поражение — укус и минута отката
+  settle(h, r, { foe, fb, my, tb }) {
+    const game = this.game, g = game.g, me = this.player, a = h.a, card = h.card;
+    const base = { uid: a.uid, name: a.bio.name, age: a.bio.age, gender: a.bio.gender, job: a.bio.job, arch: a.arch, ck: a.ck, slot: card.slot, rank: card.rank, suit: card.suit, card: cardLabel(card.rank, card.suit), cardName: cardName(card.rank, card.suit), owner: card.owner || null, ghoul: !!card.ghoul, foe, bonus: fb, roll: my, meBonus: tb };
+    if (r.winner === 'me') {
+      card.state = 'down'; card.coolUntil = 0; this.redraw(card);
+      if (r.crit) game.heal(1);
+      g.coins += 4; g.wins++; const xp = bossXp(card.rank); game.points(xp);
+      game.log('card', base); this.hunters?.gain('boss'); game.quests?.onEvent('card', xp);
+      this.sim.say(me, `🃏 ${base.cardName} ${beaten(card.rank)} · XP +${xp}`, 'music', 2.8);
+      setTimeout(() => game.player === me && this.sim.say(me, '🪙 +4', 'beer', 2.2), 2600);
+      if (this.hand && this.hand.cards.every(c => c.state === 'down')) this.completeHand();
+      game.save(); return 'card';
+    }
+    g.losses++; game.points(POINTS.loss);
+    game.log('cardBit', { ...base, ate: r.eat });
+    card.state = 'cool'; card.coolUntil = Date.now() + CARD.cooldown * 1000; this.redraw(card);
+    this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
+    const res = game.eat(r.eat, 'boss'); game.save();
+    return res === 'dead' ? (game.player !== me && me.def.dead ? 'rip' : 'killed') : 'cardBit';
+  }
+  // все пять карт биты до конца часа: бонус по покерному рангу, жетон и слот скелета
+  completeHand() {
+    const game = this.game, g = game.g, hand = this.hand, me = this.player; if (!hand || !g) return;
+    const hr = handRank(hand.cards); const xp = CARD.handBase * hr.mult; game.points(xp);
+    g.hands = (g.hands | 0) + 1; if (!g.bestHand || hr.mult > g.bestHand.mult) g.bestHand = { key: hr.key, name: hr.name, mult: hr.mult };
+    g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot();
+    game.log('hand', { hand: hr.key, name: hr.name, mult: hr.mult, xp, cards: hand.cards.map(c => cardLabel(c.rank, c.suit)) });
+    this.sim.say(me, `🃏 рука собрана: ${hr.name} · +${xp} XP · 🎟 +1${slotNew ? ' · 🦴 новый слот' : ''}`, 'music', 5);
+    game.save(); game.renderHUD();
+  }
+  // --- HUD: полоса из пяти карт (лицом, серая с секундами отката, рубашкой), ранг руки и время до конца часа; своя карта в колоде
+  hudHtml() {
+    const hand = this.hand; if (!hand) return '';
+    const now = Date.now(); const hr = handRank(hand.cards);
+    const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}">${c.state === 'down' ? '🂠' : cardLabel(c.rank, c.suit)}${c.state === 'cool' ? `<small class="cd">${Math.max(0, Math.ceil((c.coolUntil - now) / 1000))}</small>` : ''}</span>`).join('');
+    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><span class="handT" title="до конца часа">⏳ ${mmss(hourLeft(now))}</span></div>`;
+  }
+  myCardHtml() { const mc = this.myCard(); return mc ? `<span class="myCard" title="твоя карта в колоде часа: место ${mc.slot} в топ-52">карта ${cardLabel(mc.rank, mc.suit)}</span>` : ''; }
   // камера к боссу карты и его карточка (клик по полосе на HUD)
   flyTo(slot) { const b = this.bosses.find(b => b.card.slot === slot); if (!b) return; if (this.flyToFn) this.flyToFn(b.a.x, b.a.z); if (this.showCard) this.showCard(b.a); }
   // раз в секунду: смена часа (не посреди боя), откаты, таймер на HUD; каждый кадр — спрайты за боссами и ростом
