@@ -66,6 +66,15 @@ export function dealHand(hour, device, seed) {
   while (out.length < CARD.hand) { const r = 1 + Math.floor(rng() * CARD.slots); if (!out.includes(r)) out.push(r); }
   return out;
 }
+// колода → карты руки: место занято строкой рейтинга (не своей и не упокоенной) — копия того скелета, иначе упырь-картёжник
+// с семенем от (час, место); имя упырю дорисовывает cards.js (makeBio живёт в bio.js)
+export function cardsFromDeck(slots, rows, hour, device) {
+  return slots.map(slot => {
+    const { rank, suit } = cardOfSlot(slot); const row = Array.isArray(rows) ? rows[slot - 1] : null;
+    if (row && row.device !== device && !row.dead) return { slot, rank, suit, owner: row.id, name: row.name, gender: row.gender, age: row.age, job: row.job, arch: row.arch, seed: row.seed, costume: row.costume, ghoul: false };
+    return { slot, rank, suit, owner: null, ghoul: true, seed: hostSeed('ghoul', hour + '|' + slot), job: 'упырь с карточного стола' };
+  });
+}
 // бонус босса к кубику и XP за победу по старшинству карты
 export function bossBonus(rank) { const b = CARD.bonus; return rank >= 14 ? b.ace : rank >= 10 ? b.high : rank >= 6 ? b.mid : b.low; }
 export function bossXp(rank) { return CARD.xpPerRank * rank; }

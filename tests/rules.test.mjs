@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat } from '../src/rules.js';
+import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -117,4 +117,12 @@ test('migrate и statsOf: рука и собранные руки', () => {
   const g = migrate({ v: 2, score: 1, tail: [], log: [], visits: [], tarot: [] }); assert.equal(g.hand, null); assert.equal(g.hands, 0); assert.equal(g.bestHand, null);
   const n = newProgress(); assert.equal(n.hand, null); assert.equal(n.hands, 0);
   assert.equal(statsOf({ v: 2, hands: 2, bestHand: { key: 'pair', mult: 2 }, log: [] }).hands, 2); assert.equal(statsOf(null).hands, 0);
+});
+test('cardsFromDeck: владелец по месту, свои, мёртвые и пустые места — упыри', () => {
+  const rows = [{ id: 'a:1', device: 'a', name: 'Туз', seed: 1 }, { id: 'me:2', device: 'me', name: 'Я', seed: 2 }, { id: 'd:3', device: 'd', name: 'Мёртвый', seed: 3, dead: true }];
+  const cards = cardsFromDeck([1, 2, 3, 30, 52], rows, 497000, 'me');
+  assert.equal(cards.length, 5); assert.deepEqual(cards.map(c => c.slot), [1, 2, 3, 30, 52]);
+  assert.equal(cards[0].owner, 'a:1'); assert.equal(cards[0].ghoul, false); assert.equal(cards[0].rank, 14);
+  assert.equal(cards[1].ghoul, true); assert.equal(cards[2].ghoul, true); assert.equal(cards[3].ghoul, true); assert.equal(cards[3].suit, '♦');
+  assert.equal(cards[1].seed, cardsFromDeck([2], rows, 497000, 'me')[0].seed); assert.notEqual(cards[1].seed, cardsFromDeck([2], rows, 497001, 'me')[0].seed);
 });

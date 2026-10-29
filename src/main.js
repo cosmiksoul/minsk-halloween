@@ -9,6 +9,7 @@ import { ageWord, ARCHETYPES, makeRng } from './bio.js';
 import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
+import { Cards } from './cards.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
 import { hostOf } from './hosts.js';
@@ -126,13 +127,14 @@ const game = new Game(sim, scene, {
   onPerish: p => { if (remote) { clearTimeout(remoteTimer); remote.upsert(p.def, p.def.game); } renderMine(); if (cardAgent === p) showCard(p); if (!$('tabBoard').hidden) renderBoard(false); },
 });
 const hunters = new Hunters({ sim, game, cemeteries: cems, remote }); game.hunters = hunters;
+const cards = new Cards({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }); game.cards = cards; // карты часа: колода из рейтинга, боссы вокруг игрока
 for (const def of mine) { const a = sim.spawnCustom(def, def.game?.x, def.game?.z); if (def.dead) sim.ghostify(a, 'player'); } // упокоенные стоят в городе золотыми призраками
 if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.name)) { const a = sim.spawnCustom(fromLink); setTimeout(() => { showCard(a); flyTo(a.x, a.z); }, 300); }
 {
   const playable = mine.find(d => d.player && !d.guest && !d.dead) || mine.find(d => !d.guest && !d.dead);
   if (playable) { const a = sim.agents.find(x => x.def === playable); if (a) { game.setPlayer(a); flyTo(a.x, a.z); } }
 }
-game.renderHUD();
+game.renderHUD(); cards.start();
 
 // --- меню настроек и действий
 const ui = { pop: $('pop'), spd: $('spd'), pix: $('pix') };
@@ -585,6 +587,7 @@ function frame() {
   sim.update(sdt);
   game.update(sdt, clock.elapsedTime);
   hunters.update(sdt);
+  cards.update(sdt);
   drawBubbles();
   acc += dt; if (acc > 0.5) { acc = 0; $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
@@ -594,5 +597,5 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');

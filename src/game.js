@@ -124,12 +124,14 @@ export class Game {
     if (this.tarot) { this.tarot.reset(); for (const t of g.tarot) this.tarot.markDone(t.id); }
     this.pending = null; this.closeDialog();
     this.restore(); this.save(); this.renderHUD();
+    this.cards?.onPlayerChange(); // карты часа нового скелета: его сохранённая рука или новая сдача
   }
   clearPlayer() {
     if (!this.player) return;
     const p = this.player; this.select(false); this.pending = null; this.closeDialog(); this.hunters?.reset(true);
     for (const f of [...(p.followers || [])]) this.sim.unfriend(f);
     this.sim.unsetPlayer(p); p.def.player = false; this.player = null; this.candies.clear(); if (this.tarot) this.tarot.reset(); this.renderHUD();
+    this.cards?.onPlayerChange();
   }
   // после перезагрузки: убитые из журнала снова призраки, хвост снова идёт следом
   restore() {
@@ -364,6 +366,7 @@ export class Game {
     this.sim.unsetPlayer(p); this.sim.ghostify(p, 'player'); this.sim.say(p, '☠ упокоен навсегда', 'boo', 4); // золотой призрак
     this.save(); // до обнуления игрока: прогресс и строка в базе уходят с dead
     this.lastPerished = p.bio.name; this.player = null; this.candies.clear(); if (this.tarot) this.tarot.reset();
+    this.cards?.onPlayerChange(); // боссы упокоенного уходят, рука остаётся в его прогрессе
     if (this.o.onPerish) this.o.onPerish(p);
     this.renderHUD();
   }

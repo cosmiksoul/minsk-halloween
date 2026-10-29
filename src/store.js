@@ -41,7 +41,8 @@ export class Remote {
   // чужие скелеты: последние активные, кроме своих; с костюмом и счётом — это же пул охотников
   others(limit = 30) { return this.call(`${this.table}?select=id,device,name,gender,age,job,arch,seed,costume,kills,friends,hp,score,dead,updated_at&device=neq.${encodeURIComponent(deviceId())}&order=updated_at.desc&limit=${limit}`); }
   // доска почёта: счёт и живой стак
-  top(limit = 10) { return this.call(`${this.table}?select=id,device,name,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,dead,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
+  // топ по XP: доска и колода карт часа (gender, age, seed, costume — для копий скелетов-боссов)
+  top(limit = 52) { return this.call(`${this.table}?select=id,device,name,gender,age,seed,costume,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,dead,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
   // набег: стычка чужого охотника с моим скелетом (пишет клиент жертвы)
   logEncounter(row) { return this.call('encounters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); }
   // набеги с моим участием (как охотник или жертва) новее отметки
