@@ -2,7 +2,7 @@
 // выгружаем далёкое. Сетка улиц для скелетов при этом общая и загружена целиком.
 import * as THREE from 'three';
 import { buildTile, buildBig, disposeGroup } from './city.js';
-import { pointInPoly, segDist2 } from './geo.js';
+import { pointInPoly, segDist2, pointBlocked } from './geo.js';
 import { animateRoofs } from './landmarks.js';
 
 export class TileManager {
@@ -19,7 +19,7 @@ export class TileManager {
     this.ray = new THREE.Raycaster(); this.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   }
   async loadBig() {
-    try { const big = await fetch(this.base + 'big.json').then(r => r.json()); this.group.add(buildBig(big, this.M)); } catch (e) { console.warn('big.json', e); }
+    try { const big = await fetch(this.base + 'big.json').then(r => r.json()); this.big = buildBig(big, this.M); this.group.add(this.big); } catch (e) { console.warn('big.json', e); }
   }
   key(x, z) { return Math.floor(x / this.tile) + '_' + Math.floor(z / this.tile); }
   // пересечение углов экрана с землёй: какие тайлы видны
@@ -77,6 +77,15 @@ export class TileManager {
       await new Promise(r => setTimeout(r, 30));
     }
     return false;
+  }
+  // закрыта ли точка для срезки: тайла нет в индексе — край города, открыто; тайл есть, но не загружен — закрыто (лучше обойти
+  // невидимый дом); иначе здания, вода и ленты своего тайла и загруженных соседей (здания лежат по центроиду), потом большая вода
+  blockedAt(x, z) {
+    const key = this.key(x, z); if (!this.keys.has(key)) return false;
+    const g0 = this.loaded.get(key); if (!g0) return true;
+    const [ix, iz] = key.split('_').map(Number);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) { const g = dx || dz ? this.loaded.get((ix + dx) + '_' + (iz + dz)) : g0; if (g && g.userData.obst && pointBlocked(x, z, g.userData.obst)) return true; }
+    return !!(this.big && this.big.userData.obst && pointBlocked(x, z, this.big.userData.obst));
   }
   get stats() { return { loaded: this.loaded.size, pending: this.pending.size, queued: this.queue.length, built: this.built, kb: this.bytes }; }
   animate(t) { for (const g of this.loaded.values()) if (g.userData.anim) animateRoofs(g, t); }

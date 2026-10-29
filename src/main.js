@@ -93,6 +93,7 @@ function resize() {
 addEventListener('resize', resize); resize();
 
 const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspots: projectHotspots(index.center) }); loader.to(80);
+sim.blockedAt = (x, z) => tiles.blockedAt(x, z); // препятствия для срезок: здания, вода, река, проезжие части загруженных тайлов
 const markers = buildMarkers(venues, sim.danceZones); scene.add(markers.group); markers.setScale(sim.H);
 const tarot = new Tarot(scene, sim, index.center, lms.items); mats.tarot = tarot.zones; tarot.setScale(sim.H);
 const shops = new Shops(scene, sim, index.center); shops.setScale(sim.H);

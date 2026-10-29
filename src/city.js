@@ -1,7 +1,8 @@
 // Сборка города из запечённых OSM-данных по тайлам: здания, дороги, вода, парки,
 // деревья, тыквы у подъездов, фонари. Каждый тайл — своя группа, которую можно выгрузить.
 import * as THREE from 'three';
-import { pointInPoly } from './geo.js'; // геометрия живёт в geo.js без three, чтобы гоняться тестами
+import { pointInPoly, polyBBox } from './geo.js'; // геометрия живёт в geo.js без three, чтобы гоняться тестами
+import { CUT } from './rules.js';
 export { pointInPoly };
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fixFor, addRoof, SKIP_NAMES } from './landmarks.js';
@@ -177,6 +178,7 @@ export function buildBig(big, M) {
   if (green) group.add(new THREE.Mesh(green, M.flat));
   const water = flatPolys(big.water || [], 0.18, () => new THREE.Color(C.water));
   if (water) group.add(new THREE.Mesh(water, M.water));
+  group.userData.obst = { buildings: [], water: (big.water || []).map(w => ({ p: w.p, bb: polyBBox(w.p) })), ribbons: [] }; // большая вода закрыта для срезок
   return group;
 }
 
@@ -217,6 +219,12 @@ export function buildTile(t, M, seed = 1) {
   }
   if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); const bm = new THREE.Mesh(bgeo, M.building); bm.userData.isBuilding = true; group.add(bm); group.userData.buildingMesh = bm; }
   group.userData.named = named;
+  // препятствия для проверки прямой (срезки): все здания с дырками, включая пропущенные при отрисовке, вода, лента реки и проезжие части
+  group.userData.obst = {
+    buildings: (t.buildings || []).map(b => ({ p: b.p, holes: b.holes, bb: polyBBox(b.p) })),
+    water: (t.water || []).map(w => ({ p: w.p, bb: polyBBox(w.p) })),
+    ribbons: [...(t.river || []).map(r => ({ p: r.p, half: CUT.riverHalf })), ...(t.roads || []).filter(r => r.k === 'major').map(r => ({ p: r.p, half: (r.w ? Math.min(r.w, 24) : W.major) / 2 }))],
+  };
   for (const [fix, b, cx, cz, h] of roofs) { try { addRoof(group, fix, b, cx, cz, h); } catch (e) { console.warn('крыша', b.n, e); } }
 
   // деревья: из OSM плюс насыпанные в парки
