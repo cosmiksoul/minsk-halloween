@@ -178,16 +178,18 @@ export class Game {
   }
   clickVenue(v) {
     if (this.modal === 'host') this.closeHost();
-    if (!this.selected || !this.player || this.busy || v.node < 0 || this.player.state === 'dead') return false;
+    if (!this.selected || !this.player || this.busy || v.node < 0 || v.tx == null || this.player.state === 'dead') return false;
     this.dropPending(); this.closeDialog();
-    if (this.sim.moveTo(this.player, this.sim.graph.x[v.node], this.sim.graph.z[v.node], { cut: true })) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, v.tx, v.tz, { cut: true })) { this.pendingVenue = v; this.dest.position.set(v.tx, 0.56, v.tz); this.dest.visible = true; this.destT = 1; }
+    else this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
     return true;
   }
   clickShop(sh) {
     if (this.modal === 'host') this.closeHost();
-    if (!this.selected || !this.player || this.busy || sh.node < 0 || this.player.state === 'dead') return false;
+    if (!this.selected || !this.player || this.busy || sh.node < 0 || sh.tx == null || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
-    if (this.sim.moveTo(this.player, this.sim.graph.x[sh.node], this.sim.graph.z[sh.node], { cut: true })) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, sh.tx, sh.tz, { cut: true })) { this.pendingShop = sh; this.dest.position.set(sh.tx, 0.56, sh.tz); this.dest.visible = true; this.destT = 1; }
+    else this.sim.say(this.player, 'туда не пройти', 'boo', 1.4);
     return true;
   }
   // --- диалог «сладость или гадость»
@@ -215,11 +217,14 @@ export class Game {
   inReach(npc, mult = 0.8) { return (npc.x - this.player.x) ** 2 + (npc.z - this.player.z) ** 2 < Math.max(5, this.sim.H * mult) ** 2; }
   onArrive(a, node) {
     if (a !== this.player) return;
-    const v = this.sim.venueNode.get(node); const explicitV = !!v && this.pendingVenue === v;
-    if (v && (explicitV || !this.pendingVenue)) { this.visit(v); if (explicitV) this.offerGame(v, 'bar'); } // плашка хозяина только при явном визите
+    // явный визит — по входу (tx, tz) того бара, к которому шли: узел бывает общий на несколько баров; случайный проход через узел бара — визит без плашки
+    const atEntry = t => !!t && t.tx != null && Math.hypot(a.x - t.tx, a.z - t.tz) < 3;
+    const pv = this.pendingVenue, v = this.sim.venueNode.get(node);
+    if (atEntry(pv)) { this.visit(pv); this.offerGame(pv, 'bar'); }
+    else if (v && !pv) this.visit(v);
     this.pendingVenue = null;
-    const sh = this.shops && this.shops.byNode.get(node);
-    if (sh && this.pendingShop === sh) this.offerGame(sh, 'shop', () => this.openShop(sh)); // случайный проход через узел магазина меню не открывает
+    const ps = this.pendingShop;
+    if (atEntry(ps)) this.offerGame(ps, 'shop', () => this.openShop(ps)); // случайный проход через узел магазина меню не открывает
     this.pendingShop = null;
     const p = this.pending;
     if (p && !p.rolling && !this.inReach(p.npc)) { if (p.tries++ < 3 && p.npc.state === 'wait') this.sim.moveTo(this.player, p.npc.x, p.npc.z, { cut: true }); else { this.sim.release(p.npc); this.pending = null; this.sim.say(this.player, 'ушёл…', 'boo', 1.4); } }

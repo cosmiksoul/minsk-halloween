@@ -23,6 +23,12 @@ test('nearestEdgePoint: длинное ребро, концы которого �
   assert.ok(plan && Math.abs(plan.cost - 500) < 1e-6 && Math.abs(plan.endX - 500) < 1e-6 && Math.abs(plan.endZ) < 1e-6);
 });
 
+test('targetPoint: точка на ребре, узел у его концов, null без сети', () => {
+  const T = g.targetPoint(60, 5); assert.ok(Math.abs(T.x - 60) < 1e-6 && Math.abs(T.z) < 1e-6 && Math.abs(T.d - 5) < 1e-6);
+  const N = g.targetPoint(1, 4); assert.equal(N.node, g.nearest(0, 0, 1)); assert.equal(N.x, 0);
+  assert.equal(g.targetPoint(50, 500, 140), null);
+});
+
 test('nearestAny: ближайший узел с любого расстояния', () => { assert.equal(g.nearestAny(5000, 4900), g.nearest(100, 100, 1)); assert.equal(g.nearestAny(-3, 2), g.nearest(0, 0, 1)); });
 
 test('nearestNamed: имя соседней улицы, null далеко', () => { assert.equal(g.nearestNamed(100, 60, 150), 'Ленина'); assert.equal(g.nearestNamed(100, 1000, 150), null); });

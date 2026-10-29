@@ -128,6 +128,15 @@ export class Graph {
     }
     return best;
   }
+  // точка сети, в которую приведёт moveTo к (x, z): узел у концов ребра (как в planRoute), иначе точка на ребре;
+  // вход заведения или магазина для игрока — { x, z, node, d } или null, если сети нет в радиусе
+  targetPoint(x, z, maxR = 140) {
+    const P = this.nearestEdgePoint(x, z, maxR);
+    if (!P) { const n = this.nearest(x, z, maxR); return n < 0 ? null : { x: this.x[n], z: this.z[n], node: n, d: Math.hypot(this.x[n] - x, this.z[n] - z) }; }
+    if (P.t < 0.03) return { x: this.x[P.from], z: this.z[P.from], node: P.from, d: P.d };
+    if (P.t > 0.97) return { x: this.x[P.to], z: this.z[P.to], node: P.to, d: P.d };
+    return { x: P.x, z: P.z, node: P.t < 0.5 ? P.from : P.to, d: P.d };
+  }
   // имя ближайшего именованного узла в радиусе maxR: улица для журнала у безымянных дворовых дорожек
   nearestNamed(x, z, maxR = 150) {
     let best = null, bd = Infinity;
