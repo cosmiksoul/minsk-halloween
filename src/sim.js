@@ -138,7 +138,7 @@ export class Sim {
     const e = pick(rng, g.adj[from]);
     const a = { id: this.seed++, uid: 0, arch: arch.id, costume, bio, tex, base: custom ? baseTex : null, sprite, rng, from, to: e.to, len: e.len, t: rng(), speed: WALK_SPEED * (0.8 + rng() * 0.5),
       state: 'walk', timer: 0, anim: rng() * 10, face: 1, cooldown: rng() * 10, thirst: 30 + rng() * 180, path: null, target: null, bubble: null, script: null, partner: null, x: 0, z: 0, lastDance: -100, venue: null, custom: !!custom,
-      player: false, ghost: false, leader: null, waitFor: null, home: null, dest: null, moving: false, auto: false, ambient: false, ck: null, born: this.time };
+      player: false, ghost: false, leader: null, waitFor: null, home: null, dest: null, moving: false, auto: false, driven: false, ambient: false, ck: null, born: this.time };
     sprite.userData.agent = a;
     this.place(a); this.scene.add(sprite); this.agents.push(a); this.sprites.push(sprite);
     return a;
@@ -240,7 +240,7 @@ export class Sim {
   startDance(a, dur, v) { a.state = 'dance'; a.timer = dur || 8 + a.rng() * 8; a.path = null; a.target = null; this.say(a, pick(a.rng, LINES.dance), 'music', 2.2); this.stats.dances++; a.lastDance = this.time; this.enterVenue(a, v); }
   startDrink(a, v) { a.state = 'drink'; a.timer = 6 + a.rng() * 7; a.path = null; a.target = null; this.say(a, pick(a.rng, LINES.beer), 'beer', 2.8); this.stats.beers++; a.thirst = 50 + a.rng() * 220; this.enterVenue(a, v); }
 
-  party(cx, cz, r) { for (const a of this.agents) if (a.state === 'walk' && (!a.player || a.auto) && !a.ghost && (a.x - cx) ** 2 + (a.z - cz) ** 2 < r * r) this.startDance(a, 12 + a.rng() * 10); }
+  party(cx, cz, r) { for (const a of this.agents) if (a.state === 'walk' && (!a.player || a.auto) && !a.ghost && !a.driven && (a.x - cx) ** 2 + (a.z - cz) ** 2 < r * r) this.startDance(a, 12 + a.rng() * 10); }
 
   // --- игровые состояния
   // NPC останавливается и ждёт, пока к нему подойдут
@@ -288,6 +288,13 @@ export class Sim {
     if (on) { a.state = 'walk'; a.cooldown = 4; a.thirst = 30 + a.rng() * 120; if (a.from === a.to) this.teleport(a, a.from); }
     else { if (a.from === a.to) { a.state = 'idle'; } else if (a.state !== 'walk') { a.state = 'idle'; a.to = a.from; a.t = 0; this.place(a); } }
   }
+  // ведомый агент (охотник): обновляется веткой игрока — только путь, без баров, танцев и разговоров
+  drive(a, on) {
+    a.driven = !!on;
+    if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
+    this.leaveVenue(a); a.script = null; a.path = null; a.target = null; a.waitFor = null; a.dest = null;
+    if (on) a.state = 'idle'; else { a.state = 'walk'; a.cooldown = 6; if (a.from === a.to) this.teleport(a, a.from); }
+  }
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
     // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
@@ -317,8 +324,7 @@ export class Sim {
       }
       if (a.state === 'walk') { this.place(a); const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from]; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; }
       // след для друзей
-      const tr = a.trail; const last = tr[tr.length - 1];
-      if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); }
+      const tr = a.trail; if (tr) { const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
     } else if (a.state === 'drink' || a.state === 'dead') {
       a.timer -= dt; if (a.timer <= 0 && a.state === 'drink') { a.state = 'idle'; this.leaveVenue(a); }
     }
@@ -427,7 +433,7 @@ export class Sim {
     this.time += dt; const g = this.graph;
     for (const a of this.agents) {
       a.anim += dt; a.cooldown -= dt;
-      if (a.player && !a.auto) this.updatePlayer(a, dt);
+      if ((a.player && !a.auto) || a.driven) this.updatePlayer(a, dt);
       else if (a.state === 'follow') this.updateFollower(a, dt);
       else if (a.state === 'walk') {
         a.t += a.speed * dt / a.len;
@@ -468,7 +474,7 @@ export class Sim {
     this.meetTimer -= dt;
     if (this.meetTimer <= 0) {
       this.meetTimer = 0.25; const cell = 8, grid = new Map();
-      const free = a => a.state === 'walk' && a.cooldown <= 0 && (!a.player || a.auto) && !a.ghost;
+      const free = a => a.state === 'walk' && a.cooldown <= 0 && (!a.player || a.auto) && !a.ghost && !a.driven;
       for (const a of this.agents) { if (!free(a)) continue; const k = Math.floor(a.x / cell) + ',' + Math.floor(a.z / cell); (grid.get(k) || grid.set(k, []).get(k)).push(a); }
       for (const a of this.agents) {
         if (!free(a)) continue;

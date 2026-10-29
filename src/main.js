@@ -10,7 +10,8 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf } from './rules.js';
+import { statsOf, PURSUIT } from './rules.js';
+import { Hunters } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
 import { Shops } from './shops.js';
@@ -49,7 +50,7 @@ async function jProgress(u, from, to) {
   const buf = new Uint8Array(got); let o = 0; for (const c of chunks) { buf.set(c, o); o += c.length; }
   loader.to(to); return JSON.parse(new TextDecoder().decode(buf));
 }
-const [index, net, pois, eventsFile] = await Promise.all([j(BASE + 'index.json').then(d => (loader.to(8), d)), jProgress(BASE + 'net.json', 10, 48), j(BASE + 'pois.json').then(d => (loader.to(50), d)), j('data/events.json').catch(() => ({ events: [] }))]);
+const [index, net, pois, eventsFile, cemFile] = await Promise.all([j(BASE + 'index.json').then(d => (loader.to(8), d)), jProgress(BASE + 'net.json', 10, 48), j(BASE + 'pois.json').then(d => (loader.to(50), d)), j('data/events.json').catch(() => ({ events: [] })), j(BASE + 'cemeteries.json').catch(() => ({ items: [] }))]);
 loader.to(54);
 const events = eventsFile.events || [];
 const venues = buildVenues({ pois, center: index.center }, events);
@@ -94,6 +95,8 @@ const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspo
 const markers = buildMarkers(venues, sim.danceZones); scene.add(markers.group); markers.setScale(sim.H);
 const tarot = new Tarot(scene, sim, index.center, lms.items); mats.tarot = tarot.zones; tarot.setScale(sim.H);
 const shops = new Shops(scene, sim, index.center); shops.setScale(sim.H);
+// кладбища с проходимым узлом рядом: оттуда выходят охотники
+const cems = (cemFile.items || []).map(c => ({ ...c, node: sim.graph.nearest(c.x, c.z, PURSUIT.cemNodeR) })).filter(c => c.node >= 0);
 // посев по оживлённым районам; остальная толпа появляется вокруг камеры (sim.crowd)
 sim.cap = isMobile ? 450 : 900;
 sim.setPopulation(isMobile ? 120 : 260);
@@ -116,6 +119,7 @@ const game = new Game(sim, scene, {
   showCard: (a, refresh) => { showCard(a, refresh); if (refresh && !$('profile').hidden && profileAgent === a) renderProfile(a); },
   onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
 });
+const hunters = new Hunters({ sim, game, cemeteries: cems, remote }); game.hunters = hunters;
 for (const def of mine) sim.spawnCustom(def, def.game?.x, def.game?.z);
 if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.name)) { const a = sim.spawnCustom(fromLink); setTimeout(() => { showCard(a); flyTo(a.x, a.z); }, 300); }
 {
@@ -188,14 +192,17 @@ function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.gue
 function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(controls.target); controls.target.set(x, 0, z); camera.position.copy(controls.target).add(off); }
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
+// статистика гостя: по ссылке приходит массив [💀, 💚, 🃏, 🎃], из базы — объект { kills, friends } и счёт
+const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · ★ ${d.score}` : ''); };
 function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
   cardAgent = a; $('card').hidden = false;
   game.portrait(a, $('cardPic'));
   $('cName').textContent = a.bio.name; $('cName').className = 'name' + (a === game.player ? ' player' : a.custom ? ' mine' : a.ghost ? ' ghost' : '');
-  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.guest ? (a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '');
+  const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;
+  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.guest ? (a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
   $('cJob').textContent = 'При жизни: ' + a.bio.job;
-  $('cStatus').textContent = 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest && a.def.stats ? ` · 💀 ${a.def.stats[0]} · 💚 ${a.def.stats[1]} · 🃏 ${a.def.stats[2]} · 🎃 ${a.def.stats[3]}` : '');
+  $('cStatus').textContent = 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
   $('cState').textContent = 'Состояние: ' + stateOf(a);
   $('cGame').innerHTML = game.cardHtml(a);
   $('bFollow').classList.toggle('on', follow === a);
@@ -211,7 +218,7 @@ function renderProfile(a) {
   $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
   $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').textContent = 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a);
   $('pfAbout').textContent = a.def.about ? 'О себе: ' + a.def.about : '';
-  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">💀 ${a.def.stats[0]} · 💚 ${a.def.stats[1]} · 🃏 ${a.def.stats[2]} · 🎃 ${a.def.stats[3]}</div>` : '') : game.profileHtml(a);
+  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
   $('pfSelect').hidden = !ownAgent || (a === game.player && game.selected); $('pfPlay').hidden = true;
   $('pfDeck').hidden = !(ownAgent && a === game.player); $('pfShare').hidden = !(ownAgent && a === game.player);
@@ -286,6 +293,7 @@ function updatePopup() {
   if (popupBld) { const n = nearCount(popupBld.x, popupBld.z); $('pInside').textContent = n ? `рядом сейчас: ${n} скел.` : 'рядом сейчас никого'; }
 }
 $('pClose').onclick = closePopup;
+$('hmark').onclick = () => { const h = hunters.nearest(); if (h) { flyTo(h.a.x, h.a.z); showCard(h.a); } };
 $('pGo').onclick = () => {
   if (!game.player) return; takeControl(game.player);
   if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.nx, popupTarot.nz); else if (popupShop) game.clickShop(popupShop); else if (popupBld) { const [gx, gz] = popupBld.go || [popupBld.x, popupBld.z]; game.clickGround(gx, gz); }
@@ -373,7 +381,7 @@ function renderBoard(fetchRemote = true) {
 }
 setInterval(() => { if (remote && !$('tabBoard').hidden) renderBoard(true); }, 30000);
 renderMine();
-if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true }); } });
+if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0 }); } });
 
 // --- поделиться карточкой персонажа
 let shareFormat = 'post';
@@ -461,6 +469,17 @@ function drawBubbles() {
     else if (game.player && a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }
   for (let i = n; i < pool.length; i++) pool[i].style.display = 'none';
+  // метка направления на ближайшего охотника у края экрана, пока он вне кадра; в кадре его и так видно
+  const hm = $('hmark'); const nh = hunters.nearest();
+  if (nh && game.player) {
+    v3.set(nh.a.x, sim.H, nh.a.z).project(camera);
+    if (v3.x > -1 && v3.x < 1 && v3.y > -1 && v3.y < 1) hm.hidden = true;
+    else {
+      const k = 1 / Math.max(Math.abs(v3.x), Math.abs(v3.y), 1e-6); const m = 24;
+      hm.style.left = Math.max(m, Math.min(w - m, (v3.x * k + 1) / 2 * w)) + 'px'; hm.style.top = Math.max(m, Math.min(h - m, (1 - v3.y * k) / 2 * h)) + 'px';
+      const d = Math.hypot(nh.a.x - game.player.x, nh.a.z - game.player.z); hm.classList.toggle('hot', d < PURSUIT.nearWarn); hm.title = `${nh.a.bio.name} · ${Math.round(d)} м`; hm.hidden = false;
+    }
+  } else hm.hidden = true;
   const pt = popupVenue || popupTarot || popupShop || popupBld;
   if (pt) {
     const y = popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : popupBld ? (popupBld.top || 10) + 4 : popupTarot.baseY + tarot.size;
@@ -500,6 +519,7 @@ function frame() {
   sim.crowd(tiles.footprint(camera), dt);
   sim.update(sdt);
   game.update(sdt, clock.elapsedTime);
+  hunters.update(sdt);
   drawBubbles();
   acc += dt; if (acc > 0.5) { acc = 0; $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
@@ -509,5 +529,5 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
-console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест');
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');
