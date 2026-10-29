@@ -280,6 +280,7 @@ body.drawerOpen #card { left:344px; }
 #mbar { display:none; }
 @media (max-width: 700px) {
   #top { top:8px; left:8px; right:8px; justify-content:flex-start; gap:4px; }
+  #compass { display:none; } /* на телефоне компас не влезает в строку и уезжал под шапку */
   .tStats, .tbtn .tlabel { display:none; }
   .tbtn { padding:6px; } .tbtn .ic { margin:0; }
   #menu { top:48px; right:8px; }
