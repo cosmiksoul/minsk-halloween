@@ -228,6 +228,8 @@ export class Sim {
     if (on) a.state = 'idle'; else { a.state = 'walk'; a.cooldown = 6; if (a.from === a.to) this.teleport(a, a.from); }
   }
   edgePoint(node, x, z) { return this.graph.edgePoint(node, x, z); }
+  // идёт ли агент по проезжей части (ребро major): игроку даёт скорость и розыск
+  onRoad(a) { return a.state === 'walk' && !a.free && a.from !== a.to && this.graph.isMajor(a.from, a.to); }
   // свободен ли отрезок для срезки: препятствия загруженных тайлов через blockedAt (без него всё открыто).
   // Точки графа открыты по определению (по ним ходит весь город, хоть тротуар у проспекта и лежит в ленте дороги,
   // а вход в арку — на контуре дома): свою точку не проверяем, конец тоже, если он на графе (endOpen); газон проверяем
@@ -375,7 +377,8 @@ export class Sim {
     let next;
     if (a.path && a.path.length) next = a.path.shift();
     else {
-      const opts = g.adj[node].filter(e => e.to !== prev);
+      let opts = g.adj[node].filter(e => e.to !== prev);
+      const quiet = opts.filter(e => !e.major); if (quiet.length) opts = quiet; // толпа держится тротуаров: на проезжую часть сворачивает, только когда иначе некуда
       if (!opts.length) next = g.adj[node][0].to;
       else {
         // далеко ушёл от своего района — тянет обратно
@@ -401,7 +404,7 @@ export class Sim {
     if (!cand.length) { a.thirst = 60; return; }
     let tot = cand.reduce((s, c) => s + c[1], 0), r = a.rng() * tot, v = cand[0][0];
     for (const c of cand) { r -= c[1]; if (r <= 0) { v = c[0]; break; } }
-    const p = g.path(a.to, v.node);
+    const p = g.path(a.to, v.node, 110, { crowd: true }); // к бару тротуарами, проезжая часть — если иначе не дойти
     if (p) { a.path = p; a.target = v.node; } else a.thirst = 40;
   }
 

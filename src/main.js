@@ -9,12 +9,15 @@ import { ageWord, ARCHETYPES, makeRng } from './bio.js';
 import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
+import { Cards } from './cards.js';
+import { Quests } from './quests.js';
+import { beaten } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
 import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
-import { Tarot } from './tarot.js';
+import { Tarot, ARCANA_BY_ID } from './tarot.js';
 import { Shops } from './shops.js';
 import { generateCharacter } from './gen.js';
 import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
@@ -35,7 +38,6 @@ const loader = {
 loader.start();
 const canvas = $('c');
 const isMobile = innerWidth < 700;
-const MAX_OWN = 5;
 const ARCH_LABEL = { it: 'айтишник', doc: 'медик', build: 'строитель', office: 'офисный', art: 'творческий', witch: 'ведьма / маг', vamp: 'вампир', sport: 'спортсмен', transit: 'транспортник', trade: 'торговля', student: 'студент', pension: 'пенсионер', pump: 'тыквоголовый', pirate: 'пират', knight: 'рыцарь', angel: 'ангел', raver: 'рейвер' };
 
 // --- данные: индекс тайлов, пешеходная сеть, заведения, афиша
@@ -108,6 +110,10 @@ let mine = local.load();
 const saveMine = () => local.save(mine);
 const remote = makeRemote(); let remoteTimer = 0;
 const own = () => mine.filter(d => !d.guest && !d.dead).map(def => ({ def, agent: sim.agents.find(a => a.def === def) })).filter(o => o.agent);
+// слоты живых скелетов на устройстве: один по умолчанию, слот за каждую собранную руку, до пяти; старые устройства с несколькими живыми ничего не теряют
+const slots = () => slotsOf(local.get('slots', 0), mine.filter(d => !d.guest && !d.dead).length);
+local.set('slots', slots());
+const addSlot = () => { const s = slots(); if (s >= 5) return false; local.set('slots', s + 1); renderMine(); game.renderHUD(); return true; };
 const b64 = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 const shareLink = def => { const st = statsOf(def.game); return location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed, o: def.costume || undefined, b: def.about ? def.about.slice(0, 240) : undefined, st: [st.kills, st.friends, st.tarot, st.visits], sc: st.score })); };
@@ -117,19 +123,21 @@ if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location
 // объявлены до первого flyTo при старте: иначе ReferenceError (TDZ) у тех, у кого уже есть сохранённый скелет
 let rotateTo = null, follow = null, cardAgent = null;
 const game = new Game(sim, scene, {
-  tarot, shops, save: saveMine, own,
+  tarot, shops, save: saveMine, own, slots,
   showCard: (a, refresh) => { showCard(a, refresh); if (refresh && !$('profile').hidden && profileAgent === a) renderProfile(a); },
   onChange: () => { if (remote && game.player) { const p = game.player; clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(p.def, p.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
   onPerish: p => { if (remote) { clearTimeout(remoteTimer); remote.upsert(p.def, p.def.game); } renderMine(); if (cardAgent === p) showCard(p); if (!$('tabBoard').hidden) renderBoard(false); },
 });
 const hunters = new Hunters({ sim, game, cemeteries: cems, remote }); game.hunters = hunters;
+const cards = new Cards({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }); game.cards = cards; // карты часа: колода из рейтинга, боссы вокруг игрока
 for (const def of mine) { const a = sim.spawnCustom(def, def.game?.x, def.game?.z); if (def.dead) sim.ghostify(a, 'player'); } // упокоенные стоят в городе золотыми призраками
 if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.name)) { const a = sim.spawnCustom(fromLink); setTimeout(() => { showCard(a); flyTo(a.x, a.z); }, 300); }
 {
   const playable = mine.find(d => d.player && !d.guest && !d.dead) || mine.find(d => !d.guest && !d.dead);
   if (playable) { const a = sim.agents.find(x => x.def === playable); if (a) { game.setPlayer(a); flyTo(a.x, a.z); } }
 }
-game.renderHUD();
+const quests = new Quests({ game, sim }); game.quests = quests; // онбординг: цепочка квестов на устройство
+game.renderHUD(); cards.start();
 
 // --- меню настроек и действий
 const ui = { pop: $('pop'), spd: $('spd'), pix: $('pix') };
@@ -171,7 +179,9 @@ function takeControl(a) {
   game.select(true); showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on'); renderMine();
 }
 $('hud').onclick = e => {
+  if (e.target.closest('.deck')) { game.openDeck(); return; } // 🃏 на панели открывает колоду без взятия управления
   if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
+  const hc = e.target.closest('.hc'); if (hc) { cards.flyTo(+hc.dataset.slot); return; } // карта в полосе руки: камера к боссу
   const av = e.target.closest('canvas.av'); if (av) { const o = own().find(x => String(x.def.seed) === av.dataset.seed); if (o) takeControl(o.agent); return; }
   if (game.player) takeControl(game.player);
 };
@@ -188,7 +198,7 @@ $('bPlay').onclick = () => takeControl(cardAgent);
 $('bSelect').onclick = () => { if (game.selected && cardAgent === game.player) { game.select(false); showCard(cardAgent); } else takeControl(cardAgent); };
 $('bProfile').onclick = () => openProfile(cardAgent);
 $('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; previewMine(); };
-function openMine() { const full = own().length >= MAX_OWN; $('mnLimit').hidden = !full; $('mSubmit').disabled = full; $('mine').hidden = false; renderMine(); previewMine(); if (!isMobile && !full) setTimeout(() => $('mName').focus(), 50); }
+function openMine() { const full = own().length >= slots(); $('mnLimit').hidden = !full; $('mSubmit').disabled = full; $('mine').hidden = false; renderMine(); previewMine(); if (!isMobile && !full) setTimeout(() => $('mName').focus(), 50); }
 function closeMine() { $('mine').hidden = true; }
 function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest && !x.dead); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
 
@@ -196,7 +206,7 @@ function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(co
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 // статистика гостя: по ссылке приходит массив [💀, 💚, 🃏, 🎃], из базы — объект { kills, friends } и счёт
-const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · ★ ${d.score}` : ''); };
+const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · XP ${d.score}` : ''); };
 const ripText = d => `☠ упокоен навсегда${d.diedStreet ? ' у ' + d.diedStreet : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
 function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
@@ -204,7 +214,7 @@ function showCard(a, refresh) {
   game.portrait(a, $('cardPic'));
   $('cName').textContent = a.bio.name; $('cName').className = 'name' + (a === game.player ? ' player' : a.custom ? ' mine' : a.ghost ? ' ghost' : '');
   const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;
-  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.dead ? ' · упокоен навсегда' : a.def.guest ? (a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
+  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.dead ? ' · упокоен навсегда' : a.def.guest ? (a.def.boss ? ' · босс часа' : a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
   $('cJob').textContent = 'При жизни: ' + a.bio.job;
   $('cStatus').textContent = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
   $('cState').textContent = 'Состояние: ' + stateOf(a);
@@ -214,7 +224,11 @@ function showCard(a, refresh) {
   $('bSelect').hidden = !(ownAgent && a === game.player); $('bSelect').textContent = game.selected ? 'отпустить' : 'управлять'; $('bSelect').classList.toggle('on', game.selected && a === game.player);
   $('bPlay').hidden = !(ownAgent && a !== game.player && !a.def.dead);
   $('bProfile').hidden = !a.custom;
+  // босс часа: кнопка боя по состоянию карты (лицом — сразиться, отдыхает — секунды, бита)
+  const bc = cards.cardOf(a); const fb = $('bFight'); fb.hidden = !bc || !game.player || !!a.def.dead;
+  if (bc) { fb.disabled = bc.state !== 'up'; fb.textContent = bc.state === 'up' ? '⚔ сразиться' : bc.state === 'cool' ? `отдышись · ${Math.max(0, Math.ceil((bc.coolUntil - Date.now()) / 1000))} с` : 'бита'; }
 }
+$('bFight').onclick = () => { const a = cardAgent; if (!a || !game.player) return; const bc = cards.cardOf(a); if (!bc) return; if (!game.selected) takeControl(game.player); cards.fight(bc); };
 // --- профиль своего скелета: статистика, описание, колода, шаринг, ссылка, удаление
 let profileAgent = null;
 function renderProfile(a) {
@@ -225,13 +239,13 @@ function renderProfile(a) {
   $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
   $('pfSelect').hidden = !ownAgent || !!a.def.dead || (a === game.player && game.selected); $('pfPlay').hidden = true;
-  $('pfDeck').hidden = !(ownAgent && a === game.player); $('pfShare').hidden = !(ownAgent && a === game.player);
+  $('pfDeck').hidden = !ownAgent; $('pfShare').hidden = !(ownAgent && a === game.player);
   $('pfDelete').hidden = !ownAgent;
   renderLog();
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
 // --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
-const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
+const LOG_ICON = { card: '🎴', cardBit: '🩸', hand: '🏆', quest: '🎯', kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
 function logText(e, fem) {
   const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
@@ -247,6 +261,10 @@ function logText(e, fem) {
     case 'raid_bit': return e.outcome === 'rip' ? `твой скелет упокоил навсегда гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}` : `твой скелет укусил гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
     case 'raid_beaten': return `${nm} побил${his} твоего скелета${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
     case 'raid_lost': return `твой скелет потерял гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}`;
+    case 'card': return `${esc(e.cardName || e.card || 'карта')} ${beaten(e.rank)}: ${nm}, ${vs}`;
+    case 'cardBit': return `${nm} (${esc(e.card || '?')}) укусил${his}, ${vs}`;
+    case 'hand': return `рука собрана: ${esc(e.name || '?')} ×${e.mult ?? 1}, +${e.xp ?? 0} XP`;
+    case 'quest': return `квест «${esc(e.title || e.id || '?')}»: +${e.bonus ?? 0} XP`;
     case 'tarot': return `аркана ${nm}`;
     case 'visit': return `заведение ${nm}`;
     case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
@@ -261,16 +279,17 @@ function renderLog() {
   const a = journalAgent(); const box = $('journal');
   if (!a || !a.def.game || a.def.guest) { box.hidden = true; box.innerHTML = ''; return; }
   const g = migrate(a.def.game); const fem = a.bio.gender === 'f';
-  const rows = g.log.slice(0, 50).map((e, i) => `<div class="e${e.boss || e.kind === 'raid_beaten' ? ' boss' : ''}${['fail', 'bit', 'death', 'raid_beaten'].includes(e.kind) ? ' bad' : ''}${e.uid ? ' clickable' : ''}" data-i="${i}"><span class="t">${esc(fmtAt(e.at))}</span><span class="ic">${LOG_ICON[e.kind] || '·'}</span><span class="x">${logText(e, fem)}</span></div>`).join('');
+  const rows = g.log.slice(0, 50).map((e, i) => `<div class="e${e.boss || e.kind === 'raid_beaten' ? ' boss' : ''}${['fail', 'bit', 'death', 'raid_beaten'].includes(e.kind) ? ' bad' : ''}${e.uid || (e.kind === 'tarot' && e.id != null) ? ' clickable' : ''}" data-i="${i}"><span class="t">${esc(fmtAt(e.at))}</span><span class="ic">${LOG_ICON[e.kind] || '·'}</span><span class="x">${logText(e, fem)}</span></div>`).join('');
   box.innerHTML = rows ? `<div class="day">журнал · ${g.log.length}</div>${rows}` : '<div class="hint">журнал пуст: иди к прохожим и в заведения</div>'; box.hidden = false;
 }
-$('journal').onclick = e => { const el = e.target.closest('.e'); if (!el) return; const a = journalAgent(); const entry = a && a.def.game && a.def.game.log[+el.dataset.i]; if (!entry || !entry.uid) return; const who = sim.agents.find(x => x.uid === entry.uid); if (who) { closeProfile(); showCard(who); flyTo(who.x, who.z); } };
+$('journal').onclick = e => { const el = e.target.closest('.e'); if (!el) return; const a = journalAgent(); const entry = a && a.def.game && a.def.game.log[+el.dataset.i]; if (!entry) return; if (entry.kind === 'tarot' && entry.id != null) { const ar = ARCANA_BY_ID[entry.id]; if (ar) game.showTarot(ar, false, migrate(a.def.game)); return; } if (!entry.uid) return; const who = sim.agents.find(x => x.uid === entry.uid); if (who) { closeProfile(); showCard(who); flyTo(who.x, who.z); } };
 game.o.onLog = () => { if (!$('profile').hidden) renderLog(); };
 function closeProfile() { $('profile').hidden = true; profileAgent = null; hideTip(); }
 $('pfClose').onclick = closeProfile;
 $('profile').addEventListener('click', e => { if (e.target === $('profile')) closeProfile(); });
 $('pfSelect').onclick = () => { takeControl(profileAgent); closeProfile(); };
-$('pfDeck').onclick = () => { closeProfile(); game.openDeck(); };
+$('pfDeck').onclick = () => { if (!profileAgent) return; closeProfile(); game.openDeck(migrate(profileAgent.def.game)); };
+$('pfGame').addEventListener('click', e => { const el = e.target.closest('.arc'); if (!el || !profileAgent) return; const a = ARCANA_BY_ID[el.dataset.arc]; if (a) game.showTarot(a, false, migrate(profileAgent.def.game)); }); // фишка арканы в профиле открывает карту
 $('pfShare').onclick = () => { closeProfile(); openShare(); };
 $('pfLink').onclick = async () => { const link = shareLink(profileAgent.def); try { await navigator.clipboard.writeText(link); $('pfLink').textContent = 'скопировано'; setTimeout(() => $('pfLink').textContent = '🔗 ссылка', 1500); } catch { prompt('Ссылка на скелета', link); } };
 $('pfDelete').onclick = () => { const a = profileAgent; if (!a) return; if (!confirm(`Удалить скелета ${a.bio.name}?`)) return; if (a === game.player) game.clearPlayer(); mine = mine.filter(d => d !== a.def); saveMine(); if (remote) remote.remove(a.def); sim.remove(a); if (cardAgent === a) $('card').hidden = true; closeProfile(); renderMine(); pickPlayer(); };
@@ -385,7 +404,7 @@ function previewMine() { const arch = ARCHETYPES.find(a => a.id === mArch.value)
 mArch.onchange = previewMine; $('bReroll').onclick = () => { mineSeed = Math.floor(Math.random() * 1e9); previewMine(); }; previewMine();
 $('mineForm').onsubmit = e => {
   e.preventDefault();
-  if (own().length >= MAX_OWN) { $('mnLimit').hidden = false; return; }
+  if (own().length >= slots()) { $('mnLimit').hidden = false; return; }
   const age = Math.max(18, Math.min(120, +$('mAge').value || 18));
   const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed, about: $('mAbout').value.trim().slice(0, 240) };
   if (!def.name || !def.job) return;
@@ -398,7 +417,7 @@ $('mineForm').onsubmit = e => {
 function renderMine() {
   const list = mine.filter(d => !d.guest);
   const alive = list.filter(d => !d.dead).length;
-  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${alive}/${MAX_OWN}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}${d.dead ? ' dead' : ''}" data-s="${d.seed}"><span class="n">${d.dead ? '☠ ' : ''}${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.dead ? `<span class="k">упокоен ${esc(fmtAt(d.diedAt))}</span>` : d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? (st => ` · ★ ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}`)(statsOf(d.game)) : ''}</span></div>`).join('') : '';
+  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${alive}/${slots()}${slots() < 5 ? ' · следующий слот за собранную руку' : ''}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}${d.dead ? ' dead' : ''}" data-s="${d.seed}"><span class="n">${d.dead ? '☠ ' : ''}${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.dead ? `<span class="k">упокоен ${esc(fmtAt(d.diedAt))}</span>` : d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? (st => ` · XP ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}`)(statsOf(d.game)) : ''}</span></div>`).join('') : '';
   if (!$('tabBoard').hidden) renderBoard(false);
 }
 $('mineList').onclick = e => {
@@ -409,8 +428,8 @@ $('mineList').onclick = e => {
 
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
-const SCORE_HINT = 'счёт: победа +2, поражение −1, аркана +5, новое заведение +1';
-function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${r.dead ? '☠ упокоен' : `❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}`}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+const SCORE_HINT = 'XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство';
+function boardRow(r, i, me) { const lbl = r.dead ? null : cards.labelForRank(i + 1); return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span>${lbl ? `<span class="bcard${/[♥♦]/.test(lbl) ? ' red' : ''}" title="карта в колоде часа">${lbl}</span>` : ''}<span class="n">${esc(r.name)}</span><span class="sc">XP ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${r.dead ? '☠ упокоен' : `❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}`}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
   const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses, dead: !!d.dead }; }).sort((a, b) => b.score - a.score);
@@ -421,7 +440,7 @@ function renderBoard(fetchRemote = true) {
   }
   const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; };
   if (boardRows) draw(boardRows); else body.innerHTML = '<div class="hint">загружаем…</div>';
-  if (fetchRemote) remote.top(20).then(rows => { if (rows) { boardRows = rows; draw(rows); } else draw(boardRows || localRows, 'сервер недоступен, показаны ' + (boardRows ? 'последние данные' : 'только свои скелеты')); });
+  if (fetchRemote) remote.top(52).then(rows => { if (rows) { boardRows = rows; draw(rows); } else draw(boardRows || localRows, 'сервер недоступен, показаны ' + (boardRows ? 'последние данные' : 'только свои скелеты')); });
 }
 setInterval(() => { if (remote && !$('tabBoard').hidden) renderBoard(true); }, 30000);
 renderMine();
@@ -449,13 +468,13 @@ async function renderShare() {
   const p = game.player; if (!p) return;
   await ensureFonts();
   const friends = (p.followers || []).map(f => f.costume);
-  renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
+  renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, myCard: cards.myCard(), url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
   $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
 }
 function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; renderShare(); }
 $('shrClose').onclick = () => { if (game.modal === 'share') game.setModal(null); };
 for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
-const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: ★ ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
+const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: XP ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
 $('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
 $('shrCopy').onclick = async () => { const link = shareLink(game.player.def); try { await navigator.clipboard.writeText(link); $('shrCopy').textContent = 'скопировано'; setTimeout(() => $('shrCopy').textContent = '🔗 скопировать ссылку', 1500); } catch { prompt('Ссылка на скелета', link); } };
 $('shrNative').onclick = async () => { const ok = await nativeShare($('shrCv'), shareText(), shareLink(game.player.def)); if (ok) { game.onShared('native'); renderShare(); } else if (ok === false) download($('shrCv'), `skeleton-${shareFormat}.png`); };
@@ -580,6 +599,7 @@ function frame() {
   sim.update(sdt);
   game.update(sdt, clock.elapsedTime);
   hunters.update(sdt);
+  cards.update(sdt);
   drawBubbles();
   acc += dt; if (acc > 0.5) { acc = 0; $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
@@ -589,5 +609,5 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');

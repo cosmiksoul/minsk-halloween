@@ -12,28 +12,31 @@
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "./src/bio.js": "./src/bio.js?v=c2dd30b",
-  "./src/city.js": "./src/city.js?v=c2dd30b",
-  "./src/dice.js": "./src/dice.js?v=c2dd30b",
-  "./src/districts.js": "./src/districts.js?v=c2dd30b",
-  "./src/game.js": "./src/game.js?v=c2dd30b",
-  "./src/gen.js": "./src/gen.js?v=c2dd30b",
-  "./src/geo.js": "./src/geo.js?v=c2dd30b",
-  "./src/graph.js": "./src/graph.js?v=c2dd30b",
-  "./src/hosts.js": "./src/hosts.js?v=c2dd30b",
-  "./src/hunters.js": "./src/hunters.js?v=c2dd30b",
-  "./src/landmarks.js": "./src/landmarks.js?v=c2dd30b",
-  "./src/main.js": "./src/main.js?v=c2dd30b",
-  "./src/post.js": "./src/post.js?v=c2dd30b",
-  "./src/rules.js": "./src/rules.js?v=c2dd30b",
-  "./src/share.js": "./src/share.js?v=c2dd30b",
-  "./src/shops.js": "./src/shops.js?v=c2dd30b",
-  "./src/sim.js": "./src/sim.js?v=c2dd30b",
-  "./src/skeletons.js": "./src/skeletons.js?v=c2dd30b",
-  "./src/store.js": "./src/store.js?v=c2dd30b",
-  "./src/tarot.js": "./src/tarot.js?v=c2dd30b",
-  "./src/tiles.js": "./src/tiles.js?v=c2dd30b",
-  "./src/venues.js": "./src/venues.js?v=c2dd30b"
+  "./src/bio.js": "./src/bio.js?v=37b178b",
+  "./src/cards.js": "./src/cards.js?v=37b178b",
+  "./src/city.js": "./src/city.js?v=37b178b",
+  "./src/dice.js": "./src/dice.js?v=37b178b",
+  "./src/districts.js": "./src/districts.js?v=37b178b",
+  "./src/game.js": "./src/game.js?v=37b178b",
+  "./src/gen.js": "./src/gen.js?v=37b178b",
+  "./src/geo.js": "./src/geo.js?v=37b178b",
+  "./src/graph.js": "./src/graph.js?v=37b178b",
+  "./src/hosts.js": "./src/hosts.js?v=37b178b",
+  "./src/hunters.js": "./src/hunters.js?v=37b178b",
+  "./src/landmarks.js": "./src/landmarks.js?v=37b178b",
+  "./src/main.js": "./src/main.js?v=37b178b",
+  "./src/poker.js": "./src/poker.js?v=37b178b",
+  "./src/post.js": "./src/post.js?v=37b178b",
+  "./src/quests.js": "./src/quests.js?v=37b178b",
+  "./src/rules.js": "./src/rules.js?v=37b178b",
+  "./src/share.js": "./src/share.js?v=37b178b",
+  "./src/shops.js": "./src/shops.js?v=37b178b",
+  "./src/sim.js": "./src/sim.js?v=37b178b",
+  "./src/skeletons.js": "./src/skeletons.js?v=37b178b",
+  "./src/store.js": "./src/store.js?v=37b178b",
+  "./src/tarot.js": "./src/tarot.js?v=37b178b",
+  "./src/tiles.js": "./src/tiles.js?v=37b178b",
+  "./src/venues.js": "./src/venues.js?v=37b178b"
 } }
 </script>
 <script src="config.js"></script>
@@ -52,7 +55,7 @@
   <div class="tBtns">
     <button class="tbtn" data-drawer="places">🎃 Места</button>
     <button class="tbtn" data-drawer="events">🎟 Афиша</button>
-    <button class="tbtn" data-drawer="board">★ Лидеры</button>
+    <button class="tbtn" data-drawer="board">🏆 Лидеры</button>
     <button class="tbtn" data-drawer="legend">🗺 Карта</button>
   </div>
   <button id="compass" title="повернуть на север"><span id="compassArrow">▲</span><small>N</small></button>
@@ -86,6 +89,7 @@
     <div class="lg"><i class="chip" style="background:#ff8a2a"></i><b>Тыква</b> над крышей — бар, паб или клуб из OpenStreetMap. С жёлтым свечением — площадка с афишей. Зайди своим скелетом: щит 🎃 на 20 секунд.</div>
     <div class="lg"><i class="chip" style="background:#ff5fa2"></i><b>Вешалка</b> — магазин одежды. Случайная вещь за монеты 🪙.</div>
     <div class="lg"><i class="chip" style="background:#4df21e"></i><b>Зелёный дом с лучом</b> — здесь спрятан аркан таро. Подойди и открой карту.</div>
+    <div class="lg"><i class="chip" style="background:#fff8e7"></i><b>Карта над головой</b> — босс часа из рейтинга: клик, «сразиться», XP по старшинству; пять карт за час — покерный бонус, жетон и новый слот скелета.</div>
     <div class="lg"><i class="chip" style="background:#ffd23a"></i><b>Конфеты и монетки</b> лежат на дорогах вокруг тебя: конфета лечит ❤, монетка идёт в кошелёк.</div>
     <div class="lg"><i class="chip" style="background:#9dff7a"></i><b>Зелёный призрак</b> — скелет, проигравший тебе «гадость».</div>
     <div class="lg"><i class="chip" style="background:#5a2a0e"></i><b>Коричневое кольцо</b> — площадь, где скелеты танцуют.</div>
@@ -107,7 +111,7 @@
         <label class="f">костюм <select id="mArch"></select></label>
         <label class="f">о себе <textarea id="mAbout" maxlength="240" rows="2" placeholder="пару слов о скелете (необязательно)"></textarea></label>
         <div class="btns"><button type="button" id="bGen" class="gen">🎲 нагенерить</button><button type="button" id="bReroll">другой костюм</button><button type="submit" class="green" id="mSubmit">запустить на карту</button></div>
-        <div class="hint" id="mnLimit" hidden>уже пять скелетов — это максимум. Удали одного в его профиле, чтобы завести нового.</div>
+        <div class="hint" id="mnLimit" hidden>слоты заняты: новый слот даёт собранная рука из пяти карт часа. Упокоенные скелеты слот не занимают.</div>
       </form>
     </div>
     <div class="hint">скелет сохраняется в этом браузере и появится при следующем открытии. Пока ты им не управляешь, он гуляет сам. Всего можно завести пять.</div>
@@ -138,7 +142,7 @@
     <div class="line muted" id="cStatus"></div>
     <div class="line muted" id="cState"></div>
     <div id="cGame"></div>
-    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bPlay" hidden>играть за него</button><button id="bProfile" hidden>подробнее</button><button id="bFollow">следить</button><button id="bClose">закрыть</button></div>
+    <div class="cardBtns"><button id="bSelect" hidden>управлять</button><button id="bPlay" hidden>играть за него</button><button id="bProfile" hidden>подробнее</button><button id="bFight" hidden>⚔ сразиться</button><button id="bFollow">следить</button><button id="bClose">закрыть</button></div>
   </div>
 </div>
 <div id="tip" hidden></div>
@@ -235,6 +239,6 @@
 </div>
 
 <div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
-<script type="module" src="src/main.js?v=c2dd30b"></script>
+<script type="module" src="src/main.js?v=37b178b"></script>
 </body>
 </html>

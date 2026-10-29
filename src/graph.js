@@ -1,6 +1,8 @@
 // Граф пешеходной сети из OSM без three.js: узлы и рёбра, сетка для поиска ближайших, BFS для коротких прогулок,
 // A* для игрока, точка на ребре, ближайшее ребро и улица, план маршрута без побочных эффектов. Гоняется тестами в node.
 
+import { ROAD } from './rules.js';
+
 export class Heap {
   constructor() { this.k = []; this.v = []; }
   get size() { return this.k.length; }
@@ -21,7 +23,7 @@ export class Graph {
         if (r.n && !this.names[n]) this.names[n] = r.n;
         if (prev >= 0 && prev !== n) {
           const len = Math.hypot(this.x[n] - this.x[prev], this.z[n] - this.z[prev]);
-          if (len > 0.05) { this.adj[prev].push({ to: n, len }); this.adj[n].push({ to: prev, len }); }
+          if (len > 0.05) { const major = r.k === 'major'; this.adj[prev].push({ to: n, len, major }); this.adj[n].push({ to: prev, len, major }); } // проезжая часть помечена: толпа её избегает, игрок на ней быстрее
         }
         prev = n;
       }
@@ -73,18 +75,26 @@ export class Graph {
     return out;
   }
   // поиск в ширину для коротких прогулок до бара
-  path(from, to, maxHops = 110) {
+  // с { crowd: true } первый проход без рёбер проезжей части (толпа держится тротуаров), при неудаче — обычный
+  path(from, to, maxHops = 110, { crowd = false } = {}) {
     if (from === to) return [];
-    const prev = new Map([[from, -1]]); let frontier = [from];
-    for (let h = 0; h < maxHops && frontier.length; h++) {
-      const next = [];
-      for (const u of frontier) for (const e of this.adj[u]) if (!prev.has(e.to)) { prev.set(e.to, u); if (e.to === to) { const p = []; let c = to; while (c !== from) { p.push(c); c = prev.get(c); } return p.reverse(); } next.push(e.to); }
-      frontier = next;
-    }
-    return null;
+    const bfs = skipMajor => {
+      const prev = new Map([[from, -1]]); let frontier = [from];
+      for (let h = 0; h < maxHops && frontier.length; h++) {
+        const next = [];
+        for (const u of frontier) for (const e of this.adj[u]) { if (skipMajor && e.major) continue; if (!prev.has(e.to)) { prev.set(e.to, u); if (e.to === to) { const p = []; let c = to; while (c !== from) { p.push(c); c = prev.get(c); } return p.reverse(); } next.push(e.to); } }
+        frontier = next;
+      }
+      return null;
+    };
+    return (crowd && bfs(true)) || bfs(false);
   }
+  // ребро между соседями — проезжая часть? и все ли рёбра узла — проезжая часть (карту часа на такой узел не ставят)
+  isMajor(from, to) { const e = this.adj[from].find(e => e.to === to); return !!(e && e.major); }
+  allMajor(node) { const l = this.adj[node]; return l.length > 0 && l.every(e => e.major); }
   // A* для игрока: любой конец города
-  route(from, to, maxExpand = 450000) {
+  // с { crowd: true } цена ребра проезжей части умножается на ROAD.crowdCost: прохожие выходят на дорогу, только когда иначе не пройти
+  route(from, to, { maxExpand = 450000, crowd = false } = {}) {
     if (from === to) return { nodes: [], cost: 0 };
     const gen = ++this.gen, dist = this.dist, stamp = this.stamp, closed = this.closed, prev = this.prevN;
     const tx = this.x[to], tz = this.z[to]; const h = i => Math.hypot(this.x[i] - tx, this.z[i] - tz);
@@ -96,9 +106,38 @@ export class Graph {
       if (closed[u] === gen) continue; closed[u] = gen;
       if (++expanded > maxExpand) return null;
       const du = dist[u];
-      for (const e of this.adj[u]) { const nd = du + e.len; if (stamp[e.to] !== gen || nd < dist[e.to]) { stamp[e.to] = gen; dist[e.to] = nd; prev[e.to] = u; heap.push(nd + h(e.to), e.to); } }
+      for (const e of this.adj[u]) { const nd = du + e.len * (crowd && e.major ? ROAD.crowdCost : 1); if (stamp[e.to] !== gen || nd < dist[e.to]) { stamp[e.to] = gen; dist[e.to] = nd; prev[e.to] = u; heap.push(nd + h(e.to), e.to); } }
     }
     return null;
+  }
+  // кольцо: узлы с ценой пути от node в [minCost, maxCost], без самого старта (ограниченный Дейкстра на тех же массивах, что route)
+  ring(node, minCost, maxCost) {
+    const gen = ++this.gen, dist = this.dist, stamp = this.stamp, closed = this.closed; const out = [];
+    const heap = new Heap(); dist[node] = 0; stamp[node] = gen; heap.push(0, node);
+    while (heap.size) {
+      const u = heap.pop(); if (closed[u] === gen) continue; closed[u] = gen;
+      const du = dist[u]; if (du > maxCost) break;
+      if (u !== node && du >= minCost) out.push(u);
+      for (const e of this.adj[u]) { const nd = du + e.len; if (nd > maxCost) continue; if (stamp[e.to] !== gen || nd < dist[e.to]) { stamp[e.to] = gen; dist[e.to] = nd; heap.push(nd, e.to); } }
+    }
+    return out;
+  }
+  // n узлов из кандидатов попарно не ближе spacing (перемешаны rng); при нехватке добор ближайшими к (fx, fz) проходимыми узлами
+  // вне списка с тем же разбросом, в самом конце — без условия: рука всегда из n карт
+  pickSpaced(nodes, n, spacing, rng, fx, fz) {
+    const pool = nodes.slice(); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const out = []; const far = c => out.every(p => Math.hypot(this.x[p] - this.x[c], this.z[p] - this.z[c]) >= spacing);
+    for (const c of pool) { if (out.length >= n) break; if (far(c)) out.push(c); }
+    if (out.length < n) {
+      const inList = new Set(nodes); const seen = new Set(out);
+      for (let R = 200; out.length < n && R <= 1e5; R *= 2) {
+        const near = this.within(fx, fz, R).filter(c => !inList.has(c) && !seen.has(c)).sort((a, b) => (this.x[a] - fx) ** 2 + (this.z[a] - fz) ** 2 - (this.x[b] - fx) ** 2 - (this.z[b] - fz) ** 2);
+        for (const c of near) { if (out.length >= n) break; if (far(c)) { out.push(c); seen.add(c); } }
+        if (out.length < n && near.length && R >= 1600) for (const c of near) { if (out.length >= n) break; if (!seen.has(c)) { out.push(c); seen.add(c); } }
+        if (this.within(fx, fz, R).length >= this.walkable.length) break;
+      }
+    }
+    return out;
   }
 
   // точка на ребре у узла node, ближайшая к (x, z): { to, t } или null, если цель по сути в самом узле.

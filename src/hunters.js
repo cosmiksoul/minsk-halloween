@@ -137,7 +137,7 @@ export class Hunters {
     if (half) { const n = g.nearest((g.x[cem.node] + p.x) / 2, (g.z[cem.node] + p.z) / 2, 600); if (n >= 0) node = n; }
     const rng = this.rng; const street = g.names[cem.node] || '';
     const named = !bare(cem.name);
-    const guests = sim.agents.filter(x => x.custom && x.def && x.def.remote && !x.def.hunter && !x.def.raided && !x.def.dead && x !== p && !x.ghost);
+    const guests = sim.agents.filter(x => x.custom && x.def && x.def.remote && !x.def.hunter && !x.def.boss && !x.def.raided && !x.def.dead && x !== p && !x.ghost);
     let a = null, owner = null;
     if (guests.length) {
       const w = guests.map(x => 1 + (x.def.score || 0) / 10); let r = rng() * w.reduce((s, v) => s + v, 0);
