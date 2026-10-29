@@ -1,7 +1,7 @@
 // Охотники: чужие скелеты из базы (а без базы или когда гости кончились — упыри) выходят с кладбищ по шкале
 // угрозы и идут к управляемому скелету как ведомые агенты (sim.drive), без желаний толпы. При контакте дуэль
 // в game.duel, после стычки уходят к своему кладбищу и исчезают. Все числа в rules.js.
-import { LEVELS, PURSUIT, HEAT, levelOf, decayed, hunterBonus, intentOf, pickCemetery, canReset } from './rules.js';
+import { LEVELS, PURSUIT, HEAT, levelOf, decayed, hunterBonus, intentOf, pickCemetery } from './rules.js';
 import { makeRng, pickArchetype, makeBio, LINES, pick } from './bio.js';
 import { deviceId } from './store.js';
 
@@ -35,7 +35,6 @@ export class Hunters {
     const wall = Number(g.heatWall) || Date.now();
     g.heat = decayed(g.heat, (Date.now() - wall) / 1000); g.heatWall = Date.now();
     if (!Number.isFinite(g.heatAt) || g.heatAt > this.sim.time) g.heatAt = this.sim.time - HEAT.idleAfter;
-    if (!Number.isFinite(g.resetAt) || g.resetAt > this.sim.time) g.resetAt = -1e9;
   }
   // прирост угрозы: только при управляемом скелете; «минута» не трогает heatAt, чтобы ходьба не останавливала спад
   gain(kind) {
@@ -51,8 +50,8 @@ export class Hunters {
     const g = this.game.g, p = this.game.player; if (!g || !p || !this.controlled) return false;
     const active = this.hunters.filter(h => h.state !== 'leave');
     if (!(g.heat > 0) && !active.length) return false;
-    if (kind === 'venue' && !canReset(g, this.sim.time)) return false;
-    g.heat = 0; g.heatAt = this.sim.time; g.resetAt = this.sim.time; g.heatWall = Date.now();
+    if (kind === 'venue' && this.sim.time - (this.lastResetAt ?? -1e9) < 180) return false; // откат до задачи 4 живёт в памяти
+    g.heat = 0; g.heatAt = this.sim.time; this.lastResetAt = this.sim.time; g.heatWall = Date.now();
     for (const h of active) { const d = Math.hypot(h.a.x - p.x, h.a.z - p.z); if (kind === 'costume' || d > PURSUIT.seenDist) this.leave(h, 'lost'); else h.stubborn = true; }
     setTimeout(() => this.game.player === p && this.sim.say(p, kind === 'costume' ? '🎭 не узнают' : '🪦 залёг на дно', 'beer', 2.4), 2400);
     this.lastLevel = 0; this.game.renderHUD(); return true;
