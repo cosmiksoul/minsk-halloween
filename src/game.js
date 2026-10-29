@@ -52,7 +52,7 @@ class Candies {
     if (!player) return;
     for (const c of [...this.items]) {
       const d2 = (c.x - player.x) ** 2 + (c.z - player.z) ** 2;
-      if (d2 < Math.max(2.2, H * 0.35) ** 2 && player.state !== 'dead') { const k = c.kind; this.remove(c); onPick(k); }
+      if (d2 < Math.max(3, H * 0.45) ** 2 && player.state !== 'dead') { const k = c.kind; this.remove(c); onPick(k); }
       else if (d2 > 1200 * 1200) this.remove(c);
     }
     let guard = 6; while (this.items.length < CANDY_N && guard-- > 0) this.spawnOne(player.x, player.z);
@@ -163,7 +163,9 @@ export class Game {
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
     // клик рядом с меткой арканы ведёт точно в точку подбора: иначе соседний узел в 20 м оставляет карту неподобранной
     if (this.tarot) { let best = null, bd = 25 * 25; for (const it of this.tarot.items) { if (it.done || it.node < 0) continue; const d = (it.nx - x) ** 2 + (it.nz - z) ** 2; if (d < bd) { bd = d; best = it; } } if (best) { x = best.nx; z = best.nz; } }
-    if (this.sim.moveTo(this.player, x, z)) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
+    // клик рядом с конфетой или монетой ведёт точно в её точку: радиус подбора меньше погрешности клика
+    if (this.candies) { let best = null, bd = 12 * 12; for (const c of this.candies.items) { const d = (c.x - x) ** 2 + (c.z - z) ** 2; if (d < bd) { bd = d; best = c; } } if (best) { x = best.x; z = best.z; } }
+    if (this.sim.moveTo(this.player, x, z, { cut: true })) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
     this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
   clickAgent(a) {
@@ -178,14 +180,14 @@ export class Game {
     if (this.modal === 'host') this.closeHost();
     if (!this.selected || !this.player || this.busy || v.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.closeDialog();
-    if (this.sim.moveTo(this.player, this.sim.graph.x[v.node], this.sim.graph.z[v.node])) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, this.sim.graph.x[v.node], this.sim.graph.z[v.node], { cut: true })) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   clickShop(sh) {
     if (this.modal === 'host') this.closeHost();
     if (!this.selected || !this.player || this.busy || sh.node < 0 || this.player.state === 'dead') return false;
     this.dropPending(); this.pendingVenue = null; this.closeDialog();
-    if (this.sim.moveTo(this.player, this.sim.graph.x[sh.node], this.sim.graph.z[sh.node])) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
+    if (this.sim.moveTo(this.player, this.sim.graph.x[sh.node], this.sim.graph.z[sh.node], { cut: true })) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   // --- диалог «сладость или гадость»
@@ -205,7 +207,7 @@ export class Game {
     this.sim.wait(npc, this.player, Math.min(150, 30 + dist / 2.5));
     this.pending = { npc, action, tries: 0 }; this.pendingVenue = null;
     if (!this.inReach(npc)) {
-      if (!this.sim.moveTo(this.player, npc.x, npc.z)) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; }
+      if (!this.sim.moveTo(this.player, npc.x, npc.z, { cut: true })) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; }
       else this.sim.wait(npc, this.player, Math.min(240, 30 + (this.player.routeCost || dist) / 3)); // ждёт по длине дороги, а не по прямой
     }
   }
@@ -220,7 +222,7 @@ export class Game {
     if (sh && this.pendingShop === sh) this.offerGame(sh, 'shop', () => this.openShop(sh)); // случайный проход через узел магазина меню не открывает
     this.pendingShop = null;
     const p = this.pending;
-    if (p && !p.rolling && !this.inReach(p.npc)) { if (p.tries++ < 3 && p.npc.state === 'wait') this.sim.moveTo(this.player, p.npc.x, p.npc.z); else { this.sim.release(p.npc); this.pending = null; this.sim.say(this.player, 'ушёл…', 'boo', 1.4); } }
+    if (p && !p.rolling && !this.inReach(p.npc)) { if (p.tries++ < 3 && p.npc.state === 'wait') this.sim.moveTo(this.player, p.npc.x, p.npc.z, { cut: true }); else { this.sim.release(p.npc); this.pending = null; this.sim.say(this.player, 'ушёл…', 'boo', 1.4); } }
   }
   // --- заведения: первое посещение под управлением даёт очко (множество seenVenues); щиты и сброс розыска теперь в игре с хозяином
   visit(v) {
@@ -279,10 +281,11 @@ export class Game {
       let id = randomItem(kk, p.rng); for (let i = 0; i < 5 && id === p.costume[kk]; i++) id = randomItem(kk, p.rng);
       const c = { ...p.costume, [kk]: id }; this.sim.recostume(p, c); p.def.costume = c; bonus = CATALOG[kk][id]; bubble = `🛍 ${bonus}`;
     }
+    const lvl0 = this.hunters ? this.hunters.level : 0; // уровень до сброса розыска: лишний охотник приходит прежней силы
     const amount = resetAmount(kind, won); if (this.hunters) this.hunters.resetAtVenue(amount);
     if (!won) {
       this.tipsyUntil = this.sim.time + RPS.tipsy.sec;
-      if (kind === 'shop') { const wasSeen = this.seenActive(); this.seenUntil = this.sim.time + RPS.seen.sec; if (!wasSeen && this.hunters) this.hunters.extra(); } // повтор продлевает срок, второго лишнего не зовёт
+      if (kind === 'shop') { const wasSeen = this.seenActive(); this.seenUntil = this.sim.time + RPS.seen.sec; if (!wasSeen && this.hunters) this.hunters.extra(lvl0); } // повтор продлевает срок, второго лишнего не зовёт
     }
     g.hosts[key] = h.host.fav; this.lastPlay.set(key, this.sim.time);
     this.log('rps', { place: place.name, venueKind: kind, host: h.host.name, hostGender: h.host.gender, mine, theirs, won, bonus, reset: amount });
