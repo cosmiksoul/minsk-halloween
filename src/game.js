@@ -76,8 +76,8 @@ export class Game {
     $('shClose').onclick = () => { if (this.modal === 'shop') this.setModal(null); this.shopAt = null; };
     $('shopBtns').onclick = e => { const b = e.target.closest('button[data-kind]'); if (b) this.buy(b.dataset.kind); };
     $('shopFree').onclick = e => { const b = e.target.closest('button[data-off]'); if (b) this.takeOff(b.dataset.off); };
-    $('tClose').onclick = () => this.closeTarot(); $('tDeck').onclick = () => { this.closeTarot(); this.openDeck(); }; $('dClose').onclick = () => { if (this.modal === 'deck') this.setModal(null); };
-    $('dGrid').onclick = e => { const el = e.target.closest('.slot.on'); if (el) this.showTarot(ARCANA_BY_ID[el.dataset.id], false); };
+    $('tClose').onclick = () => this.closeTarot(); $('tDeck').onclick = () => { this.closeTarot(); this.openDeck(this.deckG || this.g); }; $('dClose').onclick = () => { if (this.modal === 'deck') this.setModal(null); };
+    $('dGrid').onclick = e => { const el = e.target.closest('.slot.on'); if (el) this.showTarot(ARCANA_BY_ID[el.dataset.id], false, this.deckG || this.g); };
     drawCardBack($('tBackCv'));
     this.hudAcc = 0;
     $('askSweet').onclick = () => this.choose('friend'); $('askTrick').onclick = () => this.choose('kill'); $('askNo').onclick = () => this.closeDialog();
@@ -517,25 +517,26 @@ export class Game {
   collect(it) {
     const g = this.g; if (!g || it.done || this.busy || !this.player) return;
     if (g.tarot.some(t => t.id === it.a.id)) { this.tarot.markDone(it.a.id); return; }
-    g.tarot.push({ id: it.a.id, at: clock() }); this.tarot.markDone(it.a.id);
+    g.tarot.push({ id: it.a.id, at: new Date().toISOString() }); this.tarot.markDone(it.a.id); // дата и время находки; старые записи «ЧЧ:ММ» fmtAt показывает как есть
     this.points(POINTS.tarot); this.log('tarot', { id: it.a.id, name: it.a.name }); this.hunters?.gain('tarot');
     this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name} · XP +${POINTS.tarot}`, 'music', 3);
     this.save(); this.renderHUD(); this.o.showCard(this.player, true);
     // на автопилоте карта ложится в колоду молча: модалка посреди чужих дел только мешает
     if (!this.player.auto) this.showTarot(it.a, true);
   }
-  showTarot(a, isNew) {
+  // карта с текстами от прогресса любого своего скелета (g): из профиля и журнала открывается не только у текущего игрока
+  showTarot(a, isNew, g = this.g) {
     this.setModal('tarot'); const inner = $('tInner');
     drawArcana(a.id, $('tCv'));
-    const rec = this.g && this.g.tarot.find(t => t.id === a.id);
-    $('tKicker').textContent = isNew ? 'новая аркана!' : rec ? `найдена в ${rec.at}` : 'аркана';
+    const rec = g && Array.isArray(g.tarot) && g.tarot.find(t => t.id === a.id);
+    $('tKicker').textContent = isNew ? 'новая аркана!' : rec ? `найдена ${fmtAt(rec.at)}` : 'аркана';
     $('tName').textContent = `${a.roman} · ${a.name}`; $('tPlace').textContent = a.place; $('tWhy').textContent = a.why; $('tLegend').textContent = a.legend;
     inner.classList.remove('flipped');
     if (isNew) { setTimeout(() => inner.classList.add('flipped'), 120); } else inner.classList.add('flipped');
   }
   closeTarot() { if (this.modal === 'tarot') this.setModal(null); }
-  openDeck() {
-    const g = this.g; const have = new Set(g ? g.tarot.map(t => t.id) : []);
+  openDeck(g = this.g) {
+    this.deckG = g; const have = new Set(g && Array.isArray(g.tarot) ? g.tarot.map(t => t.id) : []); // колода того скелета, чей профиль открыт
     $('dCount').textContent = `${have.size}/${ARCANA.length}`;
     $('dGrid').innerHTML = ARCANA.map(a => have.has(a.id) ? `<div class="slot on" data-id="${a.id}"><canvas width="40" height="60"></canvas><div class="sn">${a.roman} ${esc(a.name)}</div></div>` : `<div class="slot"><canvas width="40" height="60"></canvas><div class="sn">${a.roman} · ?</div><div class="sp">${esc(a.place)}</div></div>`).join('');
     const cvs = $('dGrid').querySelectorAll('.slot canvas'); ARCANA.forEach((a, i) => { if (have.has(a.id)) drawArcana(a.id, cvs[i]); else drawCardBack(cvs[i]); });
@@ -614,7 +615,7 @@ export class Game {
     hud.innerHTML = `<div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
       <div class="hudRow">${this.hearts(g)}${'<span class="sh" title="щит: примет одну рану или укус">🎃</span>'.repeat(Math.max(0, g.shields | 0))}</div>
       <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">XP ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
-      <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span><span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span><span class="cn">🪙 ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">🎟 ${g.tokens | 0}</span>${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
+      <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span><button class="deck tc" title="арканы: открыть колоду">🃏 ${g.tarot.length}/${ARCANA.length}</button><span class="cn">🪙 ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">🎟 ${g.tokens | 0}</span>${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
   }
@@ -647,7 +648,7 @@ export class Game {
       <div class="line">хвост: <span class="tl">💚 ${g.tail.length}/${CAPS.tail}</span>${g.tail.length ? ' <span class="muted">· ' + g.tail.map(f => esc(firstName(f.name))).join(', ') + '</span>' : ''}</div>
       <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
       <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>
-      <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.slice(-8).map(t => esc(ARCANA_BY_ID[t.id].roman)).join(' ') : ''}</div>
+      <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.map(t => { const a = ARCANA_BY_ID[t.id]; return a ? `<span class="arc" data-arc="${a.id}" title="открыть карту">${a.roman} ${esc(a.name)}</span>` : ''; }).join(' ') : ''}</div>
       <div class="line">монеты: <span class="cn">🪙 ${g.coins}</span> · спас-броски: <span class="tk">🎟 ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
       <div class="line muted">заведений: ${g.seenVenues.length} · щиты: 🎃 ${g.shields | 0}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
   }

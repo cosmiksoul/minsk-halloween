@@ -286,3 +286,7 @@ body.drawerOpen #card { left:344px; }
 
 /* значок проезжей части у шкалы розыска */
 #hud .road { margin-left: 4px; filter: drop-shadow(0 0 3px #ffd23a); }
+
+/* арканы из HUD и профиля: кнопка-счётчик на панели и фишки собранных карт */
+#hud button.deck { background:none; border:0; padding:0; margin:0; color:inherit; font:inherit; cursor:pointer; } #hud button.deck:hover { text-decoration:underline; }
+.arc { display:inline-block; margin:1px 4px 1px 0; padding:0 6px; border-radius:8px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); cursor:pointer; white-space:nowrap; } .arc:hover { background:rgba(255,255,255,.18); }

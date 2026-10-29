@@ -14,7 +14,7 @@ import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } f
 import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
-import { Tarot } from './tarot.js';
+import { Tarot, ARCANA_BY_ID } from './tarot.js';
 import { Shops } from './shops.js';
 import { generateCharacter } from './gen.js';
 import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
@@ -174,6 +174,7 @@ function takeControl(a) {
   game.select(true); showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on'); renderMine();
 }
 $('hud').onclick = e => {
+  if (e.target.closest('.deck')) { game.openDeck(); return; } // 🃏 на панели открывает колоду без взятия управления
   if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
   const av = e.target.closest('canvas.av'); if (av) { const o = own().find(x => String(x.def.seed) === av.dataset.seed); if (o) takeControl(o.agent); return; }
   if (game.player) takeControl(game.player);
@@ -228,7 +229,7 @@ function renderProfile(a) {
   $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
   $('pfSelect').hidden = !ownAgent || !!a.def.dead || (a === game.player && game.selected); $('pfPlay').hidden = true;
-  $('pfDeck').hidden = !(ownAgent && a === game.player); $('pfShare').hidden = !(ownAgent && a === game.player);
+  $('pfDeck').hidden = !ownAgent; $('pfShare').hidden = !(ownAgent && a === game.player);
   $('pfDelete').hidden = !ownAgent;
   renderLog();
 }
@@ -264,16 +265,17 @@ function renderLog() {
   const a = journalAgent(); const box = $('journal');
   if (!a || !a.def.game || a.def.guest) { box.hidden = true; box.innerHTML = ''; return; }
   const g = migrate(a.def.game); const fem = a.bio.gender === 'f';
-  const rows = g.log.slice(0, 50).map((e, i) => `<div class="e${e.boss || e.kind === 'raid_beaten' ? ' boss' : ''}${['fail', 'bit', 'death', 'raid_beaten'].includes(e.kind) ? ' bad' : ''}${e.uid ? ' clickable' : ''}" data-i="${i}"><span class="t">${esc(fmtAt(e.at))}</span><span class="ic">${LOG_ICON[e.kind] || '·'}</span><span class="x">${logText(e, fem)}</span></div>`).join('');
+  const rows = g.log.slice(0, 50).map((e, i) => `<div class="e${e.boss || e.kind === 'raid_beaten' ? ' boss' : ''}${['fail', 'bit', 'death', 'raid_beaten'].includes(e.kind) ? ' bad' : ''}${e.uid || (e.kind === 'tarot' && e.id != null) ? ' clickable' : ''}" data-i="${i}"><span class="t">${esc(fmtAt(e.at))}</span><span class="ic">${LOG_ICON[e.kind] || '·'}</span><span class="x">${logText(e, fem)}</span></div>`).join('');
   box.innerHTML = rows ? `<div class="day">журнал · ${g.log.length}</div>${rows}` : '<div class="hint">журнал пуст: иди к прохожим и в заведения</div>'; box.hidden = false;
 }
-$('journal').onclick = e => { const el = e.target.closest('.e'); if (!el) return; const a = journalAgent(); const entry = a && a.def.game && a.def.game.log[+el.dataset.i]; if (!entry || !entry.uid) return; const who = sim.agents.find(x => x.uid === entry.uid); if (who) { closeProfile(); showCard(who); flyTo(who.x, who.z); } };
+$('journal').onclick = e => { const el = e.target.closest('.e'); if (!el) return; const a = journalAgent(); const entry = a && a.def.game && a.def.game.log[+el.dataset.i]; if (!entry) return; if (entry.kind === 'tarot' && entry.id != null) { const ar = ARCANA_BY_ID[entry.id]; if (ar) game.showTarot(ar, false, migrate(a.def.game)); return; } if (!entry.uid) return; const who = sim.agents.find(x => x.uid === entry.uid); if (who) { closeProfile(); showCard(who); flyTo(who.x, who.z); } };
 game.o.onLog = () => { if (!$('profile').hidden) renderLog(); };
 function closeProfile() { $('profile').hidden = true; profileAgent = null; hideTip(); }
 $('pfClose').onclick = closeProfile;
 $('profile').addEventListener('click', e => { if (e.target === $('profile')) closeProfile(); });
 $('pfSelect').onclick = () => { takeControl(profileAgent); closeProfile(); };
-$('pfDeck').onclick = () => { closeProfile(); game.openDeck(); };
+$('pfDeck').onclick = () => { if (!profileAgent) return; closeProfile(); game.openDeck(migrate(profileAgent.def.game)); };
+$('pfGame').addEventListener('click', e => { const el = e.target.closest('.arc'); if (!el || !profileAgent) return; const a = ARCANA_BY_ID[el.dataset.arc]; if (a) game.showTarot(a, false, migrate(profileAgent.def.game)); }); // фишка арканы в профиле открывает карту
 $('pfShare').onclick = () => { closeProfile(); openShare(); };
 $('pfLink').onclick = async () => { const link = shareLink(profileAgent.def); try { await navigator.clipboard.writeText(link); $('pfLink').textContent = 'скопировано'; setTimeout(() => $('pfLink').textContent = '🔗 ссылка', 1500); } catch { prompt('Ссылка на скелета', link); } };
 $('pfDelete').onclick = () => { const a = profileAgent; if (!a) return; if (!confirm(`Удалить скелета ${a.bio.name}?`)) return; if (a === game.player) game.clearPlayer(); mine = mine.filter(d => d !== a.def); saveMine(); if (remote) remote.remove(a.def); sim.remove(a); if (cardAgent === a) $('card').hidden = true; closeProfile(); renderMine(); pickPlayer(); };
