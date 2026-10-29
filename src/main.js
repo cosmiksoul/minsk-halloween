@@ -8,10 +8,10 @@ import { drawPortrait, randomCostume } from './skeletons.js';
 import { ageWord, ARCHETYPES, makeRng } from './bio.js';
 import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
-import { Game } from './game.js';
+import { Game, fmtAt } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, migrate, logPush } from './rules.js';
-import { Hunters } from './hunters.js';
+import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
 import { Shops } from './shops.js';
@@ -223,8 +223,43 @@ function renderProfile(a) {
   $('pfSelect').hidden = !ownAgent || (a === game.player && game.selected); $('pfPlay').hidden = true;
   $('pfDeck').hidden = !(ownAgent && a === game.player); $('pfShare').hidden = !(ownAgent && a === game.player);
   $('pfDelete').hidden = !ownAgent;
+  renderLog();
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
+// --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
+const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠' };
+function logText(e, fem) {
+  const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
+  const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
+  const rr = Array.isArray(e.rolls) && e.rolls.length >= 3 ? `, ${e.rolls[0]}${e.rolls[1] ? '+' + e.rolls[1] : ''} против ${e.rolls[2]}` : '';
+  switch (e.kind) {
+    case 'kill': return `убил${v('', 'а')} ${nm}, d20 ${e.roll ?? '?'}`;
+    case 'friend': return `подружил${v('ся', 'ась')} с ${nm}` + (e.inTail === false ? ' · машет из толпы' : '');
+    case 'fail': return `провалил${v('', 'а')} ${e.action === 'kill' ? 'гадость' : 'сладость'} с ${nm}, d20 ${e.roll ?? '?'}`;
+    case 'spawn': return `с ${e.cem ? esc(genitiveCem(e.cem)) : 'кладбища'} вылез${his} ${nm}`;
+    case 'bit': return `${nm} укусил${his}, ${vs}`;
+    case 'win': return `побил${v('', 'а')} ${nm}, ${e.boss ? 'босс-' : ''}${e.intent === 'kill' ? 'череп' : 'сердечко'}, ${vs}`;
+    case 'lost': return `${nm} потерял${his} след`;
+    case 'raid_bit': return `твой скелет укусил ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
+    case 'raid_beaten': return `${nm} побил${his} твоего скелета${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
+    case 'raid_lost': return `твой скелет потерял ${nm}${e.place ? ' · ' + esc(e.place) : ''}`;
+    case 'tarot': return `аркана ${nm}`;
+    case 'visit': return `заведение ${nm}`;
+    case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
+    case 'death': return `рассыпал${v('ся', 'ась')}`;
+    default: return esc(e.kind);
+  }
+}
+const journalAgent = () => profileAgent && !profileAgent.def.guest ? profileAgent : game.player;
+function renderLog() {
+  const a = journalAgent(); const box = $('journal');
+  if (!a || !a.def.game || a.def.guest) { box.hidden = true; box.innerHTML = ''; return; }
+  const g = migrate(a.def.game); const fem = a.bio.gender === 'f';
+  const rows = g.log.slice(0, 50).map((e, i) => `<div class="e${e.boss || e.kind === 'raid_beaten' ? ' boss' : ''}${['fail', 'bit', 'death', 'raid_beaten'].includes(e.kind) ? ' bad' : ''}${e.uid ? ' clickable' : ''}" data-i="${i}"><span class="t">${esc(fmtAt(e.at))}</span><span class="ic">${LOG_ICON[e.kind] || '·'}</span><span class="x">${logText(e, fem)}</span></div>`).join('');
+  box.innerHTML = rows ? `<div class="day">журнал · ${g.log.length}</div>${rows}` : '<div class="hint">журнал пуст: иди к прохожим и в заведения</div>'; box.hidden = false;
+}
+$('journal').onclick = e => { const el = e.target.closest('.e'); if (!el) return; const a = journalAgent(); const entry = a && a.def.game && a.def.game.log[+el.dataset.i]; if (!entry || !entry.uid) return; const who = sim.agents.find(x => x.uid === entry.uid); if (who) { closeProfile(); showCard(who); flyTo(who.x, who.z); } };
+game.o.onLog = () => { if (!$('profile').hidden) renderLog(); };
 function closeProfile() { $('profile').hidden = true; profileAgent = null; hideTip(); }
 $('pfClose').onclick = closeProfile;
 $('profile').addEventListener('click', e => { if (e.target === $('profile')) closeProfile(); });
