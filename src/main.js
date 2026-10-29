@@ -175,8 +175,22 @@ function openDrawer(name) {
   for (const id of ['places', 'events', 'board', 'legend', 'quests']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id;
   for (const b of document.querySelectorAll('.tbtn')) b.classList.toggle('on', b.dataset.drawer === name);
   document.body.classList.add('drawerOpen'); placeDrawer();
-  if (name === 'places') renderPlaces(); if (name === 'board') renderBoard(true); if (name === 'quests') renderQuests(true);
+  if (name === 'places') renderPlaces(); if (name === 'board') renderBoard(true); if (name === 'quests') renderQuests(true); if (name === 'legend') renderChestList();
 }
+// полоса статистики внизу: весь город при текущей плотности, в кадре, встречи, пиво, танцы — с падежами
+const pluralOf = (n, f) => { const a = Math.abs(n) % 100, b = a % 10; return f[a > 10 && a < 20 ? 2 : b > 1 && b < 5 ? 1 : b === 1 ? 0 : 2]; };
+function renderStats() {
+  const st = sim.stats, pot = sim.potential();
+  $('stats').innerHTML = `в городе ≈ <b class="city">${pot.toLocaleString('ru-RU')}</b> ${pluralOf(pot, ['скелет', 'скелета', 'скелетов'])} · в кадре <b>${sim.agents.length}</b> · <b>${st.meetings}</b> ${pluralOf(st.meetings, ['встреча', 'встречи', 'встреч'])} · <b>${st.beers}</b> пива · <b>${st.dances}</b> ${pluralOf(st.dances, ['танец', 'танца', 'танцев'])}`;
+}
+// список сундуков в легенде: по близости к центру кадра, открытые в этом часу — галочкой; клик летит к сундуку
+function renderChestList() {
+  const el = $('chestList'); if (el.hidden) return; const tx = controls.target.x, tz = controls.target.z;
+  const rows = [...game.chests.items].sort((a, b) => ((a.x - tx) ** 2 + (a.z - tz) ** 2) - ((b.x - tx) ** 2 + (b.z - tz) ** 2));
+  el.innerHTML = rows.map(c => `<div class="cl${c.open ? ' open' : ''}" data-x="${c.x.toFixed(1)}" data-z="${c.z.toFixed(1)}"><span>${c.open ? '✓ ' : ''}${esc(c.name)}</span><span class="muted">${fmtDist(Math.hypot(c.x - tx, c.z - tz))}</span></div>`).join('');
+}
+$('lgChests').onclick = () => { const el = $('chestList'); el.hidden = !el.hidden; $('lgChests').textContent = el.hidden ? 'все сундуки ▾' : 'все сундуки ▴'; renderChestList(); };
+$('chestList').onclick = e => { const it = e.target.closest('.cl'); if (it) flyTo(+it.dataset.x, +it.dataset.z); };
 // вкладка квестов: вся цепочка онбординга со статусом — пройдено, текущий (подсвечен), впереди
 let questsKey = '';
 function renderQuests(force = false) {
@@ -218,6 +232,8 @@ function foldHud() { $('hud').classList.add('min'); clearTimeout(hudTimer); }
 $('hud').classList.add('min'); // свёрнута по умолчанию: строка статуса слева сверху
 function updateMbar() {
   if (!isMobile) return;
+  const run = $('mbRun'); run.hidden = !game.selected; // «бег» только под управлением; полоса — запас дыхания
+  if (game.selected) { run.classList.toggle('on', game.sprinting && !game.exhausted); run.classList.toggle('ex', game.exhausted); run.querySelector('.stam').style.width = `calc((100% - 8px) * ${game.stamina.toFixed(2)})`; }
   const act = $('mbAct'); const cardOpen = !$('card').hidden && cardAgent; const fb = $('bFight'), bs = $('bSelect'), bp = $('bPlay'), pg = $('pGo');
   let label = 'создать', ic = 'dice', fn = openMine, dis = false;
   if (cardOpen && !fb.hidden) { label = fb.disabled ? 'отдышись' : 'сразиться'; ic = 'boss'; fn = () => fb.click(); dis = fb.disabled; }
@@ -228,6 +244,10 @@ function updateMbar() {
   const key = ic + '|' + label + '|' + dis; if (act.dataset.key !== key) { act.dataset.key = key; act.innerHTML = icon(ic, 2) + `<small>${label}</small>`; act.disabled = dis; }
   act.onclick = fn;
 }
+// телефон: спринт, пока палец на кнопке «бег» (аналог Shift)
+$('mbRun').innerHTML = icon('run', 2) + '<small>бег</small><i class="stam"></i>';
+$('mbRun').addEventListener('pointerdown', e => { e.preventDefault(); game.sprinting = true; });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('mbRun').addEventListener(ev, () => { game.sprinting = false; });
 $('mbHand').innerHTML = icon('hand', 2) + '<small>рука</small>'; $('mbHand').onclick = () => { const hud = $('hud'); hud.classList.toggle('handOpen'); if (hud.classList.contains('handOpen')) hud.classList.add('min'); };
 $('mbMap').innerHTML = icon('map', 2) + '<small>легенда</small>'; $('mbMap').onclick = () => openDrawer('legend');
 $('mnClose').onclick = () => closeMine();
@@ -684,8 +704,8 @@ function frame() {
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
-  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); if (drawerTab === 'quests') renderQuests(); $('stPop').textContent = sim.agents.length; $('stCity').textContent = sim.potential().toLocaleString('ru-RU'); $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
-  feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
+  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); if (drawerTab === 'quests') renderQuests(); renderStats(); if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
+  feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); if (drawerTab === 'legend') renderChestList(); }
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;
 }
