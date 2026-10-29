@@ -63,6 +63,7 @@ export class Game {
     this.ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.9, depthWrite: false })); this.ring.visible = false; this.ring.position.y = 0.55; scene.add(this.ring);
     this.dest = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false })); this.dest.visible = false; this.dest.position.y = 0.56; scene.add(this.dest); this.destT = 0;
     sim.onArrive = (a, node) => this.onArrive(a, node);
+    sim.onEnter = (a, v) => this.onEnter(a, v);
     this.tarot = opts.tarot || null; this.shops = opts.shops || null; this.pendingShop = null; this.shopAt = null;
     $('shClose').onclick = () => { $('shop').hidden = true; this.shopAt = null; };
     $('shopBtns').onclick = e => { const b = e.target.closest('button[data-kind]'); if (b) this.buy(b.dataset.kind); };
@@ -72,7 +73,13 @@ export class Game {
     drawCardBack($('tBackCv'));
     this.hudAcc = 0;
     $('askSweet').onclick = () => this.choose('friend'); $('askTrick').onclick = () => this.choose('kill'); $('askNo').onclick = () => this.closeDialog();
-    addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeDialog(); if (this.selected) this.select(false); } });
+    addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      // сначала закрываем верхнюю модалку, управление отпускаем только когда ничего не открыто
+      for (const id of ['tarot', 'deck', 'shop', 'share']) if (!$(id).hidden) { $(id).hidden = true; return; }
+      if (!$('ask').hidden) { this.closeDialog(); return; }
+      if (this.selected) this.select(false);
+    });
   }
   get g() { return this.player ? this.player.def.game : null; }
   // сбросить текущую цель броска и отпустить скелета, который её ждал
@@ -100,12 +107,24 @@ export class Game {
     const g = this.g; if (!g) return;
     const byUid = new Map(); for (const a of this.sim.agents) if (a.uid) byUid.set(a.uid, a);
     for (const s of g.skulls) { const a = byUid.get(s.uid); if (a && !a.ghost && a.bio.name === s.name) this.sim.ghostify(a); }
-    for (const f of g.friends) { const a = byUid.get(f.uid); if (a && !a.leader && !a.ghost && a.bio.name === f.name && !a.player) { this.sim.befriend(a, this.player); a.x = this.player.x + (Math.random() - 0.5) * 6; a.z = this.player.z + (Math.random() - 0.5) * 6; } }
+    for (const f of g.friends) {
+      let a = byUid.get(f.uid); if (a && (a.leader || a.ghost || a.player || a.bio.name !== f.name)) a = null;
+      if (!a && f.name && f.arch) a = this.sim.spawnFriend(f, this.player.x, this.player.z);
+      if (a) { this.sim.befriend(a, this.player); a.x = this.player.x + (Math.random() - 0.5) * 6; a.z = this.player.z + (Math.random() - 0.5) * 6; }
+    }
   }
   save() { const g = this.g; if (!g) return; g.x = Math.round(this.player.x); g.z = Math.round(this.player.z); this.o.save(); if (this.o.onChange) this.o.onChange(); }
   select(on) {
-    this.selected = !!on && !!this.player; this.ring.visible = this.selected; this.renderHUD();
-    document.body.classList.toggle('playing', this.selected);
+    if (on && this.player && this.player.state === 'dead') return; // мёртвым не управляют: ждём респауна
+    this.selected = !!on && !!this.player; this.ring.visible = this.selected;
+    if (this.player) { if (!this.selected) this.dropPending(); this.closeDialog(); this.sim.setAuto(this.player, !this.selected); }
+    this.renderHUD(); document.body.classList.toggle('playing', this.selected);
+  }
+  // на автопилоте свой скелет заходит в бары сам: записываем как посещение, но без щита
+  onEnter(a, v) {
+    if (a !== this.player || !a.auto || !v) return; const g = this.g; if (!g) return;
+    g.visits.unshift({ name: v.name, at: clock(), id: v.id, auto: true }); if (g.visits.length > 40) g.visits.length = 40;
+    this.sim.say(a, `🎃 заглянул${a.bio.gender === 'm' ? '' : 'а'} в ${v.name}`, 'beer', 2.4); this.save(); this.renderHUD(); this.o.showCard(a, true);
   }
   // --- клики
   clickGround(x, z) {
@@ -214,7 +233,7 @@ export class Game {
     this.resolve(p.action, npc, res);
   }
   resolve(action, npc, res) {
-    const g = this.g, me = this.player; const info = { uid: npc.uid, name: npc.bio.name, age: npc.bio.age, gender: npc.bio.gender, job: npc.bio.job, arch: npc.arch, at: clock(), street: this.sim.streetOf(npc), roll: res.n };
+    const g = this.g, me = this.player; const info = { uid: npc.uid, name: npc.bio.name, age: npc.bio.age, gender: npc.bio.gender, job: npc.bio.job, arch: npc.arch, ck: npc.ck, at: clock(), street: this.sim.streetOf(npc), roll: res.n };
     if (res.kind === 'critfail') {
       this.sim.release(npc); this.sim.say(npc, pick(npc.rng, LINES.mock), 'boo', 2.4);
       if (action === 'kill' && g.skulls.length) { g.skulls.pop(); this.sim.say(me, '−2 ❤ и −1 💀', 'boo', 2.6); }
@@ -245,7 +264,7 @@ export class Game {
       }
       const now = this.sim.time; const n0 = this.shields.length; this.shields = this.shields.filter(s => s.until > now); if (n0 !== this.shields.length) this.renderHUD();
     }
-    if (this.tarot) this.tarot.update(t, p, Math.max(9, H * 0.9), it => this.collect(it));
+    if (this.tarot) this.tarot.update(t, p, 12, it => this.collect(it));
     this.candies.update(p, H, t, kind => {
       const g = this.g;
       if (kind === 'coin') { g.coins++; this.sim.say(p, '🪙 +1', 'beer', 1.6); }
@@ -260,7 +279,9 @@ export class Game {
     if (g.tarot.some(t => t.id === it.a.id)) { this.tarot.markDone(it.a.id); return; }
     g.tarot.push({ id: it.a.id, at: clock() }); this.tarot.markDone(it.a.id);
     this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name}`, 'music', 3);
-    this.save(); this.renderHUD(); this.o.showCard(this.player, true); this.showTarot(it.a, true);
+    this.save(); this.renderHUD(); this.o.showCard(this.player, true);
+    // на автопилоте карта ложится в колоду молча: модалка посреди чужих дел только мешает
+    if (!this.player.auto) this.showTarot(it.a, true);
   }
   showTarot(a, isNew) {
     const box = $('tarot'); box.hidden = false; const inner = $('tInner');
@@ -327,32 +348,44 @@ export class Game {
   // --- интерфейс
   hearts(g) { let s = ''; for (let i = 0; i < g.maxHp; i++) s += i < g.hp ? '<i class="hp on">♥</i>' : '<i class="hp">♥</i>'; return s; }
   renderHUD() {
-    const hud = $('hud'); const p = this.player;
+    const hud = $('hud'); const p = this.player; const own = this.o.own ? this.o.own() : [];
     if (!p) { hud.innerHTML = `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`; hud.classList.remove('has'); return; }
     const g = this.g; const now = this.sim.time; const sh = this.shields.filter(s => s.until > now);
     hud.classList.add('has');
-    hud.innerHTML = `<div class="hudName">${esc(p.bio.name)}</div>
+    const avatars = own.length > 1 || own.length < 5 ? `<div class="hudOwn">${own.map(o => `<canvas class="av${o.agent === p ? ' cur' : ''}" width="24" height="36" data-seed="${o.def.seed}" title="${esc(o.def.name)}"></canvas>`).join('')}${own.length < 5 ? '<button class="avAdd" title="ещё скелет (до пяти)">+</button>' : ''}</div>` : '';
+    hud.innerHTML = `<div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
       <div class="hudRow">${this.hearts(g)}${sh.map(s => `<span class="sh" title="${esc(s.name)}">🎃<small>${Math.ceil(s.until - now)}</small></span>`).join('')}</div>
       <div class="hudRow"><span class="skc">💀 ${g.skulls.length}</span><span class="frc">💚 ${g.friends.length}</span><span class="vc">🎃 ${g.visits.length}</span><span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span><span class="cn">🪙 ${g.coins}</span>${g.tokens ? `<span class="tk">🎟 ${g.tokens}</span>` : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
-      <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти' : 'клик по своему скелету, чтобы управлять'}</div>`;
+      <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
+    for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
   }
   // блок в карточке скелета
   cardHtml(a) {
     if (a === this.player) {
-      const g = this.g; let id = 0; this.tips = {};
-      const sk = g.skulls.map(s => { const k = 's' + id++; this.tips[k] = `<b>${esc(s.name)}</b><br>${s.age} ${ageWord(s.age)} · ${s.gender === 'm' ? 'мужчина' : 'женщина'}<br>при жизни: ${esc(s.job)}<br>убит в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="sk" data-tip="${k}">💀</span>`; }).join('');
-      const fr = g.friends.map(s => { const k = 'f' + id++; this.tips[k] = `<b>${esc(s.name)}</b><br>${s.age} ${ageWord(s.age)} · ${s.gender === 'm' ? 'мужчина' : 'женщина'}<br>при жизни: ${esc(s.job)}<br>подружились в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="fr" data-tip="${k}">💚</span>`; }).join('');
-      const vis = g.visits.slice(0, 6).map(v => `<div class="vis">${esc(v.at)} · 🎃 ${esc(v.name)}</div>`).join('');
+      const g = this.g;
       return `<div class="gm"><div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span></div>
-        <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
-        <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>
-        <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.slice(-5).map(t => esc(ARCANA_BY_ID[t.id].roman)).join(' ') : ''}</div>
-        <div class="line">монеты: <span class="cn">🪙 ${g.coins}</span> · спас-броски: <span class="tk">🎟 ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
-        <div class="line muted">посещения: ${g.visits.length}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
+        <div class="line"><span class="skc">💀 ${g.skulls.length}</span> · <span class="frc">💚 ${g.friends.length}</span> · <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc">🎃 ${g.visits.length}</span> · <span class="cn">🪙 ${g.coins}</span>${g.tokens ? ` · <span class="tk">🎟 ${g.tokens}</span>` : ''}</div></div>`;
     }
+    if (a.custom && !a.def.guest && a.def.game) { const g = a.def.game; return `<div class="gm"><div class="line muted">💀 ${g.skulls.length} · 💚 ${g.friends.length} · 🃏 ${g.tarot.length}/${ARCANA.length} · 🎃 ${g.visits.length} · гуляет сам</div></div>`; }
     if (a.ghost) { const s = this.g && this.g.skulls.find(x => x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(s.at)}` : ''}</div></div>`; }
     if (this.player && a.leader === this.player) { const f = this.g && this.g.friends.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(f.at)}` : ''} · идёт следом</div></div>`; }
     return '';
+  }
+  // окно профиля своего скелета: статистика, черепа и друзья с подсказками, посещения
+  profileHtml(a) {
+    const g = a.def.game; if (!g) return '<div class="hint">этот скелет ещё не играл</div>';
+    let id = 0; this.tips = {};
+    const who = s => `<b>${esc(s.name)}</b><br>${s.age} ${ageWord(s.age)} · ${s.gender === 'm' ? 'мужчина' : 'женщина'}<br>при жизни: ${esc(s.job)}`;
+    const sk = g.skulls.map(s => { const k = 's' + id++; this.tips[k] = `${who(s)}<br>убит в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="sk" data-tip="${k}">💀</span>`; }).join('');
+    const fr = g.friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>подружились в ${esc(s.at)}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`; return `<span class="fr" data-tip="${k}">💚</span>`; }).join('');
+    const vis = g.visits.slice(0, 10).map(v => `<div class="vis">${esc(v.at)} · 🎃 ${esc(v.name)}${v.auto ? ' <span class="muted">(сам)</span>' : ''}</div>`).join('');
+    return `<div class="pf">
+      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span></div>
+      <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
+      <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>
+      <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.slice(-8).map(t => esc(ARCANA_BY_ID[t.id].roman)).join(' ') : ''}</div>
+      <div class="line">монеты: <span class="cn">🪙 ${g.coins}</span> · спас-броски: <span class="tk">🎟 ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
+      <div class="line muted">посещения: ${g.visits.length}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
   }
   portrait(a, canvas) { if (a.ghost) drawGhostPortrait(canvas); else drawPortrait(a.costume, canvas); }
 }

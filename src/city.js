@@ -2,6 +2,7 @@
 // деревья, тыквы у подъездов, фонари. Каждый тайл — своя группа, которую можно выгрузить.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { fixFor, addRoof, SKIP_NAMES } from './landmarks.js';
 
 const C = {
   ground: 0x261c36, green: 0x26381f, forest: 0x1c2c1a, water: 0x16254e,
@@ -201,20 +202,28 @@ export function buildTile(t, M, seed = 1) {
   for (const r of t.river || []) fb.ribbon(r.p, 26, 0.2, new THREE.Color(C.water));
   const roadGeo = fb.build(); if (roadGeo) group.add(new THREE.Mesh(roadGeo, M.flat));
 
-  const bgeos = []; const skip = M.skip || [], tarot = M.tarot || [];
+  const bgeos = []; const skip = M.skip || [], tarot = M.tarot || []; const named = []; const roofs = [];
   for (const b of t.buildings || []) {
     const bx = b.p[0], bz = b.p[1];
-    if (skip.some(z => (bx - z[0]) ** 2 + (bz - z[1]) ** 2 < z[2] * z[2])) continue; // под особым зданием
+    let cx = 0, cz = 0, nv = 0; for (let i = 0; i < b.p.length - 2; i += 2) { cx += b.p[i]; cz += b.p[i + 1]; nv++; } cx /= nv || 1; cz /= nv || 1;
+    if (skip.some(z => (cx - z[0]) ** 2 + (cz - z[1]) ** 2 < z[2] * z[2])) continue; // под особым зданием
+    if (b.n && SKIP_NAMES.test(b.n)) continue;
     const sh = toShape(b.p, b.holes); if (!sh) continue;
+    // известные здания: поправленная высота и «крыша» (купол, шпиль, башня); храмы получают шпиль
+    const fix0 = b.n ? fixFor(b.n) : null; const fix = fix0 && fix0.maxArea && Math.abs(polyArea(b.p)) > fix0.maxArea ? null : fix0; const h = fix && fix.h ? fix.h : b.h;
+    if (b.n) named.push({ n: b.n, p: b.p, t: b.t, h, cx, cz, info: fix && fix.info ? fix.info : null });
+    if (fix && (fix.roof || fix.dome)) roofs.push([fix, b, cx, cz, h]); else if (b.t === 'church' && b.p.length >= 8) roofs.push([{ roof: 'spire' }, b, cx, cz, h]);
     // дом с арканой таро: зелёный
     const marked = tarot.some(z => pointInPoly(z[0], z[1], b.p) || (bx - z[0]) ** 2 + (bz - z[1]) ** 2 < 30 * 30);
     try {
-      const g = new THREE.ExtrudeGeometry(sh, { depth: b.h, bevelEnabled: false, curveSegments: 1 });
+      const g = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 1 });
       g.rotateX(-Math.PI / 2);
       bgeos.push(colorize(g, marked ? vary(0x5fe060, hashf(bx, bz), 0.1) : vary(C[b.t] || C.yes, hashf(bx, bz), 0.18)));
     } catch (e) { /* пропускаем */ }
   }
-  if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); group.add(new THREE.Mesh(bgeo, M.building)); }
+  if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); const bm = new THREE.Mesh(bgeo, M.building); bm.userData.isBuilding = true; group.add(bm); group.userData.buildingMesh = bm; }
+  group.userData.named = named;
+  for (const [fix, b, cx, cz, h] of roofs) { try { addRoof(group, fix, b, cx, cz, h); } catch (e) { console.warn('крыша', b.n, e); } }
 
   // деревья: из OSM плюс насыпанные в парки
   const treePts = (t.trees || []).map(tr => [tr[0], tr[1]]);
