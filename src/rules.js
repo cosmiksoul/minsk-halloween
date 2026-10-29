@@ -5,7 +5,7 @@
 
 export const CAPS = { hearts: 10, tail: 10, baseHearts: 3 };
 export const POINTS = { win: 2, loss: -1, tarot: 5, visit: 1 };
-export const HEAT = { kill: 15, friend: 8, tarot: 10, raidWin: 12, decayPer: 20, idleAfter: 30, max: 100 };
+export const HEAT = { kill: 15, friend: 8, tarot: 10, raidWin: 12, decayPer: 20, idleAfter: 30, max: 100, boss: 10, road: 1 };
 // индекс = уровень угрозы: сколько охотников сразу, с какой дистанции выходят, скорость от скорости игрока,
 // пауза между появлениями в секундах и бонус к кубику охотника
 export const LEVELS = [
@@ -30,11 +30,57 @@ export const THROWS = ['rock', 'scissors', 'paper'];
 export const THROW_ICON = { rock: '🪨', scissors: '✂️', paper: '📄' };
 export const THROW_NAME = { rock: 'камень', scissors: 'ножницы', paper: 'бумагу' }; // винительный падеж: «любит камень»
 export const LOG_MAX = 200;
+// --- эндгейм: колода из рейтинга и рука боссов на час, покерные множители, жетоны, проезжая часть, квесты
+export const CARD = { slots: 52, hand: 5, ringMin: 200, ringMax: 700, ringStep: 300, ringCap: 1600, spacing: 150, cooldown: 60, xpPerRank: 2, handBase: 20, bonus: { low: 0, mid: 1, high: 2, ace: 3 } };
+export const HAND_MULT = { high: 1, pair: 2, twoPair: 3, three: 4, straight: 6, flush: 8, fullHouse: 10, four: 15, straightFlush: 30 };
+export const TOKEN = { perHand: 1, price: 12, cap: 3 };
+export const ROAD = { speed: 1.2, heatPer: 4, crowdCost: 4 };
+// цепочка онбординга на устройство: по одному квесту на активность, виден только текущий
+export const QUESTS = [
+  { id: 'trick', title: 'первая гадость', hint: 'кликни по прохожему и выбери гадость', kind: 'kill' },
+  { id: 'treat', title: 'первая сладость', hint: 'кликни по прохожему и выбери сладость', kind: 'friend' },
+  { id: 'candy', title: 'конфета', hint: 'конфеты лежат на дорожках, подойди', kind: 'candy' },
+  { id: 'coin', title: 'монетка', hint: 'монетки блестят у дорог', kind: 'coin' },
+  { id: 'ghost', title: 'призрак', hint: 'за шалости приходят призраки с кладбищ', kind: 'win' },
+  { id: 'card', title: 'карта', hint: 'на карте стоят пять карт часа, бей слабую', kind: 'card' },
+];
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 
 // исход обычного d20: 1 крит-провал, 2–7 провал, 8–19 успех, 20 крит
+// место в рейтинге → карта: масти по четвертям ♠ ♥ ♦ ♣, старшинство сверху вниз (1 — туз пик, 13 — двойка пик, 14 — туз червей)
+export function cardOfSlot(r) { return { rank: 14 - ((r - 1) % 13), suit: ['♠', '♥', '♦', '♣'][Math.floor((r - 1) / 13)] }; }
+// час по Минску (UTC+3, без летнего времени): общий номер часа для всех и секунды до его конца
+export function minskHour(ms) { return Math.floor((ms / 1000 + 3 * 3600) / 3600); }
+export function hourLeft(ms) { return 3600 - ((Math.floor(ms / 1000) + 3 * 3600) % 3600); }
+export function handSeed(hour, device, seed) { return hostSeed('hand', hour + '|' + device + '|' + seed); }
+// mulberry32: детерминированный генератор от целого семени, без импортов
+export function rngOf(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// сдача: пять разных мест 1…52 в порядке вытягивания; ключ — час, устройство и скелет, поэтому перезагрузка руку не меняет
+export function dealHand(hour, device, seed) {
+  const rng = rngOf(handSeed(hour, device, seed)); const out = [];
+  while (out.length < CARD.hand) { const r = 1 + Math.floor(rng() * CARD.slots); if (!out.includes(r)) out.push(r); }
+  return out;
+}
+// бонус босса к кубику и XP за победу по старшинству карты
+export function bossBonus(rank) { const b = CARD.bonus; return rank >= 14 ? b.ace : rank >= 10 ? b.high : rank >= 6 ? b.mid : b.low; }
+export function bossXp(rank) { return CARD.xpPerRank * rank; }
+// квесты: бонус за закрытие — столько же, сколько дало само действие (гадость +2 → ещё +2), а за действие без XP (конфета, монета) — 5;
+// виден только первый незакрытый квест
+export function questBonus(xp) { const x = num(xp); return x > 0 ? x : 5; }
+export function nextQuest(done) { return QUESTS.find(q => !done.includes(q.id)) || null; }
+export function questFor(done, kind) { const q = nextQuest(done); return q && q.kind === kind ? q : null; }
+// слоты живых скелетов на устройстве: не меньше одного и числа живых, не больше пяти
+export function slotsOf(stored, alive) { return Math.min(5, Math.max(1, num(stored), num(alive))); }
+// жетон спас-броска в магазине: цена и потолок на покупку (заработанные сверх потолка не пропадают)
+export function canBuyToken(g) { return num(g.coins) >= TOKEN.price && num(g.tokens) < TOKEN.cap; }
+export function buyToken(g) { if (!canBuyToken(g)) return false; g.coins = num(g.coins) - TOKEN.price; g.tokens = num(g.tokens) + 1; return true; }
+// розыск на проезжей части: очко за каждые ROAD.heatPer секунд ходьбы, остаток переносится
+export function roadHeat(acc, dt) { const a = num(acc) + num(dt); const points = Math.floor(a / ROAD.heatPer); return { acc: a - points * ROAD.heatPer, points }; }
 export function outcomeOf(n) { return n <= 1 ? 'critfail' : n <= 7 ? 'fail' : n <= 19 ? 'success' : 'crit'; }
 // срезать ли напрямик: цель близко и по дорожкам в ratio раз дальше (или маршрута нет вовсе); стоя на месте не срезаем
 export function shouldCut(d, routeCost) { return d > 0 && d <= CUT.maxDist && (routeCost == null || routeCost >= CUT.ratio * d); }
@@ -74,7 +120,7 @@ export function duel(foe, foeBonus, me, meBonus) {
 
 // --- прогресс скелета (v2): стак, счёт, журнал, угроза
 export function newProgress() {
-  return { v: 2, hp: CAPS.baseHearts, maxHp: CAPS.baseHearts, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null };
+  return { v: 2, hp: CAPS.baseHearts, maxHp: CAPS.baseHearts, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null, hand: null, hands: 0, bestHand: null };
 }
 function oldScore(g) { return (g.skulls?.length ?? 0) * 3 + (g.friends?.length ?? 0) * 3 + (g.tarot?.length ?? 0) * 5 + (g.visits?.length ?? 0); }
 // старый прогресс (массивы skulls/friends, кап 6 сердец) один раз превращается в v2: счёт по старой формуле,
@@ -88,6 +134,7 @@ export function migrate(g) {
     if (!Array.isArray(g.seenVenues)) g.seenVenues = uniqIds(g.visits.filter(v => v && !v.auto));
     if (!Number.isFinite(g.shields)) g.shields = 0;
     if (!g.hosts || typeof g.hosts !== 'object') g.hosts = {};
+    if (g.hand === undefined) g.hand = null; if (!Number.isFinite(g.hands)) g.hands = 0; if (g.bestHand === undefined) g.bestHand = null; // рука часа и собранные руки
     delete g.resetAt;
     return g;
   }
@@ -151,11 +198,11 @@ export function pickCemetery(items, px, pz, level, used = []) {
 }
 // сводка прогресса для карточек, списков и доски: понимает и старый формат до миграции
 export function statsOf(g) {
-  if (!g) return { score: 0, kills: 0, friends: 0, tarot: 0, visits: 0, hearts: CAPS.baseHearts, tail: 0, wins: 0, losses: 0, deaths: 0 };
+  if (!g) return { score: 0, kills: 0, friends: 0, tarot: 0, visits: 0, hearts: CAPS.baseHearts, tail: 0, wins: 0, losses: 0, deaths: 0, hands: 0, bestHand: null };
   const v2 = g.v === 2, log = Array.isArray(g.log) ? g.log : [];
   return {
     score: scoreOf(g), kills: v2 ? num(g.kills) : (g.skulls?.length ?? 0), friends: v2 ? num(g.friendsTotal, log.filter(e => e.kind === 'friend').length) : (g.friends?.length ?? 0),
     tarot: g.tarot?.length ?? 0, visits: v2 && Array.isArray(g.seenVenues) ? g.seenVenues.length : (g.visits?.length ?? 0), hearts: num(g.maxHp, CAPS.baseHearts), tail: v2 ? (g.tail?.length ?? 0) : Math.min(CAPS.tail, g.friends?.length ?? 0),
-    wins: num(g.wins), losses: num(g.losses), deaths: num(g.deaths),
+    wins: num(g.wins), losses: num(g.losses), deaths: num(g.deaths), hands: num(g.hands), bestHand: g.bestHand || null,
   };
 }
