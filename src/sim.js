@@ -1,7 +1,7 @@
 // Симуляция: граф улиц из OSM, по которому ходят скелеты; встречи, бары, танцы,
 // а также состояния для игры: игрок, ожидание, друг-попутчик, призрак.
 import * as THREE from 'three';
-import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip } from './skeletons.js';
+import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip, GHOSTS } from './skeletons.js';
 import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES } from './bio.js';
 
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
@@ -103,7 +103,7 @@ export class Sim {
     this.agents = []; this.sprites = []; this.stats = { meetings: 0, beers: 0, dances: 0 };
     this.seed = 1; this.time = 0; this.meetTimer = 0;
     this.camRight = new THREE.Vector3(1, 0, 0);
-    this.pool = new Map(); this.ghostTex = null;
+    this.pool = new Map(); this.ghostTex = {}; // текстуры призраков по роли: npc (голубой), player (золотой)
     this.onArrive = null; // колбэк игры: игрок дошёл до узла
     this.onEnter = null;  // колбэк игры: скелет зашёл в заведение
     this.density = 1; this.cap = 900; this.crowdTimer = 0; this.lastFp = null;
@@ -250,15 +250,15 @@ export class Sim {
     this.leaveVenue(a); a.state = 'wait'; a.timer = dur; a.waitFor = who; a.script = null; a.path = null; a.target = null;
   }
   release(a) { if (a.state === 'wait') { a.state = 'walk'; a.waitFor = null; a.cooldown = 6; } }
-  // убитый скелет становится призраком
-  ghostify(a) {
+  // убитый скелет становится призраком: прохожий голубым, упокоенный игрок золотым
+  ghostify(a, kind = 'npc') {
     if (a.ghost) return;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
     if (a.leader) this.unfriend(a);
     this.leaveVenue(a);
-    if (!this.ghostTex) this.ghostTex = this.makeTexture(drawGhostStrip());
-    a.tex.dispose(); a.tex = this.ghostTex.clone(); a.sprite.material.map = a.tex; a.sprite.material.opacity = 0.85; a.sprite.material.needsUpdate = true;
-    a.ghost = true; a.state = 'walk'; a.speed = WALK_SPEED * 0.45; a.script = null; a.path = null; a.target = null; a.waitFor = null; a.bubble = null;
+    if (!this.ghostTex[kind]) this.ghostTex[kind] = this.makeTexture(drawGhostStrip(GHOSTS[kind] || GHOSTS.npc));
+    a.tex.dispose(); a.tex = this.ghostTex[kind].clone(); a.sprite.material.map = a.tex; a.sprite.material.opacity = 0.85; a.sprite.material.transparent = true; a.sprite.material.needsUpdate = true;
+    a.ghost = true; a.ghostKind = kind; a.haunted = false; a.state = 'walk'; a.speed = WALK_SPEED * 0.45; a.script = null; a.path = null; a.target = null; a.waitFor = null; a.bubble = null;
     if (a.from === a.to) this.teleport(a, a.from);
   }
   // NPC идёт за лидером (игроком) по его следу
@@ -275,6 +275,13 @@ export class Sim {
     l.followers = l.followers.filter(f => f !== a); a.leader = null;
     const n = this.graph.nearest(a.x, a.z, 200); this.teleport(a, n >= 0 ? n : this.nodeOf(l));
     a.state = 'walk'; a.cooldown = 10;
+  }
+  // охотник-призрак: тот же костюм, но вместо ног хвост и зелёная аура-обводка; парит над землёй
+  haunt(a) {
+    if (a.ghost || a.haunted) return;
+    const base = this.makeTexture(drawStrip(a.costume, { ghost: GHOSTS.hunter })); const oldTex = a.tex, oldBase = a.base;
+    a.tex = base.clone(); a.base = base; a.sprite.material.map = a.tex; a.sprite.material.opacity = 0.92; a.sprite.material.transparent = true; a.sprite.material.needsUpdate = true;
+    oldTex.dispose(); if (oldBase) oldBase.dispose(); a.haunted = true;
   }
   // --- игрок: путь по графу до точки на карте
   setPlayer(a) { a.player = true; a.trail = a.trail || []; a.followers = a.followers || []; a.speed = WALK_SPEED * 1.3; a.dest = null; this.setAuto(a, true); }
@@ -311,6 +318,8 @@ export class Sim {
   // идти к точке (x, z): по графу до ближайшего узла, а если точка лежит на ребре рядом — до самой точки (a.stopT)
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
+    // после прямого подхода (охотник) агент стоит вне ребра: сначала ставим его на ближайший узел
+    if (a.state === 'approach' || (a.from === a.to && Math.hypot(a.x - g.x[a.from], a.z - g.z[a.from]) > 3)) { const n = g.nearest(a.x, a.z, 140); if (n >= 0) this.teleport(a, n); if (a.state === 'approach') a.state = 'idle'; }
     const ep = this.edgePoint(node, x, z); a.stopT = null;
     // точка на текущем ребре: дойти до неё или развернуться, не бегая через узлы
     if (ep && a.from !== a.to && ((a.from === node && a.to === ep.to) || (a.from === ep.to && a.to === node))) {
@@ -335,7 +344,9 @@ export class Sim {
     if (a.from === a.to) { if (a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; a.t = 0; } else { a.state = 'idle'; a.dest = null; } }
     return true;
   }
-  stop(a) { a.path = null; a.stopT = null; a.dest = null; if (a.state === 'walk') a.state = 'idle'; }
+  stop(a) { a.path = null; a.stopT = null; a.dest = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
+  // прямой подход вне графа (последние метры охотника к игроку, как у попутчиков): цель в метрах, путь не нужен
+  approach(a, x, z) { a.state = 'approach'; a.ax = x; a.az = z; a.path = null; a.stopT = null; a.dest = null; }
   // стоим на узле заведения?
   venueAt(a) { return a.from === a.to || a.t < 0.05 ? this.venueNode.get(a.from) : a.t > 0.95 ? this.venueNode.get(a.to) : null; }
 
@@ -343,7 +354,7 @@ export class Sim {
     const g = this.graph;
     if (a.state === 'walk') {
       if (a.from === a.to) { a.state = 'idle'; return; }
-      a.t += a.speed * dt / a.len;
+      a.t += a.speed * (a.speedMul || 1) * dt / a.len;
       // цель посреди ребра (прохожий, конфета): встаём на точке, не доходя до узла; onArrive без узла, чтобы не «зайти» в бар в 30 м
       if (a.stopT != null && !(a.path && a.path.length) && a.t >= a.stopT) {
         a.t = a.stopT; a.stopT = null; a.state = 'idle'; a.dest = null; a.path = null; this.place(a); if (this.onArrive) this.onArrive(a, -1); return;
@@ -356,6 +367,10 @@ export class Sim {
       if (a.state === 'walk') { this.place(a); const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from]; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; }
       // след для друзей
       const tr = a.trail; if (tr) { const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
+    } else if (a.state === 'approach') {
+      const dx = a.ax - a.x, dz = a.az - a.z, d = Math.hypot(dx, dz);
+      if (d < 0.5) a.state = 'idle';
+      else { const step = Math.min(d, a.speed * (a.speedMul || 1) * dt); a.x += dx / d * step; a.z += dz / d * step; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; a.sprite.position.set(a.x, 0.5, a.z); }
     } else if (a.state === 'drink' || a.state === 'dead') {
       a.timer -= dt; if (a.timer <= 0 && a.state === 'drink') { a.state = 'idle'; this.leaveVenue(a); }
     }
@@ -492,7 +507,7 @@ export class Sim {
       let f;
       if (a.ghost) f = FRAMES.idle[0] + (Math.floor(a.anim * 2) % 2);
       else switch (a.state) {
-        case 'walk': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
+        case 'walk': case 'approach': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
         case 'follow': f = a.moving ? FRAMES.walk[Math.floor(a.anim * 6) % 4] : FRAMES.idle[0]; break;
         case 'dance': f = FRAMES.dance[Math.floor(a.anim * 4) % 4]; break;
         case 'drink': f = FRAMES.drink[Math.floor(a.anim * 1.5) % 2]; break;
@@ -500,7 +515,8 @@ export class Sim {
         default: f = FRAMES.idle[0];
       }
       if (a.face > 0) { a.tex.repeat.x = 1 / NF; a.tex.offset.x = f / NF; } else { a.tex.repeat.x = -1 / NF; a.tex.offset.x = (f + 1) / NF; }
-      a.sprite.position.y = a.ghost ? 1.5 + Math.sin(a.anim * 2.5) * this.H * 0.08 + this.H * 0.1 : a.state === 'dance' ? 0.5 + (Math.floor(a.anim * 4) % 2) * this.H * 0.07 : 0.5;
+      a.sprite.position.y = a.ghost ? 1.5 + Math.sin(a.anim * 2.5) * this.H * 0.08 + this.H * 0.1 : a.haunted ? 0.5 + this.H * 0.05 + Math.sin(a.anim * 3) * this.H * 0.04 : a.state === 'dance' ? 0.5 + (Math.floor(a.anim * 4) % 2) * this.H * 0.07 : 0.5;
+      if (a.tipsy) a.sprite.position.x = a.x + Math.sin(this.time * 6) * this.H * 0.04; // «штормит»: скелет идёт шатаясь
     }
     this.meetTimer -= dt;
     if (this.meetTimer <= 0) {

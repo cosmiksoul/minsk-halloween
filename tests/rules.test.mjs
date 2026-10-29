@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, canReset, statsOf } from '../src/rules.js';
+import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(10), 'fail'); assert.equal(outcomeOf(11), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -44,11 +44,26 @@ test('pickCemetery: ближайшее к дистанции уровня, не 
   assert.equal(pickCemetery([{ x: 0, z: 100, node: 1 }], 0, 0, 5), null);
   assert.equal(pickCemetery([], 0, 0, 3), null); assert.equal(pickCemetery(items, 0, 0, 0), null);
 });
-test('canReset', () => { const g = newProgress(); assert.equal(canReset(g, 10), true); g.resetAt = 100; assert.equal(canReset(g, 200), false); assert.equal(canReset(g, 280), true); });
-test('HEAT из спеки', () => { assert.deepEqual(HEAT, { kill: 15, friend: 8, tarot: 10, raidWin: 12, minute: 1, decayPer: 20, idleAfter: 30, resetCooldown: 180, max: 100 }); });
+test('HEAT без минуты и кулдауна', () => { assert.deepEqual(HEAT, { kill: 15, friend: 8, tarot: 10, raidWin: 12, decayPer: 20, idleAfter: 30, max: 100 }); });
+test('PURSUIT: за кадром и прямой подход', () => { assert.equal(PURSUIT.offscreen, 400); assert.equal(PURSUIT.offscreenSpeed, 4); assert.equal(PURSUIT.direct, 150); assert.equal(PURSUIT.reach, 2); assert.equal(PURSUIT.waitNear, 300); });
 test('statsOf: v2 и старый формат', () => {
-  const g = newProgress(); g.score = 9; g.kills = 2; g.tail = [{ uid: 1 }]; logPush(g, { kind: 'friend' }); logPush(g, { kind: 'friend' }); logPush(g, { kind: 'kill' });
+  const g = newProgress(); g.score = 9; g.kills = 2; g.friendsTotal = 2; g.tail = [{ uid: 1 }]; logPush(g, { kind: 'friend' }); logPush(g, { kind: 'friend' }); logPush(g, { kind: 'kill' });
   assert.deepEqual(statsOf(g), { score: 9, kills: 2, friends: 2, tarot: 0, visits: 0, hearts: 3, tail: 1, wins: 0, losses: 0, deaths: 0 });
   const o = statsOf({ skulls: [1, 1], friends: Array(12).fill(1), tarot: [1], visits: [1], maxHp: 5 });
   assert.equal(o.kills, 2); assert.equal(o.friends, 12); assert.equal(o.tail, 10); assert.equal(o.hearts, 5); assert.equal(o.score, 6 + 36 + 5 + 1); assert.equal(statsOf(null).hearts, 3);
+});
+test('rpsBeats', () => { assert.equal(rpsBeats('rock', 'scissors'), true); assert.equal(rpsBeats('scissors', 'paper'), true); assert.equal(rpsBeats('paper', 'rock'), true); assert.equal(rpsBeats('rock', 'paper'), false); assert.equal(rpsBeats('rock', 'rock'), false); });
+test('hostThrow: любимый с перевесом', () => { assert.equal(hostThrow('rock', () => 0.1), 'rock'); const other = hostThrow('rock', () => 0.9); assert.ok(other !== 'rock' && THROWS.includes(other)); });
+test('hostSeed детерминирован и различает', () => { assert.equal(hostSeed('bar', 'Чердак|Зыбицкая 6'), hostSeed('bar', 'Чердак|Зыбицкая 6')); assert.notEqual(hostSeed('bar', 'Чердак|Зыбицкая 6'), hostSeed('shop', 'Чердак|Зыбицкая 6')); assert.ok(hostSeed('bar', '') > 0); });
+test('stakeOf и resetAmount', () => { assert.equal(stakeOf(0, 'bar'), 1); assert.equal(stakeOf(3, 'bar'), 3); assert.equal(stakeOf(0, 'shop'), 2); assert.equal(stakeOf(5, 'shop'), 10); assert.equal(resetAmount('bar', true), 60); assert.equal(resetAmount('bar', false), 20); assert.equal(resetAmount('shop', true), 100); assert.equal(resetAmount('shop', false), 60); });
+test('deathCoins: половина вниз, ноль — пермасмерть', () => { assert.deepEqual(deathCoins(7), { left: 3, perma: false }); assert.deepEqual(deathCoins(1), { left: 0, perma: false }); assert.deepEqual(deathCoins(0), { left: 0, perma: true }); assert.deepEqual(deathCoins(undefined), { left: 0, perma: true }); });
+test('newProgress: новые поля', () => { const g = newProgress(); assert.equal(g.friendsTotal, 0); assert.deepEqual(g.seenVenues, []); assert.equal(g.shields, 0); assert.deepEqual(g.hosts, {}); assert.equal('resetAt' in g, false); });
+test('migrate v1: friendsTotal и seenVenues', () => { const g = migrate({ skulls: [], friends: [{ uid: 1 }, { uid: 2 }], visits: [{ id: 5 }, { id: 5 }, { id: 7 }] }); assert.equal(g.friendsTotal, 2); assert.deepEqual(g.seenVenues, [5, 7]); assert.equal(g.shields, 0); });
+test('migrate v2 из PR #6 дополняется на месте', () => { const g = { v: 2, score: 9, tail: [], log: [{ kind: 'friend' }, { kind: 'kill' }, { kind: 'friend' }], visits: [{ id: 3 }, { id: 4, auto: true }], tarot: [], resetAt: 5 }; const m = migrate(g); assert.equal(m, g); assert.equal(g.score, 9); assert.equal(g.friendsTotal, 2); assert.deepEqual(g.seenVenues, [3]); assert.equal(g.shields, 0); assert.deepEqual(g.hosts, {}); assert.equal('resetAt' in g, false); });
+test('statsOf.friends из friendsTotal', () => { assert.equal(statsOf({ v: 2, friendsTotal: 4, log: [] }).friends, 4); });
+test('pickCemetery: разные кладбища для одновременных охотников', () => {
+  const a = { x: 0, z: 2400, node: 1 }, b = { x: 2300, z: 0, node: 2 }, c = { x: 0, z: 9000, node: 3 };
+  assert.equal(pickCemetery([a, b, c], 0, 0, 1, [a]), b);
+  assert.equal(pickCemetery([a, c], 0, 0, 1, [a]), a); // c дальше двух дистанций: берём занятое
+  assert.equal(pickCemetery([a, b], 0, 0, 1), a);
 });

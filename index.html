@@ -101,6 +101,7 @@
   <div class="line" id="pHours"></div>
   <div class="line rate" id="pRate"></div>
   <div class="line" id="pInside"></div>
+  <div class="line" id="pHost"></div>
   <div id="pEvents"></div>
   <div class="line" id="pWeb"></div>
   <div class="line"><button id="pGo" hidden>🎃 зайти своим скелетом</button></div>
@@ -138,6 +139,19 @@
   </div>
 </div>
 
+<div id="host" hidden>
+  <canvas id="hostPic" width="48" height="72"></canvas>
+  <div class="askBody">
+    <div class="askTitle">Камень, ножницы, бумага</div>
+    <div class="line" id="hostName"></div>
+    <div class="line muted" id="hostMeta"></div>
+    <div class="line" id="hostAsk"></div>
+    <div class="line muted" id="hostFav"></div>
+    <div class="askBtns" id="hostBtns"><button id="hostRock" class="throw">🪨</button><button id="hostScissors" class="throw">✂️</button><button id="hostPaper" class="throw">📄</button><button id="hostNo">не сегодня</button></div>
+    <div id="hostRes" hidden><div class="vs" id="hostVs"></div><div class="line" id="hostText"></div></div>
+    <div class="bar"><i id="hostBar"></i></div>
+  </div>
+</div>
 <div id="ask" hidden>
   <canvas id="askPic" width="48" height="72"></canvas>
   <div class="askBody">
