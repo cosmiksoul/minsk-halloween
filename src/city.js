@@ -219,11 +219,12 @@ export function buildTile(t, M, seed = 1) {
   }
   if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); const bm = new THREE.Mesh(bgeo, M.building); bm.userData.isBuilding = true; group.add(bm); group.userData.buildingMesh = bm; }
   group.userData.named = named;
-  // препятствия для проверки прямой (срезки): все здания с дырками, включая пропущенные при отрисовке, вода, лента реки и проезжие части
+  // препятствия для проверки прямой (срезки): все здания с дырками, включая пропущенные при отрисовке, вода и лента реки;
+  // проезжие части не препятствие — по ним ходят, машин в игре нет
   group.userData.obst = {
     buildings: (t.buildings || []).map(b => ({ p: b.p, holes: b.holes, bb: polyBBox(b.p) })),
     water: (t.water || []).map(w => ({ p: w.p, bb: polyBBox(w.p) })),
-    ribbons: [...(t.river || []).map(r => ({ p: r.p, half: CUT.riverHalf })), ...(t.roads || []).filter(r => r.k === 'major').map(r => ({ p: r.p, half: (r.w ? Math.min(r.w, 24) : W.major) / 2 }))],
+    ribbons: (t.river || []).map(r => ({ p: r.p, half: CUT.riverHalf })),
   };
   for (const [fix, b, cx, cz, h] of roofs) { try { addRoof(group, fix, b, cx, cz, h); } catch (e) { console.warn('крыша', b.n, e); } }
 

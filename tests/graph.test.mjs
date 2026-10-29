@@ -9,6 +9,11 @@ test('nearestEdgePoint: проекция на середину ребра и nul
   const ep = g.nearestEdgePoint(50, 7); assert.ok(Math.abs(ep.t - 0.5) < 1e-6); assert.ok(Math.abs(ep.d - 7) < 1e-6); assert.ok(Math.abs(ep.x - 50) < 1e-6); assert.ok(Math.abs(ep.z) < 1e-6);
   assert.equal(g.nearestEdgePoint(50, 500, 140), null);
 });
+test('проезжие части в графе: major-дорога даёт рёбра и имя', () => {
+  const g2 = new Graph([{ p: [0, 0, 100, 0], k: 'major', n: 'праспект Незалежнасці' }, { p: [100, 0, 100, 50], k: 'path' }]);
+  const a = g2.nearest(0, 0, 1), b = g2.nearest(100, 50, 1); assert.ok(a >= 0 && b >= 0); assert.ok(Math.abs(g2.route(a, b).cost - 150) < 1e-6); assert.equal(g2.names[a], 'праспект Незалежнасці');
+});
+
 test('nearestAny: ближайший узел с любого расстояния', () => { assert.equal(g.nearestAny(5000, 4900), g.nearest(100, 100, 1)); assert.equal(g.nearestAny(-3, 2), g.nearest(0, 0, 1)); });
 
 test('nearestNamed: имя соседней улицы, null далеко', () => { assert.equal(g.nearestNamed(100, 60, 150), 'Ленина'); assert.equal(g.nearestNamed(100, 1000, 150), null); });

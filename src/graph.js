@@ -14,7 +14,7 @@ export class Graph {
     const idx = new Map();
     const node = (x, z) => { const k = x + '|' + z; let i = idx.get(k); if (i === undefined) { i = this.x.length; idx.set(k, i); this.x.push(x); this.z.push(z); this.adj.push([]); this.names.push(null); } return i; };
     for (const r of roads) {
-      if (r.k === 'major') continue;
+      // проезжие части тоже проходимы: машин в игре нет, а проспекты связывают дворы и ведут через мосты
       let prev = -1;
       for (let i = 0; i + 1 < r.p.length; i += 2) {
         const n = node(r.p[i], r.p[i + 1]);
