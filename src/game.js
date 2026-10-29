@@ -75,6 +75,8 @@ export class Game {
     addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeDialog(); if (this.selected) this.select(false); } });
   }
   get g() { return this.player ? this.player.def.game : null; }
+  // сбросить текущую цель броска и отпустить скелета, который её ждал
+  dropPending() { const p = this.pending; this.pending = null; if (p && !p.rolling && p.npc.state === 'wait') this.sim.release(p.npc); }
   // --- игрок
   setPlayer(a) {
     if (this.player === a) return;
@@ -108,7 +110,7 @@ export class Game {
   // --- клики
   clickGround(x, z) {
     if (!this.selected || !this.player || this.busy || this.player.state === 'dead') return false;
-    this.pending = null; this.pendingVenue = null; this.closeDialog();
+    this.dropPending(); this.pendingVenue = null; this.closeDialog();
     if (this.sim.moveTo(this.player, x, z)) { this.dest.position.set(x, 0.56, z); this.dest.visible = true; this.destT = 1; return true; }
     this.sim.say(this.player, 'туда не пройти', 'boo', 1.4); return true;
   }
@@ -120,13 +122,13 @@ export class Game {
   }
   clickVenue(v) {
     if (!this.selected || !this.player || this.busy || v.node < 0 || this.player.state === 'dead') return false;
-    this.pending = null; this.closeDialog();
+    this.dropPending(); this.closeDialog();
     if (this.sim.moveTo(this.player, v.x, v.z)) { this.pendingVenue = v; this.dest.position.set(this.sim.graph.x[v.node], 0.56, this.sim.graph.z[v.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
   clickShop(sh) {
     if (!this.selected || !this.player || this.busy || sh.node < 0 || this.player.state === 'dead') return false;
-    this.pending = null; this.pendingVenue = null; this.closeDialog();
+    this.dropPending(); this.pendingVenue = null; this.closeDialog();
     if (this.sim.moveTo(this.player, sh.x, sh.z)) { this.pendingShop = sh; const g = this.sim.graph; this.dest.position.set(g.x[sh.node], 0.56, g.z[sh.node]); this.dest.visible = true; this.destT = 1; }
     return true;
   }
@@ -141,7 +143,10 @@ export class Game {
   choose(action) {
     const npc = this.dialogNpc; this.closeDialog(); if (!npc || !this.player || this.busy) return;
     if (npc.ghost || npc.leader) return;
-    this.sim.wait(npc, this.player, 30);
+    if (this.pending && this.pending.npc !== npc) this.dropPending();
+    // скелет ждёт столько, сколько нужно дойти до него (плюс запас), иначе дальние цели «уходили» раньше, чем игрок добирался
+    const dist = Math.hypot(npc.x - this.player.x, npc.z - this.player.z);
+    this.sim.wait(npc, this.player, Math.min(150, 30 + dist / 2.5));
     this.pending = { npc, action, tries: 0 }; this.pendingVenue = null;
     if (!this.inReach(npc)) { if (!this.sim.moveTo(this.player, npc.x, npc.z)) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; } }
   }
@@ -323,7 +328,7 @@ export class Game {
   hearts(g) { let s = ''; for (let i = 0; i < g.maxHp; i++) s += i < g.hp ? '<i class="hp on">♥</i>' : '<i class="hp">♥</i>'; return s; }
   renderHUD() {
     const hud = $('hud'); const p = this.player;
-    if (!p) { hud.innerHTML = `<div class="hudHint">создай своего скелета во вкладке «Свой скелет» — и играй</div>`; hud.classList.remove('has'); return; }
+    if (!p) { hud.innerHTML = `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`; hud.classList.remove('has'); return; }
     const g = this.g; const now = this.sim.time; const sh = this.shields.filter(s => s.until > now);
     hud.classList.add('has');
     hud.innerHTML = `<div class="hudName">${esc(p.bio.name)}</div>
@@ -346,7 +351,7 @@ export class Game {
         <div class="line muted">посещения: ${g.visits.length}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
     }
     if (a.ghost) { const s = this.g && this.g.skulls.find(x => x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(s.at)}` : ''}</div></div>`; }
-    if (a.leader === this.player) { const f = this.g && this.g.friends.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(f.at)}` : ''} · идёт следом</div></div>`; }
+    if (this.player && a.leader === this.player) { const f = this.g && this.g.friends.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(f.at)}` : ''} · идёт следом</div></div>`; }
     return '';
   }
   portrait(a, canvas) { if (a.ghost) drawGhostPortrait(canvas); else drawPortrait(a.costume, canvas); }
