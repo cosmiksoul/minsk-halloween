@@ -203,6 +203,8 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 .mnBox #mineList { display:flex; flex-direction:column; gap:6px; max-height:28vh; overflow:auto; }
 .mnBox #mineList:empty { display:none; }
 #hud .hudNew { font-size:11px; padding:7px 10px; align-self:flex-start; }
+#hud .hudPick { font-size:11px; padding:7px 10px; }
+#mineList .item.dead .n { color:var(--muted); text-decoration:line-through; }
 #hud:not(.has) { cursor:default; }
 @media (max-width: 700px) { .mnRow { flex-direction:column; align-items:center; } .mnBox { max-height:calc(100vh - 24px); overflow:auto; } }
 

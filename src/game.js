@@ -2,7 +2,7 @@
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
-import { CAPS, POINTS, PURSUIT, RPS, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel } from './rules.js';
+import { CAPS, POINTS, PURSUIT, RPS, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins } from './rules.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
@@ -114,7 +114,7 @@ export class Game {
     if (this.player === a) return;
     if (this.player) { this.sim.unsetPlayer(this.player); this.player.def.player = false; this.select(false); }
     this.hunters?.reset(true); // смена скелета: охотники прежнего расходятся без записей, угроза остаётся в его прогрессе
-    this.player = a; a.def.player = true; this.sim.setPlayer(a);
+    this.player = a; a.def.player = true; this.lastPerished = null; this.sim.setPlayer(a);
     const g = a.def.game = migrate(a.def.game); // старый прогресс один раз превращается в v2: счёт, хвост, журнал
     if (g.hp <= 0) g.hp = g.maxHp; // сохранились мёртвым: собираемся заново с полным здоровьем
     if (this.tarot) { this.tarot.reset(); for (const t of g.tarot) this.tarot.markDone(t.id); }
@@ -253,13 +253,32 @@ export class Game {
   }
   die() {
     const g = this.g, p = this.player; if (!p || p.state === 'dead') return;
+    // цена смерти: половина монет; совсем без монет — пермасмерть
+    const { left, perma } = deathCoins(g.coins); const lost = g.coins - left; g.coins = left;
+    if (perma) { this.perish(); return; }
     g.deaths++; this.pending = null; this.pendingVenue = null; this.closeDialog();
-    // стак рассыпается вместе с костями: хвост разбегается, максимум сердец −2 (не ниже трёх), угроза и охотники обнуляются
+    // стак рассыпается вместе с костями: хвост разбегается, максимум сердец −2 (не ниже трёх), угроза и охотники обнуляются; щиты остаются
     for (const f of [...(p.followers || [])]) { this.sim.unfriend(f); this.sim.say(f, 'ой', 'boo', 1.6); }
     g.tail = []; g.maxHp = Math.max(CAPS.baseHearts, g.maxHp - 2); g.hp = 0;
-    this.log('death'); this.hunters?.reset();
+    this.log('death', { coinsLost: lost }); this.hunters?.reset();
     this.sim.stop(p); p.state = 'dead'; p.timer = 1e9; p.sprite.material.opacity = 0.35; p.sprite.material.transparent = true;
-    this.sim.say(p, 'рассыпался на кости…', 'boo', 3); this.respawnAt = performance.now() + 3500;
+    this.sim.say(p, 'рассыпался на кости…', 'boo', 3); if (lost > 0) setTimeout(() => this.player === p && this.sim.say(p, `☠ −${lost} 🪙`, 'boo', 2.2), 1200);
+    this.respawnAt = performance.now() + 3500;
+  }
+  // пермасмерть: без монет скелет рассыпается навсегда — вечный призрак в городе, dead в прогрессе и в базе, управлять им нельзя
+  perish() {
+    const g = this.g, p = this.player; if (!p) return;
+    g.deaths++; this.dropPending(); this.pendingVenue = null; this.pendingShop = null; this.setModal(null); this.dialogNpc = null; this.shopAt = null;
+    for (const f of [...(p.followers || [])]) { this.sim.unfriend(f); this.sim.say(f, 'ой', 'boo', 1.6); }
+    g.tail = []; g.hp = 0;
+    this.log('rip', {}); this.hunters?.reset();
+    p.def.dead = true; p.def.diedAt = new Date().toISOString(); p.def.diedStreet = this.sim.streetOf(p); p.def.player = false;
+    this.selected = false; this.ring.visible = false; document.body.classList.remove('playing');
+    this.sim.unsetPlayer(p); this.sim.ghostify(p); this.sim.say(p, '☠ упокоен навсегда', 'boo', 4);
+    this.save(); // до обнуления игрока: прогресс и строка в базе уходят с dead
+    this.lastPerished = p.bio.name; this.player = null; this.candies.clear(); if (this.tarot) this.tarot.reset();
+    if (this.o.onPerish) this.o.onPerish(p);
+    this.renderHUD();
   }
   respawn() {
     const p = this.player, g = this.g; g.hp = g.maxHp;
@@ -300,7 +319,7 @@ export class Game {
       const dmg = res.kind === 'critfail' ? 2 : 1;
       g.losses++; this.points(POINTS.loss); this.log('fail', info);
       this.sim.say(me, `−${dmg} ❤ · ★ −${-POINTS.loss}`, 'boo', 2.4);
-      this.damage(dmg);
+      this.damage(dmg); if (this.player !== me) return; // упокоен навсегда: дальше нечего начислять
       if (res.kind === 'critfail' && me.state !== 'dead' && g.tail.length) this.eat(1, 'critfail', true);
     } else {
       if (action === 'kill') {
@@ -370,8 +389,9 @@ export class Game {
       g.losses++; this.points(POINTS.loss);
       this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
       this.log('bit', { ...base, ate: r.eat });
-      outcome = this.eat(r.eat, 'hunter') === 'dead' ? 'killed' : 'bit';
+      outcome = this.eat(r.eat, 'hunter') === 'dead' ? (this.player !== me && me.def.dead ? 'rip' : 'killed') : 'bit';
     }
+    if (this.player !== me) { this.busy = false; return outcome; } // упокоен внутри дуэли: игрока уже нет
     this.save(); this.renderHUD(); this.busy = false; this.o.showCard(me, true);
     return outcome;
   }
@@ -480,7 +500,10 @@ export class Game {
   }
   renderHUD() {
     const hud = $('hud'); const p = this.player; const own = this.o.own ? this.o.own() : [];
-    if (!p) { hud.innerHTML = `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`; hud.classList.remove('has'); return; }
+    if (!p) {
+      hud.innerHTML = this.lastPerished ? `<div class="hudName">☠ ${esc(this.lastPerished)} упокоен навсегда</div><div class="hudRow"><button class="hudPick">взять другого</button><button class="green hudNew">создать нового</button></div>` : `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`;
+      hud.classList.remove('has'); return;
+    }
     const g = this.g; const st = statsOf(g);
     hud.classList.add('has');
     const avatars = own.length > 1 || own.length < 5 ? `<div class="hudOwn">${own.map(o => `<canvas class="av${o.agent === p ? ' cur' : ''}" width="24" height="36" data-seed="${o.def.seed}" title="${esc(o.def.name)}"></canvas>`).join('')}${own.length < 5 ? '<button class="avAdd" title="ещё скелет (до пяти)">+</button>' : ''}</div>` : '';

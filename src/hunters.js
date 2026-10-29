@@ -97,7 +97,7 @@ export class Hunters {
     if (d < PURSUIT.nearSay && sim.time - (h.saidAt || -99) > 6) { h.saidAt = sim.time; sim.say(a, h.intent === 'kill' ? '👀 ищет тебя' : '🤝 идёт знакомиться', h.intent === 'kill' ? 'boo' : '', 2.4); }
     if (d > LEVELS[Math.max(1, lvl)].dist * PURSUIT.farFactor) { h.farSince ||= sim.time; if (sim.time - h.farSince > PURSUIT.farAfter) { this.leave(h, 'lost'); return; } } else h.farSince = 0;
     if (ctrl && p.state !== 'dead' && game.inReach(a) && sim.time - (h.retryAt || -99) > 0.5) {
-      h.state = 'duel'; sim.stop(a);
+      h.state = 'duel'; h.victim = p; sim.stop(a);
       Promise.resolve(game.duel(h)).then(outcome => { if (outcome === null) { h.state = 'hunt'; h.retryAt = sim.time; } else this.finish(h, outcome); }).catch(e => { console.warn('дуэль', e); h.state = 'hunt'; h.retryAt = sim.time; });
     }
   }
@@ -149,7 +149,7 @@ export class Hunters {
   }
   // набег в базу: только охотники с хозяином (упыри никому не принадлежат); пишет клиент жертвы в момент исхода
   record(h, outcome) {
-    const p = this.game.player;
+    const p = h.victim || this.game.player; // после пермасмерти игрока уже нет, но набег был
     if (h.owner && this.remote && this.remote.logEncounter && p) {
       const rolls = outcome === 'lost' || !h.rolls ? null : h.rolls;
       this.remote.logEncounter({ hunter: h.owner.id, hunter_device: h.owner.device, hunter_name: h.owner.name, victim: deviceId() + ':' + p.def.seed, victim_device: deviceId(), victim_name: p.def.name, outcome, rolls, level: h.level, place: this.sim.streetOf(p), at: new Date().toISOString() });

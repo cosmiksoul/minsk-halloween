@@ -34,14 +34,14 @@ export class Remote {
   // сохранить / обновить своего скелета вместе с игровым прогрессом: костюм, стак и счётчики; позиция в сеть не уходит
   upsert(def, game) {
     const st = statsOf(game);
-    const row = { id: deviceId() + ':' + def.seed, device: deviceId(), name: def.name, gender: def.gender, age: def.age, job: def.job, arch: def.arch, seed: def.seed, costume: def.costume ?? null,
+    const row = { id: deviceId() + ':' + def.seed, device: deviceId(), name: def.name, gender: def.gender, age: def.age, job: def.job, arch: def.arch, seed: def.seed, costume: def.costume ?? null, dead: !!def.dead,
       hp: game?.hp ?? 3, kills: st.kills, friends: st.friends, visits: st.visits, deaths: st.deaths, tarot: st.tarot, coins: game?.coins ?? 0, score: st.score, wins: st.wins, losses: st.losses, hearts: st.hearts, tail: st.tail, updated_at: new Date().toISOString() };
     return this.call(this.table + '?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
   }
   // чужие скелеты: последние активные, кроме своих; с костюмом и счётом — это же пул охотников
-  others(limit = 30) { return this.call(`${this.table}?select=id,device,name,gender,age,job,arch,seed,costume,kills,friends,hp,score,updated_at&device=neq.${encodeURIComponent(deviceId())}&order=updated_at.desc&limit=${limit}`); }
+  others(limit = 30) { return this.call(`${this.table}?select=id,device,name,gender,age,job,arch,seed,costume,kills,friends,hp,score,dead,updated_at&device=neq.${encodeURIComponent(deviceId())}&order=updated_at.desc&limit=${limit}`); }
   // доска почёта: счёт и живой стак
-  top(limit = 10) { return this.call(`${this.table}?select=id,device,name,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
+  top(limit = 10) { return this.call(`${this.table}?select=id,device,name,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,dead,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
   // набег: стычка чужого охотника с моим скелетом (пишет клиент жертвы)
   logEncounter(row) { return this.call('encounters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); }
   // набеги с моим участием (как охотник или жертва) новее отметки

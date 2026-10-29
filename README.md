@@ -83,6 +83,7 @@ create table skeletons (
   hp int default 3, kills int default 0, friends int default 0, visits int default 0, deaths int default 0,
   tarot int default 0, coins int default 0, score int default 0,
   costume jsonb, wins int default 0, losses int default 0, hearts int default 3, tail int default 0,
+  dead boolean default false,
   updated_at timestamptz default now()
 );
 alter table skeletons enable row level security;
@@ -109,6 +110,7 @@ create policy "insert any" on encounters for insert with check (true);
 ```sql
 alter table skeletons add column if not exists tarot int default 0, add column if not exists coins int default 0, add column if not exists score int default 0;
 alter table skeletons add column if not exists costume jsonb, add column if not exists wins int default 0, add column if not exists losses int default 0, add column if not exists hearts int default 3, add column if not exists tail int default 0;
+alter table skeletons add column if not exists dead boolean default false;
 ```
 
 2. В `config.js` впиши `url` проекта и `anonKey` (Settings → API). Ключ публичный по замыслу Supabase.
