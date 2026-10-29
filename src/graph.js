@@ -124,17 +124,17 @@ export class Graph {
   }
   // n узлов из кандидатов попарно не ближе spacing (перемешаны rng); при нехватке добор ближайшими к (fx, fz) проходимыми узлами
   // вне списка с тем же разбросом, в самом конце — без условия: рука всегда из n карт
-  pickSpaced(nodes, n, spacing, rng, fx, fz) {
+  pickSpaced(nodes, n, spacing, rng, fx, fz, ok = null) {
     const pool = nodes.slice(); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const out = []; const far = c => out.every(p => Math.hypot(this.x[p] - this.x[c], this.z[p] - this.z[c]) >= spacing);
     for (const c of pool) { if (out.length >= n) break; if (far(c)) out.push(c); }
     if (out.length < n) {
       const inList = new Set(nodes); const seen = new Set(out);
       for (let R = 200; out.length < n && R <= 1e5; R *= 2) {
-        const near = this.within(fx, fz, R).filter(c => !inList.has(c) && !seen.has(c)).sort((a, b) => (this.x[a] - fx) ** 2 + (this.z[a] - fz) ** 2 - (this.x[b] - fx) ** 2 - (this.z[b] - fz) ** 2);
+        const all = this.within(fx, fz, R); const near = all.filter(c => !inList.has(c) && !seen.has(c) && (!ok || ok(c))).sort((a, b) => (this.x[a] - fx) ** 2 + (this.z[a] - fz) ** 2 - (this.x[b] - fx) ** 2 - (this.z[b] - fz) ** 2);
         for (const c of near) { if (out.length >= n) break; if (far(c)) { out.push(c); seen.add(c); } }
         if (out.length < n && near.length && R >= 1600) for (const c of near) { if (out.length >= n) break; if (!seen.has(c)) { out.push(c); seen.add(c); } }
-        if (this.within(fx, fz, R).length >= this.walkable.length) break;
+        if (all.length >= this.walkable.length) break;
       }
     }
     return out;

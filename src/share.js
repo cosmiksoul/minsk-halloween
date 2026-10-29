@@ -3,6 +3,7 @@ import { drawFrame, FW, FH } from './skeletons.js';
 import { ARCANA, ARCANA_BY_ID, drawArcana } from './tarot.js';
 import { ageWord } from './bio.js';
 import { statsOf as progressStats } from './rules.js';
+import { cardLabel } from './poker.js';
 
 const PIX = '"Press Start 2P", monospace', MONO = '"JetBrains Mono", ui-monospace, monospace';
 const C = { bg: '#120b1f', bg2: '#1b1326', ink: '#e9dff7', muted: '#9b8bb8', accent: '#ff8a2a', green: '#4df21e', gold: '#ffd23a', line: '#3a2a55', pink: '#ff5fa2' };
@@ -56,7 +57,7 @@ export function renderShareCard(canvas, { def, costume, friends = [], format = '
     y = 392; x = 320; for (const a of tarot.slice(0, 11)) { const cv = document.createElement('canvas'); cv.width = 40; cv.height = 60; drawArcana(a.id, cv); g.drawImage(cv, x, y, 70, 105); x += 78; }
     if (!tarot.length) { g.fillStyle = C.muted; g.font = `18px ${MONO}`; g.fillText(`арканы таро: 0 из ${ARCANA.length}, всё впереди`, 320, 420); }
     // карты часа: XP, собранные руки и своя карта в колоде
-    const handLine = `XP ${st.score}` + (st.hands ? ` · рук собрано ${st.hands} · лучшая: ${st.bestHand ? st.bestHand.name + ' ×' + st.bestHand.mult : '?'}` : '') + (myCard ? ` · карта ${myCard.label || ''}` : '');
+    const handLine = `XP ${st.score}` + (st.hands ? ` · рук собрано ${st.hands} · лучшая: ${st.bestHand ? st.bestHand.name + ' ×' + st.bestHand.mult : '?'}` : '') + (myCard ? ` · карта ${myCard.label || cardLabel(myCard.rank, myCard.suit)}` : '');
     g.fillStyle = C.muted; g.font = `18px ${MONO}`; g.fillText(handLine, 320, 516);
     g.fillStyle = C.green; g.font = `16px ${MONO}`; g.fillText('играй: ' + url, 56, 560); g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText('ночь на 1 ноября · Минск', W - 56, 560); g.textAlign = 'left';
   } else {

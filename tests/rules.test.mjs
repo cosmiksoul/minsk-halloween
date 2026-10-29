@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
+import { isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -125,4 +125,29 @@ test('cardsFromDeck: владелец по месту, свои, мёртвые 
   assert.equal(cards[0].owner, 'a:1'); assert.equal(cards[0].ghoul, false); assert.equal(cards[0].rank, 14);
   assert.equal(cards[1].ghoul, true); assert.equal(cards[2].ghoul, true); assert.equal(cards[3].ghoul, true); assert.equal(cards[3].suit, '♦');
   assert.equal(cards[1].seed, cardsFromDeck([2], rows, 497000, 'me')[0].seed); assert.notEqual(cards[1].seed, cardsFromDeck([2], rows, 497001, 'me')[0].seed);
+});
+
+test('migrate: битая рука обнуляется, состояния карт нормализуются', () => {
+  assert.equal(migrate({ ...newProgress(), hand: { hour: 1, cards: null } }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: { hour: 1, cards: [{ slot: 1 }] } }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: 'x' }).hand, null);
+  assert.equal(migrate({ ...newProgress(), hand: { cards: [1, 2, 3, 4, 5].map(slot => ({ slot })) } }).hand, null);
+  const weird = [1, 2, 3, 4, 5].map(slot => ({ slot, rank: 14, suit: '♠', state: 'weird', coolUntil: 'no' }));
+  const g4 = migrate({ ...newProgress(), hand: { hour: 497000, cards: weird } });
+  assert.equal(g4.hand.cards.length, CARD.hand); assert.equal(g4.hand.cards[0].state, 'up'); assert.equal(g4.hand.cards[0].coolUntil, 0);
+  const ok = [1, 2, 3, 4, 5].map(slot => ({ slot, rank: 14, suit: '♠', state: 'cool', coolUntil: 5 }));
+  const g5 = migrate({ ...newProgress(), hand: { hour: 497000, cards: ok } }); assert.equal(g5.hand.cards[0].state, 'cool'); assert.equal(g5.hand.cards[0].coolUntil, 5);
+});
+
+test('isHalloweenNight: 31.10 18:00 – 01.11 06:00 по Минску', () => {
+  assert.equal(isHalloweenNight(Date.UTC(2026, 9, 31, 14, 59)), false);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 9, 31, 15, 0)), true);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 10, 1, 2, 59)), true);
+  assert.equal(isHalloweenNight(Date.UTC(2026, 10, 1, 3, 0)), false);
+  assert.equal(HALLOWEEN.xpMul, 2);
+});
+
+test('addPoints: ночью Хэллоуина плюс удваивается, минус нет', () => {
+  const night = Date.UTC(2026, 9, 31, 20, 0), day = Date.UTC(2026, 9, 30, 20, 0);
+  const g = newProgress(); assert.equal(addPoints(g, 5, day), 5); assert.equal(addPoints(g, 5, night), 15); assert.equal(addPoints(g, -1, night), 14);
 });

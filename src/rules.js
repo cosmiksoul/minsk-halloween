@@ -32,6 +32,7 @@ export const THROW_NAME = { rock: 'камень', scissors: 'ножницы', pa
 export const LOG_MAX = 200;
 // --- эндгейм: колода из рейтинга и рука боссов на час, покерные множители, жетоны, проезжая часть, квесты
 export const CARD = { slots: 52, hand: 5, ringMin: 200, ringMax: 700, ringStep: 300, ringCap: 1600, spacing: 150, cooldown: 60, xpPerRank: 2, handBase: 20, bonus: { low: 0, mid: 1, high: 2, ace: 3 } };
+const CARD_STATES = ['up', 'cool', 'down'];
 export const HAND_MULT = { high: 1, pair: 2, twoPair: 3, three: 4, straight: 6, flush: 8, fullHouse: 10, four: 15, straightFlush: 30 };
 export const TOKEN = { perHand: 1, price: 12, cap: 3 };
 export const ROAD = { speed: 1.2, heatPer: 4, crowdCost: 4 };
@@ -143,7 +144,10 @@ export function migrate(g) {
     if (!Array.isArray(g.seenVenues)) g.seenVenues = uniqIds(g.visits.filter(v => v && !v.auto));
     if (!Number.isFinite(g.shields)) g.shields = 0;
     if (!g.hosts || typeof g.hosts !== 'object') g.hosts = {};
-    if (g.hand === undefined) g.hand = null; if (!Number.isFinite(g.hands)) g.hands = 0; if (g.bestHand === undefined) g.bestHand = null; // рука часа и собранные руки
+    // рука часа: только объект с часом и ровно пятью картами, иначе сдадим заново; состояние и откат карт нормализуем (обрыв сохранения, другая сборка)
+    if (!g.hand || typeof g.hand !== 'object' || !Number.isInteger(g.hand.hour) || !Array.isArray(g.hand.cards) || g.hand.cards.length !== CARD.hand || g.hand.cards.some(c => !c || typeof c !== 'object')) g.hand = null;
+    else for (const c of g.hand.cards) { if (!CARD_STATES.includes(c.state)) c.state = 'up'; if (!Number.isFinite(c.coolUntil)) c.coolUntil = 0; }
+    if (!Number.isFinite(g.hands)) g.hands = 0; if (g.bestHand === undefined) g.bestHand = null; // собранные руки
     delete g.resetAt;
     return g;
   }
@@ -165,7 +169,10 @@ export function migrate(g) {
   delete g.skulls; delete g.friends;
   return g;
 }
-export function addPoints(g, n) { g.score = Math.max(0, num(g.score) + n); return g.score; }
+// ночь Хэллоуина по Минску (UTC+3): 31.10 18:00 – 01.11 06:00, положительный XP удваивается
+export const HALLOWEEN = { from: Date.UTC(2026, 9, 31, 15, 0), to: Date.UTC(2026, 10, 1, 3, 0), xpMul: 2 };
+export function isHalloweenNight(now = Date.now()) { return now >= HALLOWEEN.from && now < HALLOWEEN.to; }
+export function addPoints(g, n, now = Date.now()) { const k = n > 0 && isHalloweenNight(now) ? HALLOWEEN.xpMul : 1; g.score = Math.max(0, num(g.score) + n * k); return g.score; }
 // +1 к максимуму сердец (до капа) и, если healToo, +1 текущего; true, когда максимум вырос
 export function growHearts(g, healToo = true) {
   const grew = g.maxHp < CAPS.hearts;

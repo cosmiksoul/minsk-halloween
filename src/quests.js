@@ -7,8 +7,8 @@ import { local } from './store.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 export class Quests {
-  constructor({ game, sim }) { this.game = game; this.sim = sim; }
-  get done() { const d = local.get('quests', []); return Array.isArray(d) ? d : []; }
+  constructor({ game, sim }) { this.game = game; this.sim = sim; this._done = null; }
+  get done() { if (!this._done) { const d = local.get('quests', []); this._done = Array.isArray(d) ? d : []; } return this._done; } // в памяти: HUD зовёт на каждый рендер
   current() { return nextQuest(this.done); }
   // событие игры: kill, friend, candy, coin, win (охотник), card (босс); xp — что дало само действие
   onEvent(kind, xp) {

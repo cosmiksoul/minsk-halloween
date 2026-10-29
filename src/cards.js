@@ -22,10 +22,14 @@ export class Cards {
   // вход или смена скелета: рука этого часа из прогресса (узлы проверяются) или новая сдача; с базой первая сдача ждёт рейтинг до трёх секунд
   async start() {
     const g = this.game.g, p = this.player; if (!g || !p) return;
-    const token = ++this.token; const hour = minskHour(Date.now());
+    const hour = minskHour(Date.now());
     if (g.hand && g.hand.hour === hour) { this.verifyHand(g.hand); this.spawnBosses(); this.game.renderHUD(); return; }
-    this.dealing = true; await this.loadDeck(hour); this.dealing = false;
-    if (token !== this.token || this.game.player !== p || this.game.g !== g) return;
+    if (this.dealing && this.dealingFor === g && this.dealingHour === hour) return; // сдача уже идёт (setPlayer и main зовут start дважды): один запрос рейтинга
+    const token = ++this.token; this.dealing = true; this.dealingFor = g; this.dealingHour = hour;
+    await this.loadDeck(hour);
+    if (token !== this.token) return; // пока ждали рейтинг, скелет сменился: новая сдача идёт со своим токеном и сама снимет dealing
+    this.dealing = false;
+    if (this.game.player !== p || this.game.g !== g) return;
     this.deal(hour);
   }
   // колода на этот час: ответ рейтинга или пусто (упыри); позже трёх секунд ответ на этот час уже не ждём
@@ -33,7 +37,7 @@ export class Cards {
     if (!this.remote) { this.deck = []; return; }
     if (this.deckHour === hour) return;
     const rows = await Promise.race([this.remote.top(CARD.slots).catch(() => null), new Promise(r => setTimeout(() => r(null), 3000))]);
-    this.deck = Array.isArray(rows) ? rows : []; this.deckHour = hour;
+    this.deck = Array.isArray(rows) ? rows : []; if (Array.isArray(rows)) this.deckHour = hour; // без ответа час не помечаем: update дотянет колоду позже (своя карта на HUD)
   }
   // сдача: пять мест колоды по часу, устройству и скелету; боссы на узлах кольца 200–700 м (шире на окраине), не у заведений и не посреди проспекта
   deal(hour) {
@@ -46,7 +50,7 @@ export class Cards {
     }
     const rng = rngOf(handSeed(hour, dev, seed) ^ 0x9e3779b9);
     const nodes = this.placeNodes(CARD.hand, rng, []);
-    cards.forEach((c, i) => { this.setNode(c, nodes[i]); c.state = 'up'; c.coolUntil = 0; });
+    const home = this.sim.nodeOf(p); cards.forEach((c, i) => { this.setNode(c, nodes[i] != null ? nodes[i] : home); c.state = 'up'; c.coolUntil = 0; });
     g.hand = { hour, cards, dealtAt: Date.now() };
     this.game.save(); this.spawnBosses(); this.game.renderHUD();
   }
@@ -59,7 +63,9 @@ export class Cards {
     let cands = [];
     for (let max = CARD.ringMax; ; max += CARD.ringStep) { cands = g.ring(start, CARD.ringMin, max).filter(n => !bad(n)); if (cands.length >= count || max >= CARD.ringCap) break; }
     const named = cands.filter(n => g.names[n]); const pool = named.length >= count ? named : cands;
-    return g.pickSpaced(pool, count, CARD.spacing, rng, p.x, p.z);
+    // добор ближайшими только из достижимых узлов той же компоненты: с острова графа боссы иначе «не дойти»
+    const reach = pool.length < count ? new Set(g.ring(start, 0, CARD.ringCap * 3)) : null;
+    return g.pickSpaced(pool, count, CARD.spacing, rng, p.x, p.z, reach ? (n => reach.has(n) && !bad(n)) : null);
   }
   // сохранённая рука: узел должен существовать и быть проходимым и не быть заведением, иначе ближайший к сохранённым координатам, иначе снова в кольцо
   verifyHand(hand) {
@@ -123,6 +129,7 @@ export class Cards {
   // --- бой: только по явному «сразиться»; скелет идёт к боссу как к прохожему, дуэль стартует по приходу (Game.update)
   fight(card) {
     const game = this.game, p = this.player; if (!p || !card) return false;
+    if (game.busy || !game.controlled || game.modal !== null) return false; // не посреди броска, не мёртвым и не без управления, не из-под модалки
     if (card.state !== 'up') { this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
     const a = this.agentOf(card); if (!a) return false;
     game.dropPending(); game.pendingVenue = null; game.pendingShop = null; game.closeDialog();
@@ -172,16 +179,19 @@ export class Cards {
   flyTo(slot) { const b = this.bosses.find(b => b.card.slot === slot); if (!b) return; if (this.flyToFn) this.flyToFn(b.a.x, b.a.z); if (this.showCard) this.showCard(b.a); }
   // раз в секунду: смена часа (не посреди боя), откаты, таймер на HUD; каждый кадр — спрайты за боссами и ростом
   update(dt) {
-    for (const b of this.bosses) this.placeSprite(b);
+    if (this.sim.H !== this.lastH) { this.lastH = this.sim.H; for (const b of this.bosses) this.placeSprite(b); } // боссы стоят: спрайты двигаем только при смене роста
     this.acc += dt; if (this.acc < 1) return; this.acc = 0;
     const g = this.game.g, p = this.player, hand = this.hand; if (!g || !p || this.dealing) return;
     const now = Date.now(), hour = minskHour(now);
     if ((!hand || hand.hour !== hour) && !this.game.busy && !this.game.pendingBoss) {
       // старая рука закрывается без бонуса, боссы уходят; новая сдаётся вокруг текущего места после свежей колоды
       const token = ++this.token; this.clearBosses(!!hand); this.dealing = true;
-      this.loadDeck(hour).then(() => { this.dealing = false; if (token !== this.token || this.game.player !== p || this.game.g !== g) return; this.deal(minskHour(Date.now())); });
+      this.dealingFor = g; this.dealingHour = hour;
+      this.loadDeck(hour).then(() => { if (token !== this.token) return; this.dealing = false; if (this.game.player !== p || this.game.g !== g) return; this.deal(minskHour(Date.now())); });
       return;
     }
+    // колода часа не пришла при сдаче (таймаут): дотягиваем раз в минуту ради своей карты на HUD и подписей доски
+    if (this.remote && this.deckHour !== hour && now >= (this.deckRetryAt || 0)) { this.deckRetryAt = now + 60000; this.loadDeck(hour).then(() => { if (this.deckHour === hour && this.game.player === p) this.game.renderHUD(); }); }
     let changed = false;
     for (const c of hand.cards) if (c.state === 'cool' && now >= (c.coolUntil || 0)) { c.state = 'up'; c.coolUntil = 0; this.redraw(c); changed = true; }
     if (changed) { this.game.save(); this.game.renderHUD(); }
