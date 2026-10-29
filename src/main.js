@@ -13,10 +13,10 @@ import { Cards } from './cards.js';
 import { Quests } from './quests.js';
 import { Sfx } from './sfx.js';
 import { initIntro } from './intro.js';
-import { icon, installFrames, registerIcons } from './ui.js';
+import { icon, installFrames, registerIcons, statLine } from './ui.js';
 import { beaten, cardLabel } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf, cardOfSlot } from './rules.js';
 import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
@@ -153,6 +153,7 @@ $('popV').textContent = fmtX(ui.pop.value);
 ui.pop.oninput = () => { $('popV').textContent = fmtX(ui.pop.value); sim.density = +ui.pop.value; sim.cap = Math.round((isMobile ? 450 : 900) * Math.max(0.5, sim.density)); };
 ui.spd.oninput = () => { $('spdV').textContent = fmtX(ui.spd.value); };
 ui.pix.oninput = () => { $('pixV').textContent = ui.pix.value; pixel.setPixelSize(+ui.pix.value); };
+$('menuBtn').innerHTML = icon('menu', 1);
 $('menuBtn').onclick = () => { const m = $('menu'); m.hidden = !m.hidden; $('menuBtn').classList.toggle('on', !m.hidden); };
 // звук: кнопка в шапке переключает все эффекты, флаг переживает перезагрузку
 const paintSnd = () => { $('sndBtn').innerHTML = icon(Sfx.muted ? 'mute' : 'sound', 1); $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
@@ -236,8 +237,8 @@ function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(co
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 // статистика гостя: по ссылке приходит массив [💀, 💚, 🃏, 🎃], из базы — объект { kills, friends } и счёт
-const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · XP ${d.score}` : ''); };
-const ripText = d => `☠ упокоен навсегда${d.diedStreet ? ' у ' + d.diedStreet : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
+const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return statLine({ score: d.score, kills: v.kills ?? 0, friends: v.friends ?? 0, tarot: v.tarot, visits: v.visits }); };
+const ripText = d => `${icon('skull', 1)} упокоен навсегда${d.diedStreet ? ' у ' + esc(d.diedStreet) : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
 function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
   cardAgent = a; $('card').hidden = false;
@@ -246,7 +247,7 @@ function showCard(a, refresh) {
   const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;
   $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.dead ? ' · упокоен навсегда' : a.def.guest ? (a.def.boss ? ' · босс часа' : a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
   $('cJob').textContent = 'При жизни: ' + a.bio.job;
-  $('cStatus').textContent = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
+  const gs = a.custom && a.def.guest ? guestStats(a.def) : ''; $('cStatus').innerHTML = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + esc(a.bio.status) + (gs ? ' · ' + gs : '');
   $('cState').textContent = 'Состояние: ' + stateOf(a);
   $('cGame').innerHTML = game.cardHtml(a);
   $('bFollow').classList.toggle('on', follow === a);
@@ -264,9 +265,9 @@ let profileAgent = null;
 function renderProfile(a) {
   $('pfName').textContent = a.bio.name; game.portrait(a, $('pfPic'));
   $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
-  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').textContent = a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a);
+  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').innerHTML = a.def.dead ? ripText(a.def) : 'Сейчас: ' + esc(a.bio.status) + ' · ' + stateOf(a);
   $('pfAbout').textContent = a.def.about ? 'О себе: ' + a.def.about : '';
-  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
+  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def)}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
   $('pfSelect').hidden = !ownAgent || !!a.def.dead || (a === game.player && game.selected); $('pfPlay').hidden = true;
   $('pfDeck').hidden = !ownAgent; $('pfShare').hidden = !(ownAgent && a === game.player);
@@ -460,16 +461,25 @@ $('mineList').onclick = e => {
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
 const SCORE_HINT = 'XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство';
-function boardRow(r, i, me) { const lbl = r.dead ? null : cards.labelForRank(i + 1); return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span>${lbl ? `<span class="bcard${/[♥♦]/.test(lbl) ? ' red' : ''}" title="карта в колоде часа">${lbl}</span>` : ''}<span class="n">${esc(r.name)}</span><span class="sc">XP ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${r.dead ? '☠ упокоен' : `❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}`}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+// строка доски: карта колоды часа canvas'ом по данным колоды (та же строка id), без базы карт нет; статы одной функцией с иконками
+function boardRow(r, i, me) {
+  const slot = remote && cards.deck.length && !r.dead ? cards.deck.findIndex(x => x.id === r.id) + 1 : 0;
+  const cv = slot >= 1 && slot <= 52 ? `<canvas class="bcv" width="24" height="33" data-slot="${slot}" title="карта в колоде часа"></canvas>` : '<span class="bcv"></span>';
+  const st = r.dead ? `${icon('skull', 1)} упокоен` : statLine({ hearts: r.hearts ?? '?', tail: r.tail ?? 0 });
+  return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span>${cv}<span class="n">${esc(r.name)}</span><span class="sc">${icon('xp', 1)} ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${st}</span><span class="s">${esc(r.job || '')} · ${statLine({ kills: r.kills ?? 0, friends: r.friends ?? 0, tarot: r.tarot ?? 0, visits: r.visits ?? 0, deaths: r.deaths || 0 }, { tail: false })}</span></div>`;
+}
+function drawBoardCards() {
+  for (const cv of document.querySelectorAll('#tabBoard canvas.bcv')) { const slot = +cv.dataset.slot; if (!slot) continue; const tmp = document.createElement('canvas'); tmp.width = 32; tmp.height = 44; cards.drawCard(tmp, { ...cardOfSlot(slot), state: 'up' }); const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, 24, 33); g.drawImage(tmp, 0, 0, 24, 33); }
+}
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
   const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses, dead: !!d.dead }; }).sort((a, b) => b.score - a.score);
   const list = (rows, empty) => rows.length ? rows.map((r, i) => boardRow(r, i, r.id === myId)).join('') : `<div class="hint">${empty}</div>`;
   if (!remote) {
     body.innerHTML = '<div class="day">скелеты в этом браузере</div>' + list(localRows, 'пока никого: создай своего скелета') + `<div class="hint">${SCORE_HINT}. Общий рейтинг всех игроков появится, когда в config.js будет вписан Supabase (README, раздел «База»)</div>`;
-    return;
+    drawBoardCards(); return;
   }
-  const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; };
+  const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; drawBoardCards(); };
   if (boardRows) draw(boardRows); else body.innerHTML = '<div class="hint">загружаем…</div>';
   if (fetchRemote) remote.top(52).then(rows => { if (rows) { boardRows = rows; draw(rows); } else draw(boardRows || localRows, 'сервер недоступен, показаны ' + (boardRows ? 'последние данные' : 'только свои скелеты')); });
 }
@@ -616,6 +626,9 @@ function updateCompass() {
   $('compassArrow').style.transform = `rotate(${ang.toFixed(0)}deg)`;
 }
 
+// XP и жетоны своего скелета в шапке
+let topKey = '';
+function updateTopMe() { const g = game.g; const el = $('topMe'); if (!g) { if (!el.hidden) { el.hidden = true; topKey = ''; } return; } const key = g.score + '|' + (g.tokens | 0); if (key !== topKey) { topKey = key; el.innerHTML = `${icon('xp', 1)} ${g.score}<span class="sep">·</span>${icon('token', 1)} ${g.tokens | 0}`; el.hidden = false; } }
 // --- главный цикл
 const clock = new THREE.Clock(); let acc = 0, feedAcc = 0, frameMs = 0, frames = 0;
 function frame() {
@@ -643,7 +656,7 @@ function frame() {
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
-  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
+  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); updateTopMe(); $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;

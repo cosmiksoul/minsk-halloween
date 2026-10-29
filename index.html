@@ -12,34 +12,34 @@
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "./src/bio.js": "./src/bio.js?v=6566703",
-  "./src/cards.js": "./src/cards.js?v=6566703",
-  "./src/city.js": "./src/city.js?v=6566703",
-  "./src/dice.js": "./src/dice.js?v=6566703",
-  "./src/districts.js": "./src/districts.js?v=6566703",
-  "./src/game.js": "./src/game.js?v=6566703",
-  "./src/gen.js": "./src/gen.js?v=6566703",
-  "./src/geo.js": "./src/geo.js?v=6566703",
-  "./src/graph.js": "./src/graph.js?v=6566703",
-  "./src/hosts.js": "./src/hosts.js?v=6566703",
-  "./src/hunters.js": "./src/hunters.js?v=6566703",
-  "./src/intro.js": "./src/intro.js?v=6566703",
-  "./src/landmarks.js": "./src/landmarks.js?v=6566703",
-  "./src/main.js": "./src/main.js?v=6566703",
-  "./src/poker.js": "./src/poker.js?v=6566703",
-  "./src/post.js": "./src/post.js?v=6566703",
-  "./src/quests.js": "./src/quests.js?v=6566703",
-  "./src/rules.js": "./src/rules.js?v=6566703",
-  "./src/sfx.js": "./src/sfx.js?v=6566703",
-  "./src/share.js": "./src/share.js?v=6566703",
-  "./src/shops.js": "./src/shops.js?v=6566703",
-  "./src/sim.js": "./src/sim.js?v=6566703",
-  "./src/skeletons.js": "./src/skeletons.js?v=6566703",
-  "./src/store.js": "./src/store.js?v=6566703",
-  "./src/tarot.js": "./src/tarot.js?v=6566703",
-  "./src/tiles.js": "./src/tiles.js?v=6566703",
-  "./src/ui.js": "./src/ui.js?v=6566703",
-  "./src/venues.js": "./src/venues.js?v=6566703"
+  "./src/bio.js": "./src/bio.js?v=86e365e",
+  "./src/cards.js": "./src/cards.js?v=86e365e",
+  "./src/city.js": "./src/city.js?v=86e365e",
+  "./src/dice.js": "./src/dice.js?v=86e365e",
+  "./src/districts.js": "./src/districts.js?v=86e365e",
+  "./src/game.js": "./src/game.js?v=86e365e",
+  "./src/gen.js": "./src/gen.js?v=86e365e",
+  "./src/geo.js": "./src/geo.js?v=86e365e",
+  "./src/graph.js": "./src/graph.js?v=86e365e",
+  "./src/hosts.js": "./src/hosts.js?v=86e365e",
+  "./src/hunters.js": "./src/hunters.js?v=86e365e",
+  "./src/intro.js": "./src/intro.js?v=86e365e",
+  "./src/landmarks.js": "./src/landmarks.js?v=86e365e",
+  "./src/main.js": "./src/main.js?v=86e365e",
+  "./src/poker.js": "./src/poker.js?v=86e365e",
+  "./src/post.js": "./src/post.js?v=86e365e",
+  "./src/quests.js": "./src/quests.js?v=86e365e",
+  "./src/rules.js": "./src/rules.js?v=86e365e",
+  "./src/sfx.js": "./src/sfx.js?v=86e365e",
+  "./src/share.js": "./src/share.js?v=86e365e",
+  "./src/shops.js": "./src/shops.js?v=86e365e",
+  "./src/sim.js": "./src/sim.js?v=86e365e",
+  "./src/skeletons.js": "./src/skeletons.js?v=86e365e",
+  "./src/store.js": "./src/store.js?v=86e365e",
+  "./src/tarot.js": "./src/tarot.js?v=86e365e",
+  "./src/tiles.js": "./src/tiles.js?v=86e365e",
+  "./src/ui.js": "./src/ui.js?v=86e365e",
+  "./src/venues.js": "./src/venues.js?v=86e365e"
 } }
 </script>
 <script src="config.js"></script>
@@ -57,17 +57,18 @@
 <div id="hud" class="panel"></div>
 
 <!-- верхняя полоса: статистика города, списки и меню -->
+<!-- шапка: меню, четыре вкладки иконками (подписи на десктопе), справа XP и жетоны своего скелета, звук, компас -->
 <div id="top">
-  <div class="tStats" id="tStats"><b id="stPop">0</b> скелетов · <b id="stMeet">0</b> встреч · <b id="stBeer">0</b> пива · <b id="stDance">0</b> танцев</div>
+  <button id="menuBtn" title="настройки"></button>
   <div class="tBtns">
-    <button class="tbtn" data-drawer="places">🎃 Места</button>
-    <button class="tbtn" data-drawer="events">🎟 Афиша</button>
-    <button class="tbtn" data-drawer="board">🏆 Лидеры</button>
-    <button class="tbtn" data-drawer="legend">🗺 Карта</button>
+    <button class="tbtn" data-drawer="places">Места</button>
+    <button class="tbtn" data-drawer="events">Афиша</button>
+    <button class="tbtn" data-drawer="board">Лидеры</button>
+    <button class="tbtn" data-drawer="legend">Карта</button>
   </div>
-  <button id="compass" title="повернуть на север"><span id="compassArrow">▲</span><small>N</small></button>
+  <div id="topMe" class="tStats" title="XP и спас-броски своего скелета" hidden></div>
   <button id="sndBtn" title="звук"></button>
-  <button id="menuBtn" title="настройки">⚙</button>
+  <button id="compass" title="повернуть на север"><span id="compassArrow">▲</span><small>N</small></button>
 </div>
 
 <div id="menu" class="panel" hidden>
@@ -94,6 +95,7 @@
   <div class="tabBody" id="tabEvents" hidden></div>
   <div class="tabBody" id="tabBoard" hidden></div>
   <div class="tabBody" id="tabLegend" hidden>
+    <div class="tStats" id="tStats"><b id="stPop">0</b> скелетов · <b id="stMeet">0</b> встреч · <b id="stBeer">0</b> пива · <b id="stDance">0</b> танцев</div>
     <div class="lg"><i class="chip" style="background:#ff8a2a"></i><b>Тыква</b> над крышей — бар, паб или клуб из OpenStreetMap. С жёлтым свечением — площадка с афишей. Зайди своим скелетом: щит <i class="ic ic-shield" style="width:16px;height:16px"></i> на 20 секунд.</div>
     <div class="lg"><i class="chip" style="background:#ff5fa2"></i><b>Вешалка</b> — магазин одежды. Случайная вещь за монеты <i class="ic ic-coin" style="width:16px;height:16px"></i>.</div>
     <div class="lg"><i class="chip" style="background:#4df21e"></i><b>Зелёный дом с лучом</b> — здесь спрятан аркан таро. Подойди и открой карту.</div>
@@ -256,6 +258,6 @@
   </div>
 </div>
 <div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
-<script type="module" src="src/main.js?v=6566703"></script>
+<script type="module" src="src/main.js?v=86e365e"></script>
 </body>
 </html>

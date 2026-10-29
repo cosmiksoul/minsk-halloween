@@ -374,3 +374,14 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 .inFoot { display:flex; align-items:center; gap:10px; } .inFoot button { margin-left:auto; font-size:12px; padding:8px 14px; }
 .inDots { display:flex; gap:5px; } .inDot { width:8px; height:8px; background:var(--line); } .inDot.on { background:var(--green); }
 @media (max-width: 700px) { .inRow { flex-direction:column; } #inCv { width:min(288px, 100%); height:auto; aspect-ratio:3/2; } }
+
+/* --- шапка: меню слева, вкладки, справа XP и жетоны, звук, компас; счётчики города живут в легенде */
+#top { justify-content:flex-start; }
+#topMe { margin-left:auto; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; } #topMe[hidden] { display:none; } #topMe .sep { color:var(--muted); }
+#menu { left:12px; right:auto; }
+#tabLegend .tStats { display:block; margin-bottom:8px; }
+@media (max-width: 700px) { #topMe { display:flex; font-size:9px; padding:5px 6px; } #menu { left:8px; right:8px; width:auto; } #tabLegend .tStats { display:block; white-space:normal; } }
+/* карты колоды у строк доски: canvas 24×33 */
+#tabBoard canvas.bcv { width:24px; height:33px; image-rendering:pixelated; vertical-align:middle; margin-right:4px; }
+#tabBoard .item { grid-template-columns:auto auto 1fr auto; }
+#tabBoard .item .s, #tabBoard .item .st { grid-column:1 / -1; }

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
 import { Sfx } from './sfx.js';
-import { icon, toast, escHtml } from './ui.js';
+import { icon, toast, escHtml, statLine } from './ui.js';
 import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
 import { cardLabel, isRed } from './poker.js';
 import { hostOf } from './hosts.js';
@@ -646,7 +646,7 @@ export class Game {
     hud.innerHTML = `<div class="hudMini"><span class="hudName">${esc(p.bio.name)}</span>${this.hearts(g)}<span class="pts">${icon('xp', 1)} ${g.score}</span></div><div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
       <div class="hudRow">${this.hearts(g)}${`<span class="sh" title="щит: примет одну рану или укус">${icon('shield', 1)}</span>`.repeat(Math.max(0, g.shields | 0))}</div>
       <div class="hudRow"><span class="tl" title="друзья в хвосте">${icon('friend', 1)} ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">${icon('xp', 1)} ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
-      <div class="hudRow"><span class="skc" title="черепа">${icon('skull', 1)} ${st.kills}</span><span class="frc" title="друзей всего">${icon('friend', 1)} ${st.friends}</span><span class="vc" title="заведений">${icon('places', 1)} ${g.seenVenues.length}</span><button class="deck tc" title="арканы: открыть колоду">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</button><span class="cn">${icon('coin', 1)} ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">${icon('token', 1)} ${g.tokens | 0}</span>${this.cards ? this.cards.myCardHtml() : ''}${g.deaths ? `<span class="dc" title="смертей">${icon('skull', 1)} ×${g.deaths}</span>` : ''}</div>
+      <div class="hudRow">${statLine({ kills: st.kills, friends: st.friends, visits: g.seenVenues.length })}<button class="deck tc" title="арканы: открыть колоду">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</button>${statLine({ coins: g.coins, tokens: g.tokens | 0, deaths: g.deaths })}${this.cards ? this.cards.myCardHtml() : ''}</div>
       ${this.cards ? this.cards.hudHtml() : ''}${this.quests ? this.quests.hudHtml() : ''}
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
@@ -666,7 +666,7 @@ export class Game {
         <div class="line"><span class="pts">${icon('xp', 1)} ${g.score}</span> · ${icon('heart', 1)} max ${g.maxHp} · <span class="tl">${icon('friend', 1)} хвост ${g.tail.length}/${CAPS.tail}</span>${lvl ? ` · <span class="thr on" title="розыск">${icon('wanted', 1)} ${lvl}</span>` : ''}</div>
         <div class="line"><span class="skc">${icon('skull', 1)} ${st.kills}</span> · <span class="frc">${icon('friend', 1)} ${st.friends}</span> · <span class="tc">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc" title="заведений">${icon('places', 1)} ${g.seenVenues.length}</span> · <span class="cn">${icon('coin', 1)} ${g.coins}</span>${g.tokens ? ` · <span class="tk">${icon('token', 1)} ${g.tokens}</span>` : ''}</div></div>`;
     }
-    if (a.custom && !a.def.guest && a.def.game) { const st = statsOf(a.def.game); return `<div class="gm"><div class="line muted">${icon('xp', 1)} ${st.score} · ${icon('heart', 1)} ${st.hearts} · ${icon('friend', 1)} ${st.tail} · ${icon('skull', 1)} ${st.kills} · ${icon('arcana', 1)} ${st.tarot}/${ARCANA.length} · гуляет сам</div></div>`; }
+    if (a.custom && !a.def.guest && a.def.game) { const st = statsOf(a.def.game); return `<div class="gm"><div class="line muted">${statLine({ score: st.score, hearts: st.hearts, tail: st.tail, kills: st.kills, tarot: st.tarot }, { arcana: ARCANA.length })} · гуляет сам</div></div>`; }
     if (a.ghost) { const s = this.g && this.g.log.find(x => x.kind === 'kill' && x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(fmtAt(s.at))}` : ''}</div></div>`; }
     if (this.player && a.leader === this.player) { const f = this.g && this.g.tail.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(fmtAt(f.at))}` : ''} · идёт следом</div></div>`; }
     return '';
@@ -683,7 +683,7 @@ export class Game {
     const fr = friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}подружились в ${when(s)}${s.kind === 'friend' && !s.inTail ? ' · машет из толпы' : ''}`; return `<span class="fr${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? icon('boss', 1) : icon('friend', 1)}</span>`; }).join('');
     const vis = g.visits.slice(0, 10).map(v => `<div class="vis">${esc(v.at)} · ${icon('places', 1)} ${esc(v.name)}${v.auto ? ' <span class="muted">(сам)</span>' : ''}</div>`).join('');
     return `<div class="pf">
-      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span> · <span class="pts">${icon('xp', 1)} ${g.score}</span> <span class="muted">· побед ${g.wins} · поражений ${g.losses}</span></div>
+      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span> · ${statLine({ score: g.score, kills: g.kills | 0, friends: g.friendsTotal | 0, tarot: g.tarot.length, visits: g.seenVenues.length }, { arcana: ARCANA.length })} <span class="muted">· побед ${g.wins} · поражений ${g.losses}</span></div>
       <div class="line">хвост: <span class="tl">${icon('friend', 1)} ${g.tail.length}/${CAPS.tail}</span>${g.tail.length ? ' <span class="muted">· ' + g.tail.map(f => esc(firstName(f.name))).join(', ') + '</span>' : ''}</div>
       <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
       <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>

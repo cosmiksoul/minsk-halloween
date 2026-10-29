@@ -80,6 +80,9 @@ const ICONS = {
   beer: [
     '................', '................', '....kkkkkk......', '...kwwwwwwk.....', '..kggggggggkkk..', '..kggggggggkggk.', '..kgggggggkgkgk.', '..kgggggggkgkgk.',
     '..kgggggggkgkgk.', '..kggggggggkggk.', '..kggggggggkkk..', '..kggggggggk....', '..kggggggggk....', '...kkkkkkkk.....', '................', '................'],
+  menu: [
+    '................', '......kkkk......', '...k.kaaaak.k...', '..kakkaaaakkak..', '..kaaaaaaaaaak..', '...kaaakkaaak...', '.kkaaak..kaaakk.', '.kaaaak..kaaaak.',
+    '.kaaaak..kaaaak.', '.kkaaak..kaaakk.', '...kaaakkaaak...', '..kaaaaaaaaaak..', '..kakkaaaakkak..', '...k.kaaaak.k...', '......kkkk......', '................'],
   quest: [
     '................', '.....kkkkkk.....', '...kkrrrrrrkk...', '..krrkkkkkkrrk..', '.krkkwwwwwwkkrk.', '.krkwwkkkkwwkrk.', 'krkwwkrrrrkwwkrk', 'krkwkrrrrrrkwkrk',
     'krkwkrrrrrrkwkrk', 'krkwwkrrrrkwwkrk', '.krkwwkkkkwwkrk.', '.krkkwwwwwwkkrk.', '..krrkkkkkkrrk..', '...kkrrrrrrkk...', '.....kkkkkk.....', '................'],
