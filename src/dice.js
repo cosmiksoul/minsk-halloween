@@ -1,4 +1,6 @@
 // Бросок d20: пиксельный кубик крутится на оверлее, число мельтешит, потом замирает.
+import { outcomeOf } from './rules.js';
+export { outcomeOf };
 const $ = id => document.getElementById(id);
 
 export const OUTCOMES = {
@@ -7,7 +9,6 @@ export const OUTCOMES = {
   success: { label: 'успех', color: '#4df21e' },
   crit: { label: 'КРИТИЧЕСКИЙ УСПЕХ', color: '#ffd23a' },
 };
-export function outcomeOf(n) { return n <= 1 ? 'critfail' : n <= 10 ? 'fail' : n <= 19 ? 'success' : 'crit'; }
 
 function drawD20(ctx, n, color, angle) {
   const S = ctx.canvas.width; ctx.clearRect(0, 0, S, S);

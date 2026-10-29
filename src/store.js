@@ -3,8 +3,9 @@
 // а чужие скелеты можно показать на карте. Любая ошибка сети — молча остаёмся локальными.
 const LS = 'minsk-skeletons.custom';
 
-// общий счёт для доски почёта: черепа и друзья по 3, арканы по 5, заведения по 1
-export function scoreOf(g) { if (!g) return 0; return (g.skulls?.length ?? 0) * 3 + (g.friends?.length ?? 0) * 3 + (g.tarot?.length ?? 0) * 5 + (g.visits?.length ?? 0); }
+// счёт для доски почёта считается в rules.js (накопитель у v2, старая формула у прежнего прогресса)
+import { scoreOf } from './rules.js';
+export { scoreOf };
 
 export const local = {
   load() { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } },
