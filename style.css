@@ -294,13 +294,8 @@ body.drawerOpen #card { left:344px; }
   #ask, #host { bottom:72px; }
   #toasts { top:auto; bottom:72px; right:8px; left:8px; align-items:stretch; }
   #hud { top:52px; left:8px; max-width:calc(100vw - 16px); padding:4px 8px; } /* под шапкой, чтобы кнопки шапки не перекрывали панель */
-  #hud.has.min .hudTop, #hud.has.min .hudRow, #hud.has.min .hand, #hud.has.min .hudQuest, #hud.has.min .hudHint { display:none; }
-  #hud .hudMini { display:none; align-items:center; gap:6px; font-size:11px; }
-  #hud.has.min .hudMini { display:flex; }
-  #hud.has.min.handOpen .hand { display:flex; }
   #bmark, #hmark { font-size:20px; }
 }
-#hud .hudMini { display:none; }
 
 /* значок проезжей части у шкалы розыска */
 #hud .road { margin-left: 4px; filter: drop-shadow(0 0 3px #ffd23a); }
@@ -378,7 +373,7 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 @media (max-width: 700px) { .inRow { flex-direction:column; } #inCv { width:min(288px, 100%); height:auto; aspect-ratio:3/2; } }
 
 /* --- шапка: меню слева, вкладки, справа XP и жетоны, звук, компас; счётчики города живут в легенде */
-#top { justify-content:flex-start; }
+#top { justify-content:flex-end; } /* кнопки справа, слева панель персонажа */
 #topMe { margin-left:auto; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; } #topMe[hidden] { display:none; } #topMe .sep { color:var(--muted); }
 #menu { left:12px; right:auto; }
 #stats { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:4; white-space:nowrap; font-size:10px; max-width:calc(100vw - 24px); overflow:hidden; text-overflow:ellipsis; }
@@ -422,3 +417,28 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
 #menu label.chk { display:flex; align-items:center; gap:6px; font-size:10px; cursor:pointer; } #menu label.chk input { accent-color:var(--green); margin:0; }
 .dGrid { grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:10px 8px; }
 .slot canvas { width:64px; height:96px; transition:transform .12s steps(2); } .slot.on:hover canvas { transform:translateY(-3px) scale(1.04); }
+
+/* --- панель персонажа в три состояния: строка статуса (min) → карточка (клик) → профиль (ещё клик); без скелета — внизу по центру */
+#hud.has.min .hudTop, #hud.has.min .hudRow, #hud.has.min .hand, #hud.has.min .hudQuest, #hud.has.min .hudHint, #hud.has.min .hudCtlRow { display:none; }
+#hud .hudMini { display:none; align-items:center; gap:8px; font-size:10px; white-space:nowrap; }
+#hud.has.min .hudMini { display:flex; } #hud.has.min { max-width:none; padding:4px 8px; }
+#hud.has.min.handOpen .hand { display:flex; }
+.hudMini .hearts { gap:1px; } .hudMini .hudArrow { color:var(--muted); font-size:9px; } #hud.has.min:hover .hudArrow { color:var(--ink); }
+.hudTop .hudFold { margin-left:auto; font-size:14px; line-height:1; padding:0 6px; color:var(--muted); } .hudTop .hudFold:hover { color:#fff; }
+.hudCtlRow { display:flex; align-items:center; gap:8px; margin-top:2px; } .hudCtlRow .hudHint { flex:1; }
+#hud:not(.has) { left:50%; right:auto; top:auto; bottom:52px; transform:translateX(-50%); align-items:center; text-align:center; cursor:default; transition:none; }
+#hud:not(.has) .hudRow { justify-content:center; }
+@media (max-width: 700px) { #hud:not(.has) { bottom:104px; max-width:calc(100vw - 16px); } #hud.has.min { padding:3px 6px; } }
+
+/* --- вкладка «Квесты» */
+.qHead { padding:8px 10px 6px; font-family:"Press Start 2P", monospace; font-size:7px; color:#d8c2ff; }
+.q { display:flex; gap:8px; align-items:flex-start; padding:6px 10px; border-bottom:1px solid var(--line); font-size:10px; line-height:1.4; }
+.q .qi { flex:0 0 16px; text-align:center; } .q .qh { font-size:9px; color:var(--muted); }
+.q.done { color:var(--muted); } .q.done .qi { color:var(--green); font-weight:700; }
+.q.cur { background:rgba(255,210,58,.08); } .q.cur b { color:#ffd23a; }
+.q.todo { opacity:.55; }
+#tabQuests .hint { padding:8px 10px; }
+
+/* --- подтверждение */
+#confirm { position:fixed; inset:0; z-index:11; display:flex; align-items:center; justify-content:center; background:rgba(8,4,16,.72); padding:12px; }
+#confirm[hidden] { display:none; } .cfBox { width:min(420px, 100%); } .cfBox .dTitle { color:#ff5fa2; } .cfBox .line { line-height:1.5; }
