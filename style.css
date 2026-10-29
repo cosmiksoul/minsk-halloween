@@ -244,6 +244,7 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 #compassArrow { display:inline-block; transition:transform .2s; }
 #menuBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); }
 #menuBtn.on { border-color:var(--accent); color:var(--accent); }
+#sndBtn { background:var(--panel); border:1px solid var(--line); border-radius:6px; width:32px; height:32px; padding:0; font-size:14px; backdrop-filter:blur(4px); } #sndBtn.off { opacity:.6; }
 #menu { position:fixed; top:52px; right:12px; z-index:6; width:300px; max-width:calc(100vw - 24px); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; display:flex; flex-direction:column; gap:6px; backdrop-filter:blur(4px); }
 #menu[hidden] { display:none; }
 .mTitle { font-family:"Press Start 2P", monospace; font-size:7px; color:var(--accent); letter-spacing:.5px; margin-top:2px; }
@@ -273,16 +274,31 @@ body.drawerOpen #card { left:344px; }
 .pfText { display:flex; flex-direction:column; gap:4px; min-width:0; }
 #pfGame { max-height:36vh; overflow:auto; }
 #pfGame .line { line-height:1.6; }
+/* телефон: шапка только иконками, нижняя панель #mbar, HUD в одну строку, карточка снизу над панелью */
+#mbar { display:none; }
 @media (max-width: 700px) {
-  #top { top:auto; bottom:12px; justify-content:flex-start; }
-  .tStats { font-size:9px; padding:5px 8px; white-space:normal; }
-  #menu { top:auto; bottom:52px; }
-  #drawer { width:calc(100vw - 24px); bottom:100px; }
-  body.drawerOpen #card { left:12px; }
-  body.drawerOpen #card { display:none; }
-  #card { bottom:64px; }
-  #ask, #host { bottom:64px; }
+  #top { top:8px; left:8px; right:8px; justify-content:flex-start; gap:4px; }
+  .tStats, .tbtn .tlabel { display:none; }
+  .tbtn { padding:6px; } .tbtn .ic { margin:0; }
+  #menu { top:48px; right:8px; }
+  #drawer { width:calc(100vw - 16px); left:8px; top:96px; bottom:76px; }
+  body.drawerOpen #card { left:0; display:none; }
+  #mbar { position:fixed; left:0; right:0; bottom:0; height:64px; z-index:6; display:flex; justify-content:space-around; align-items:center; padding:4px 8px; background:rgba(14,9,24,.96); border-top:2px solid var(--line); }
+  #mbar button { width:56px; height:56px; padding:2px 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-family:"Press Start 2P", monospace; font-size:8px; line-height:1; }
+  #mbar button .ic { margin:0; } #mbar button small { font-size:8px; }
+  #mbar button:disabled { opacity:.5; }
+  #card { left:0; right:0; bottom:64px; width:100%; max-width:100%; animation:slideUp .2s ease-out; }
+  @keyframes slideUp { from { transform:translateY(100%) } to { transform:none } }
+  #ask, #host { bottom:72px; }
+  #toasts { top:auto; bottom:72px; right:8px; left:8px; align-items:stretch; }
+  #hud { top:52px; left:8px; max-width:calc(100vw - 16px); padding:4px 8px; } /* под шапкой, чтобы кнопки шапки не перекрывали панель */
+  #hud.has.min .hudTop, #hud.has.min .hudRow, #hud.has.min .hand, #hud.has.min .hudQuest, #hud.has.min .hudHint { display:none; }
+  #hud .hudMini { display:none; align-items:center; gap:6px; font-size:11px; }
+  #hud.has.min .hudMini { display:flex; }
+  #hud.has.min.handOpen .hand { display:flex; }
+  #bmark, #hmark { font-size:20px; }
 }
+#hud .hudMini { display:none; }
 
 /* значок проезжей части у шкалы розыска */
 #hud .road { margin-left: 4px; filter: drop-shadow(0 0 3px #ffd23a); }
@@ -306,3 +322,66 @@ body.drawerOpen #card { left:344px; }
 
 /* строка текущего квеста онбординга на HUD */
 #hud .hudQuest { margin:2px 0 1px; font-size:9px; line-height:1.3; color:#ffd23a; }
+
+/* --- рисованный интерфейс: иконки из canvas, девятисекционные рамки, кнопки с фаской, сердца и полоса розыска */
+.ic { display:inline-block; background-size:100% 100%; background-repeat:no-repeat; image-rendering:pixelated; vertical-align:-3px; flex:0 0 auto; }
+#hud.panel, #card.panel, #drawer.panel, #menu.panel, #ask.panel, #host.panel, .dBox.panel, .tBox.panel, #diceTitle.panel, #intro .inBox { border:8px solid transparent; border-image:var(--frame-dark) 8 fill stretch; border-radius:0; background:transparent; box-shadow:none; backdrop-filter:none; }
+.panel.light { border-image:var(--frame-light) 8 fill stretch; color:#1b1326; }
+button { border-radius:0; box-shadow:inset -2px -2px 0 rgba(0,0,0,.55), inset 2px 2px 0 rgba(255,255,255,.14); }
+button:active { transform:translate(1px,1px); box-shadow:none; }
+button.x, #hud button.deck, #popup .x { box-shadow:none; }
+button .ic { vertical-align:-3px; margin-right:3px; }
+.hearts { display:inline-flex; gap:1px; align-items:center; }
+.ic.lost { animation:heartLost .3s steps(2) 1; }
+@keyframes heartLost { 0% { transform:translateX(-4px); filter:brightness(2) } 100% { transform:none; filter:none } }
+.thrWrap { display:inline-flex; align-items:center; gap:2px; cursor:help; }
+.thrBar { position:relative; display:inline-block; width:60px; height:6px; background:#1b1326; border:1px solid var(--line); box-sizing:content-box; }
+.thrBar .fill { position:absolute; left:0; top:0; bottom:0; }
+.thrBar .tick { position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.28); }
+.thrWrap.hot .thrBar { animation:thrBlink .8s steps(2) infinite; }
+.thrWrap.flash .thrBar { animation:thrFlash 1.2s ease-out 1; }
+.statLine .sep { color:var(--muted); }
+.tbtn .ic { margin-right:4px; }
+.tbtn, #menuBtn, #sndBtn, .tabs2 button, .socials button, .item .k { border-radius:0; }
+#sndBtn .ic, #menuBtn .ic { margin:0; }
+.hudRow .ic { vertical-align:-3px; }
+
+/* --- рука объектом: карты canvas на HUD, трекер цели, стрелка на босса у края экрана */
+#hud .hand { flex-wrap:wrap; gap:4px; align-items:flex-start; }
+#hud .hc { min-width:0; height:auto; padding:0; border:0; background:none; border-radius:0; display:inline-block; position:relative; }
+#hud .hc canvas.hcc { display:block; width:32px; height:44px; image-rendering:pixelated; }
+#hud .hc.up:hover canvas { transform:translateY(-2px); }
+#hud .hc.down canvas { opacity:.85; }
+#hud .hc.cool .cd, #hud .hc .cd { position:absolute; left:0; right:0; bottom:3px; text-align:center; font-size:8px; line-height:1.3; background:rgba(27,19,38,.85); color:#fff; border-radius:0; padding:0; font-variant-numeric:tabular-nums; }
+#hud .handR { margin-left:0; align-self:center; }
+#hud .handTr { width:100%; font-size:10px; color:var(--ink); display:flex; gap:3px; align-items:center; flex-wrap:wrap; }
+#bmark { position:fixed; left:0; top:0; z-index:5; transform:translate(-50%,-50%); cursor:pointer; filter:drop-shadow(0 0 5px #ffd23a); transition:left .15s linear, top .15s linear; user-select:none; line-height:0; }
+#bmark[hidden] { display:none; }
+
+/* --- тосты: системные сообщения стопкой справа сверху под шапкой, новые сверху */
+#toasts { position:fixed; right:12px; top:56px; z-index:8; display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none; }
+.toast { display:flex; align-items:center; gap:6px; background:rgba(14,9,24,.94); color:var(--ink); border:1px solid var(--line); box-shadow:2px 2px 0 var(--black); padding:6px 10px; font-size:11px; line-height:1.4; max-width:min(320px, calc(100vw - 24px)); transform:translateY(-8px); opacity:0; transition:transform .15s ease-out, opacity .15s ease-out; }
+.toast.in { transform:none; opacity:1; } .toast.out { opacity:0; transition:opacity .3s; }
+.toast .ic { flex:0 0 auto; }
+
+/* --- интро: модалка с картинкой 96×64 втрое крупнее и двумя строками текста */
+#intro { position:fixed; inset:0; z-index:11; display:flex; align-items:center; justify-content:center; background:rgba(8,4,16,.82); padding:12px; }
+#intro[hidden] { display:none; }
+.inBox { width:min(560px, 100%); } .inBox .dTitle { color:var(--green); } .inBox .dTitle span { color:var(--muted); font-size:8px; }
+.inRow { display:flex; gap:16px; align-items:center; }
+#inCv { width:288px; height:192px; image-rendering:pixelated; background:#000; border:2px solid var(--line); flex:0 0 auto; }
+.inText { font-size:13px; line-height:1.7; color:var(--ink); }
+.inFoot { display:flex; align-items:center; gap:10px; } .inFoot button { margin-left:auto; font-size:12px; padding:8px 14px; }
+.inDots { display:flex; gap:5px; } .inDot { width:8px; height:8px; background:var(--line); } .inDot.on { background:var(--green); }
+@media (max-width: 700px) { .inRow { flex-direction:column; } #inCv { width:min(288px, 100%); height:auto; aspect-ratio:3/2; } }
+
+/* --- шапка: меню слева, вкладки, справа XP и жетоны, звук, компас; счётчики города живут в легенде */
+#top { justify-content:flex-start; }
+#topMe { margin-left:auto; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; } #topMe[hidden] { display:none; } #topMe .sep { color:var(--muted); }
+#menu { left:12px; right:auto; }
+#tabLegend .tStats { display:block; margin-bottom:8px; }
+@media (max-width: 700px) { #topMe { display:flex; font-size:9px; padding:5px 6px; } #menu { left:8px; right:8px; width:auto; } #tabLegend .tStats { display:block; white-space:normal; } }
+/* карты колоды у строк доски: canvas 24×33 */
+#tabBoard canvas.bcv { width:24px; height:33px; image-rendering:pixelated; vertical-align:middle; margin-right:4px; }
+#tabBoard .item { grid-template-columns:auto auto 1fr auto; }
+#tabBoard .item .s, #tabBoard .item .st { grid-column:1 / -1; }

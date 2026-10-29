@@ -7,6 +7,8 @@ import { CARD, TOKEN, POINTS, cardsFromDeck, dealHand, minskHour, hourLeft, hand
 import { cardLabel, cardName, beaten, isRed, handRank } from './poker.js';
 import { makeBio, makeRng, pickArchetype } from './bio.js';
 import { deviceId } from './store.js';
+import { Sfx } from './sfx.js';
+import { icon } from './ui.js';
 
 const mmss = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -130,10 +132,10 @@ export class Cards {
   fight(card) {
     const game = this.game, p = this.player; if (!p || !card) return false;
     if (game.busy || !game.controlled || game.modal !== null) return false; // не посреди броска, не мёртвым и не без управления, не из-под модалки
-    if (card.state !== 'up') { this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
+    if (card.state !== 'up') { Sfx.play('boo'); this.sim.say(p, card.state === 'cool' ? 'отдышись' : 'эта карта уже бита', 'boo', 1.6); return false; }
     const a = this.agentOf(card); if (!a) return false;
     game.dropPending(); game.pendingVenue = null; game.pendingShop = null; game.closeDialog();
-    if (!this.sim.moveTo(p, a.x, a.z, { cut: true })) { this.sim.say(p, 'не дойти', 'boo', 1.4); game.pendingBoss = null; return false; }
+    if (!this.sim.moveTo(p, a.x, a.z, { cut: true })) { Sfx.play('boo'); this.sim.say(p, 'не дойти', 'boo', 1.4); game.pendingBoss = null; return false; }
     game.pendingBoss = { card, a }; game.dest.position.set(a.x, 0.56, a.z); game.dest.visible = true; game.destT = 1; return true;
   }
   // исход дуэли с боссом: победа кладёт карту, даёт XP по старшинству и розыск; поражение — укус и минута отката
@@ -141,18 +143,17 @@ export class Cards {
     const game = this.game, g = game.g, me = this.player, a = h.a, card = h.card;
     const base = { uid: a.uid, name: a.bio.name, age: a.bio.age, gender: a.bio.gender, job: a.bio.job, arch: a.arch, ck: a.ck, slot: card.slot, rank: card.rank, suit: card.suit, card: cardLabel(card.rank, card.suit), cardName: cardName(card.rank, card.suit), owner: card.owner || null, ghoul: !!card.ghoul, foe, bonus: fb, roll: my, meBonus: tb };
     if (r.winner === 'me') {
-      card.state = 'down'; card.coolUntil = 0; this.redraw(card);
+      card.state = 'down'; card.coolUntil = 0; this.redraw(card); Sfx.play('win');
       if (r.crit) game.heal(1);
       g.coins += 4; g.wins++; const xp = bossXp(card.rank); game.points(xp);
       game.log('card', base); this.hunters?.gain('boss'); game.quests?.onEvent('card', xp);
-      this.sim.say(me, `🃏 ${base.cardName} ${beaten(card.rank)} · XP +${xp}`, 'music', 2.8);
-      setTimeout(() => game.player === me && this.sim.say(me, '🪙 +4', 'beer', 2.2), 2600);
+      game.notify(`${base.cardName} ${beaten(card.rank)} · XP +${xp} · +4 монеты`, 'card', 3000);
       if (this.hand && this.hand.cards.every(c => c.state === 'down')) this.completeHand();
       game.save(); return 'card';
     }
     g.losses++; game.points(POINTS.loss);
     game.log('cardBit', { ...base, ate: r.eat });
-    card.state = 'cool'; card.coolUntil = Date.now() + CARD.cooldown * 1000; this.redraw(card);
+    card.state = 'cool'; card.coolUntil = Date.now() + CARD.cooldown * 1000; this.redraw(card); Sfx.play('bite');
     this.sim.say(a, r.crit ? 'АМ-АМ' : 'ам', 'boo', 2.4);
     const res = game.eat(r.eat, 'boss'); game.save();
     return res === 'dead' ? (game.player !== me && me.def.dead ? 'rip' : 'killed') : 'cardBit';
@@ -162,17 +163,33 @@ export class Cards {
     const game = this.game, g = game.g, hand = this.hand, me = this.player; if (!hand || !g) return;
     const hr = handRank(hand.cards); const xp = CARD.handBase * hr.mult; game.points(xp);
     g.hands = (g.hands | 0) + 1; if (!g.bestHand || hr.mult > g.bestHand.mult) g.bestHand = { key: hr.key, name: hr.name, mult: hr.mult };
-    g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot();
+    g.tokens = (g.tokens | 0) + TOKEN.perHand; const slotNew = this.addSlot(); Sfx.play('token');
     game.log('hand', { hand: hr.key, name: hr.name, mult: hr.mult, xp, cards: hand.cards.map(c => cardLabel(c.rank, c.suit)) });
-    this.sim.say(me, `🃏 рука собрана: ${hr.name} · +${xp} XP · 🎟 +1${slotNew ? ' · 🦴 новый слот' : ''}`, 'music', 5);
+    game.notify(`рука собрана: ${hr.name} · +${xp} XP · +1 спас-бросок${slotNew ? ' · новый слот скелета' : ''}`, 'hand', 5000);
     game.save(); game.renderHUD();
   }
-  // --- HUD: полоса из пяти карт (лицом, серая с секундами отката, рубашкой), ранг руки и время до конца часа; своя карта в колоде
+  // --- HUD: рука объектом — пять карт canvas (лицом, серая с mm:ss отката поверх, рубашкой), ранг руки, под ними трекер цели
   hudHtml() {
     const hand = this.hand; if (!hand) return '';
     const now = Date.now(); const hr = handRank(hand.cards);
-    const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}">${c.state === 'down' ? '🂠' : cardLabel(c.rank, c.suit)}${c.state === 'cool' ? `<small class="cd">${Math.max(0, Math.ceil((c.coolUntil - now) / 1000))}</small>` : ''}</span>`).join('');
-    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><span class="handT" title="до конца часа">⏳ ${mmss(hourLeft(now))}</span></div>`;
+    const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}"><canvas class="hcc" width="32" height="44" data-slot="${c.slot}"></canvas>${c.state === 'cool' ? `<small class="cd">${mmss(Math.max(0, Math.ceil((c.coolUntil - now) / 1000)))}</small>` : ''}</span>`).join('');
+    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><div class="handTr">${this.trackerText(now)}</div></div>`;
+  }
+  // карты руки на HUD дорисовываются после вставки разметки теми же рисовалками, что над головами боссов
+  drawHandCards() { const hand = this.hand; if (!hand) return; for (const cv of document.querySelectorAll('#hud canvas.hcc')) { const c = hand.cards.find(c => String(c.slot) === cv.dataset.slot); if (c) this.drawCard(cv, c); } }
+  // ближайший к игроку босс с картой лицом: для трекера и стрелки у края экрана
+  nearestUp() {
+    const p = this.player; if (!p) return null; let best = null, bd = Infinity;
+    for (const b of this.bosses) { if (b.card.state !== 'up' || !this.sim.agents.includes(b.a)) continue; const d = Math.hypot(b.a.x - p.x, b.a.z - p.z); if (d < bd) { bd = d; best = b; } }
+    return best ? { a: best.a, card: best.card, d: bd } : null;
+  }
+  // «Рука 2/5 · ⏳ 37:12 · до босса 340 м»; когда все пять биты — «Рука собрана · пара ×2 · ⏳ 37:12»
+  trackerText(now = Date.now()) {
+    const hand = this.hand; if (!hand) return '';
+    const down = hand.cards.filter(c => c.state === 'down').length; const t = `${icon('clock', 1)} ${mmss(hourLeft(now))}`;
+    if (down === hand.cards.length) { const hr = handRank(hand.cards); return `Рука собрана · ${hr.name} ×${hr.mult} · ${t}`; }
+    const nb = this.nearestUp();
+    return `Рука ${down}/${hand.cards.length} · ${t}${nb ? ` · до босса ${Math.round(nb.d)} м` : ''}`;
   }
   myCardHtml() { const mc = this.myCard(); return mc ? `<span class="myCard" title="твоя карта в колоде часа: место ${mc.slot} в топ-52">карта ${cardLabel(mc.rank, mc.suit)}</span>` : ''; }
   // камера к боссу карты и его карточка (клик по полосе на HUD)
@@ -185,7 +202,7 @@ export class Cards {
     const now = Date.now(), hour = minskHour(now);
     if ((!hand || hand.hour !== hour) && !this.game.busy && !this.game.pendingBoss) {
       // старая рука закрывается без бонуса, боссы уходят; новая сдаётся вокруг текущего места после свежей колоды
-      const token = ++this.token; this.clearBosses(!!hand); this.dealing = true;
+      const token = ++this.token; if (hand) Sfx.play('hour'); this.clearBosses(!!hand); this.dealing = true;
       this.dealingFor = g; this.dealingHour = hour;
       this.loadDeck(hour).then(() => { if (token !== this.token) return; this.dealing = false; if (this.game.player !== p || this.game.g !== g) return; this.deal(minskHour(Date.now())); });
       return;
@@ -195,7 +212,7 @@ export class Cards {
     let changed = false;
     for (const c of hand.cards) if (c.state === 'cool' && now >= (c.coolUntil || 0)) { c.state = 'up'; c.coolUntil = 0; this.redraw(c); changed = true; }
     if (changed) { this.game.save(); this.game.renderHUD(); }
-    const t = document.querySelector('#hud .handT'); if (t) t.textContent = '⏳ ' + mmss(hourLeft(now));
-    for (const el of document.querySelectorAll('#hud .hc.cool .cd')) { const c = hand.cards.find(c => String(c.slot) === el.parentElement.dataset.slot); if (c) el.textContent = String(Math.max(0, Math.ceil((c.coolUntil - now) / 1000))); }
+    const tr = document.querySelector('#hud .handTr'); if (tr) tr.innerHTML = this.trackerText(now); // трекер цели в том же тике
+    for (const el of document.querySelectorAll('#hud .hc.cool .cd')) { const c = hand.cards.find(c => String(c.slot) === el.parentElement.dataset.slot); if (c) el.textContent = mmss(Math.max(0, Math.ceil((c.coolUntil - now) / 1000))); }
   }
 }

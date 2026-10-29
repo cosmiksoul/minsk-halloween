@@ -11,9 +11,12 @@ import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
 import { Cards } from './cards.js';
 import { Quests } from './quests.js';
-import { beaten } from './poker.js';
+import { Sfx } from './sfx.js';
+import { initIntro } from './intro.js';
+import { icon, installFrames, registerIcons, statLine } from './ui.js';
+import { beaten, cardLabel } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf, cardOfSlot } from './rules.js';
 import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
@@ -23,6 +26,7 @@ import { generateCharacter } from './gen.js';
 import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
 
 const $ = id => document.getElementById(id);
+installFrames(); registerIcons(); // рамки панелей и стили иконок до первого рендера
 
 // --- экран загрузки: прогресс по этапам (сеть улиц самая тяжёлая) и сменные подписи
 const LOAD_LINES = ['собираем кости…', 'зовём скелетов с Комаровки…', 'точим кубик d20…', 'раскладываем арканы по городу…', 'включаем фасад Футуриса…', 'наливаем пиво в барах…', 'будим упырей на кладбищах…', 'красим тыквы…', 'заводим Чижовку и Уручье…'];
@@ -138,6 +142,9 @@ if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.
 }
 const quests = new Quests({ game, sim }); game.quests = quests; // онбординг: цепочка квестов на устройство
 game.renderHUD(); cards.start();
+// интро один раз на устройство без своих скелетов; после последнего слайда — форма, заполненная генератором
+const intro = initIntro({ drawCard: (cv, c) => cards.drawCard(cv, c), onCreate: () => { openMine(); $('bGen').onclick(); } });
+$('bHow').onclick = () => { closeDrawer(); intro.show(); };
 
 // --- меню настроек и действий
 const ui = { pop: $('pop'), spd: $('spd'), pix: $('pix') };
@@ -146,7 +153,11 @@ $('popV').textContent = fmtX(ui.pop.value);
 ui.pop.oninput = () => { $('popV').textContent = fmtX(ui.pop.value); sim.density = +ui.pop.value; sim.cap = Math.round((isMobile ? 450 : 900) * Math.max(0.5, sim.density)); };
 ui.spd.oninput = () => { $('spdV').textContent = fmtX(ui.spd.value); };
 ui.pix.oninput = () => { $('pixV').textContent = ui.pix.value; pixel.setPixelSize(+ui.pix.value); };
+$('menuBtn').innerHTML = icon('menu', 1);
 $('menuBtn').onclick = () => { const m = $('menu'); m.hidden = !m.hidden; $('menuBtn').classList.toggle('on', !m.hidden); };
+// звук: кнопка в шапке переключает все эффекты, флаг переживает перезагрузку
+const paintSnd = () => { $('sndBtn').innerHTML = icon(Sfx.muted ? 'mute' : 'sound', 1); $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
+$('sndBtn').onclick = () => { Sfx.mute(!Sfx.muted); paintSnd(); if (!Sfx.muted) Sfx.play('coin'); }; paintSnd();
 $('bReset').onclick = () => location.reload();
 $('bRot').onclick = () => { rotateTo = (rotateTo ?? controls.getAzimuthalAngle()) + Math.PI / 2; };
 $('bNorth').onclick = () => { rotateTo = 0; };
@@ -169,7 +180,8 @@ function openDrawer(name) {
 function placeDrawer() { if (isMobile) return; $('drawer').style.top = Math.round($('hud').getBoundingClientRect().bottom + 8) + 'px'; }
 new ResizeObserver(() => { if (drawerTab) placeDrawer(); }).observe($('hud'));
 function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn')) b.classList.remove('on'); }
-for (const b of document.querySelectorAll('.tbtn')) b.onclick = () => openDrawer(b.dataset.drawer);
+const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map' };
+for (const b of document.querySelectorAll('.tbtn')) { b.innerHTML = icon(TAB_ICON[b.dataset.drawer] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => openDrawer(b.dataset.drawer); }
 $('drawerClose').onclick = closeDrawer;
 
 // --- свой скелет: взять управление, переключить, создать
@@ -179,12 +191,31 @@ function takeControl(a) {
   game.select(true); showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on'); renderMine();
 }
 $('hud').onclick = e => {
+  if (isMobile && $('hud').classList.contains('has') && $('hud').classList.contains('min') && !e.target.closest('button, .hc, canvas.av')) { expandHud(); return; } // на телефоне первый тап по свёрнутой панели разворачивает её на 5 с
   if (e.target.closest('.deck')) { game.openDeck(); return; } // 🃏 на панели открывает колоду без взятия управления
   if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
   const hc = e.target.closest('.hc'); if (hc) { cards.flyTo(+hc.dataset.slot); return; } // карта в полосе руки: камера к боссу
   const av = e.target.closest('canvas.av'); if (av) { const o = own().find(x => String(x.def.seed) === av.dataset.seed); if (o) takeControl(o.agent); return; }
   if (game.player) takeControl(game.player);
 };
+// --- телефон: HUD свёрнут в строку (имя, сердца, XP), тап разворачивает на 5 с; нижняя панель дублирует главную кнопку
+let hudTimer = 0;
+function expandHud() { const hud = $('hud'); hud.classList.remove('min'); clearTimeout(hudTimer); hudTimer = setTimeout(() => { if (isMobile) hud.classList.add('min'); }, 5000); }
+if (isMobile) $('hud').classList.add('min');
+function updateMbar() {
+  if (!isMobile) return;
+  const act = $('mbAct'); const cardOpen = !$('card').hidden && cardAgent; const fb = $('bFight'), bs = $('bSelect'), bp = $('bPlay'), pg = $('pGo');
+  let label = 'создать', ic = 'dice', fn = openMine, dis = false;
+  if (cardOpen && !fb.hidden) { label = fb.disabled ? 'отдышись' : 'сразиться'; ic = 'boss'; fn = () => fb.click(); dis = fb.disabled; }
+  else if (cardOpen && !bp.hidden) { label = 'играть'; ic = 'hand'; fn = () => bp.click(); }
+  else if (cardOpen && !bs.hidden) { label = game.selected ? 'отпустить' : 'управлять'; ic = 'quest'; fn = () => bs.click(); }
+  else if (!$('popup').hidden && !pg.hidden) { label = 'зайти'; ic = 'places'; fn = () => pg.click(); }
+  else if (game.player) { label = game.selected ? 'отпустить' : 'управление'; ic = 'quest'; fn = () => { if (game.selected) { game.select(false); showCard(game.player); } else takeControl(game.player); }; }
+  const key = ic + '|' + label + '|' + dis; if (act.dataset.key !== key) { act.dataset.key = key; act.innerHTML = icon(ic, 2) + `<small>${label}</small>`; act.disabled = dis; }
+  act.onclick = fn;
+}
+$('mbHand').innerHTML = icon('hand', 2) + '<small>рука</small>'; $('mbHand').onclick = () => { const hud = $('hud'); hud.classList.toggle('handOpen'); if (hud.classList.contains('handOpen')) hud.classList.add('min'); };
+$('mbMap').innerHTML = icon('map', 2) + '<small>карта</small>'; $('mbMap').onclick = () => openDrawer('legend');
 $('mnClose').onclick = () => closeMine();
 $('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
 addEventListener('keydown', e => {
@@ -206,8 +237,8 @@ function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(co
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 // статистика гостя: по ссылке приходит массив [💀, 💚, 🃏, 🎃], из базы — объект { kills, friends } и счёт
-const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · XP ${d.score}` : ''); };
-const ripText = d => `☠ упокоен навсегда${d.diedStreet ? ' у ' + d.diedStreet : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
+const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return statLine({ score: d.score, kills: v.kills ?? 0, friends: v.friends ?? 0, tarot: v.tarot, visits: v.visits }); };
+const ripText = d => `${icon('skull', 1)} упокоен навсегда${d.diedStreet ? ' у ' + esc(d.diedStreet) : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
 function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
   cardAgent = a; $('card').hidden = false;
@@ -216,7 +247,7 @@ function showCard(a, refresh) {
   const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;
   $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.dead ? ' · упокоен навсегда' : a.def.guest ? (a.def.boss ? ' · босс часа' : a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
   $('cJob').textContent = 'При жизни: ' + a.bio.job;
-  $('cStatus').textContent = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
+  const gs = a.custom && a.def.guest ? guestStats(a.def) : ''; $('cStatus').innerHTML = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + esc(a.bio.status) + (gs ? ' · ' + gs : '');
   $('cState').textContent = 'Состояние: ' + stateOf(a);
   $('cGame').innerHTML = game.cardHtml(a);
   $('bFollow').classList.toggle('on', follow === a);
@@ -226,7 +257,7 @@ function showCard(a, refresh) {
   $('bProfile').hidden = !a.custom;
   // босс часа: кнопка боя по состоянию карты (лицом — сразиться, отдыхает — секунды, бита)
   const bc = cards.cardOf(a); const fb = $('bFight'); fb.hidden = !bc || !game.player || !!a.def.dead;
-  if (bc) { fb.disabled = bc.state !== 'up'; fb.textContent = bc.state === 'up' ? '⚔ сразиться' : bc.state === 'cool' ? `отдышись · ${Math.max(0, Math.ceil((bc.coolUntil - Date.now()) / 1000))} с` : 'бита'; }
+  if (bc) { fb.disabled = bc.state !== 'up'; fb.innerHTML = bc.state === 'up' ? icon('boss', 1) + 'сразиться' : bc.state === 'cool' ? `${icon('clock', 1)}отдышись · ${Math.max(0, Math.ceil((bc.coolUntil - Date.now()) / 1000))} с` : 'бита'; }
 }
 $('bFight').onclick = () => { const a = cardAgent; if (!a || !game.player) return; const bc = cards.cardOf(a); if (!bc) return; if (!game.selected) takeControl(game.player); cards.fight(bc); };
 // --- профиль своего скелета: статистика, описание, колода, шаринг, ссылка, удаление
@@ -234,9 +265,9 @@ let profileAgent = null;
 function renderProfile(a) {
   $('pfName').textContent = a.bio.name; game.portrait(a, $('pfPic'));
   $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
-  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').textContent = a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a);
+  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').innerHTML = a.def.dead ? ripText(a.def) : 'Сейчас: ' + esc(a.bio.status) + ' · ' + stateOf(a);
   $('pfAbout').textContent = a.def.about ? 'О себе: ' + a.def.about : '';
-  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
+  $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def)}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
   $('pfSelect').hidden = !ownAgent || !!a.def.dead || (a === game.player && game.selected); $('pfPlay').hidden = true;
   $('pfDeck').hidden = !ownAgent; $('pfShare').hidden = !(ownAgent && a === game.player);
@@ -357,6 +388,7 @@ function updatePopup() {
 }
 $('pClose').onclick = closePopup;
 $('hmark').onclick = () => { const h = hunters.nearest(); if (h) { flyTo(h.a.x, h.a.z); showCard(h.a); } };
+$('bmark').innerHTML = icon('boss', 2); $('bmark').onclick = () => { const slot = +$('bmark').dataset.slot; if (slot) cards.flyTo(slot); }; // стрелка на босса руки
 $('pGo').onclick = () => {
   if (!game.player) return; takeControl(game.player);
   if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.nx, popupTarot.nz); else if (popupShop) game.clickShop(popupShop); else if (popupBld) { const [gx, gz] = popupBld.go || [popupBld.x, popupBld.z]; game.clickGround(gx, gz); }
@@ -430,16 +462,25 @@ $('mineList').onclick = e => {
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
 const SCORE_HINT = 'XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство';
-function boardRow(r, i, me) { const lbl = r.dead ? null : cards.labelForRank(i + 1); return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span>${lbl ? `<span class="bcard${/[♥♦]/.test(lbl) ? ' red' : ''}" title="карта в колоде часа">${lbl}</span>` : ''}<span class="n">${esc(r.name)}</span><span class="sc">XP ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${r.dead ? '☠ упокоен' : `❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}`}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+// строка доски: карта колоды часа canvas'ом по данным колоды (та же строка id), без базы карт нет; статы одной функцией с иконками
+function boardRow(r, i, me) {
+  const slot = remote && cards.deck.length && !r.dead ? cards.deck.findIndex(x => x.id === r.id) + 1 : 0;
+  const cv = slot >= 1 && slot <= 52 ? `<canvas class="bcv" width="24" height="33" data-slot="${slot}" title="карта в колоде часа"></canvas>` : '<span class="bcv"></span>';
+  const st = r.dead ? `${icon('skull', 1)} упокоен` : statLine({ hearts: r.hearts ?? '?', tail: r.tail ?? 0 });
+  return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span>${cv}<span class="n">${esc(r.name)}</span><span class="sc">${icon('xp', 1)} ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${st}</span><span class="s">${esc(r.job || '')} · ${statLine({ kills: r.kills ?? 0, friends: r.friends ?? 0, tarot: r.tarot ?? 0, visits: r.visits ?? 0, deaths: r.deaths || 0 }, { tail: false })}</span></div>`;
+}
+function drawBoardCards() {
+  for (const cv of document.querySelectorAll('#tabBoard canvas.bcv')) { const slot = +cv.dataset.slot; if (!slot) continue; const tmp = document.createElement('canvas'); tmp.width = 32; tmp.height = 44; cards.drawCard(tmp, { ...cardOfSlot(slot), state: 'up' }); const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, 24, 33); g.drawImage(tmp, 0, 0, 24, 33); }
+}
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
   const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses, dead: !!d.dead }; }).sort((a, b) => b.score - a.score);
   const list = (rows, empty) => rows.length ? rows.map((r, i) => boardRow(r, i, r.id === myId)).join('') : `<div class="hint">${empty}</div>`;
   if (!remote) {
     body.innerHTML = '<div class="day">скелеты в этом браузере</div>' + list(localRows, 'пока никого: создай своего скелета') + `<div class="hint">${SCORE_HINT}. Общий рейтинг всех игроков появится, когда в config.js будет вписан Supabase (README, раздел «База»)</div>`;
-    return;
+    drawBoardCards(); return;
   }
-  const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; };
+  const draw = (rows, note) => { body.innerHTML = '<div class="day">доска почёта</div>' + list(rows, 'пока пусто — будь первым') + `<div class="hint">${SCORE_HINT}${note ? ' · ' + note : ''}</div>`; drawBoardCards(); };
   if (boardRows) draw(boardRows); else body.innerHTML = '<div class="hint">загружаем…</div>';
   if (fetchRemote) remote.top(52).then(rows => { if (rows) { boardRows = rows; draw(rows); } else draw(boardRows || localRows, 'сервер недоступен, показаны ' + (boardRows ? 'последние данные' : 'только свои скелеты')); });
 }
@@ -458,7 +499,7 @@ if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(r
     def.game = migrate(def.game); logPush(def.game, { kind, name: row.victim_name, place: row.place, rolls: row.rolls, level: row.level, outcome: row.outcome, at: row.at }); n++;
   }
   local.set('raids.seen', newest); if (!n) return; saveMine();
-  if (game.player) sim.say(game.player, `📜 пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'music', 4);
+  if (game.player) game.notify(`пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'afisha', 4000);
   if (game.o.onLog) game.o.onLog();
 });
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead }); if (r.dead) sim.ghostify(a, 'player'); } });
@@ -560,6 +601,17 @@ function drawBubbles() {
       const d = Math.hypot(nh.a.x - game.player.x, nh.a.z - game.player.z); hm.classList.toggle('hot', d < PURSUIT.nearWarn); hm.title = `${nh.a.bio.name} · ${Math.round(d)} м`; hm.hidden = false;
     }
   } else hm.hidden = true;
+  // стрелка на ближайшего босса руки (карта лицом) у края экрана, пока он вне кадра: только под управлением и когда рука есть
+  const bm = $('bmark'); const nb = game.player && game.selected && cards.hand ? cards.nearestUp() : null;
+  if (nb) {
+    v3.set(nb.a.x, sim.H, nb.a.z).project(camera);
+    if (v3.x > -1 && v3.x < 1 && v3.y > -1 && v3.y < 1) bm.hidden = true;
+    else {
+      const k = 1 / Math.max(Math.abs(v3.x), Math.abs(v3.y), 1e-6); const m = 26, mTop = isMobile ? 26 : 64; // сверху ниже шапки, чтобы стрелка не пряталась под кнопками
+      bm.style.left = Math.max(m, Math.min(w - m, (v3.x * k + 1) / 2 * w)) + 'px'; bm.style.top = Math.max(mTop, Math.min(h - (isMobile ? 80 : m), (1 - v3.y * k) / 2 * h)) + 'px';
+      bm.title = `${cardLabel(nb.card.rank, nb.card.suit)} · ${nb.card.name} · ${Math.round(nb.d)} м`; bm.dataset.slot = nb.card.slot; bm.hidden = false;
+    }
+  } else bm.hidden = true;
   const pt = popupVenue || popupTarot || popupShop || popupBld;
   if (pt) {
     const y = popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : popupBld ? (popupBld.top || 10) + 4 : popupTarot.baseY + tarot.size;
@@ -575,6 +627,9 @@ function updateCompass() {
   $('compassArrow').style.transform = `rotate(${ang.toFixed(0)}deg)`;
 }
 
+// XP и жетоны своего скелета в шапке
+let topKey = '';
+function updateTopMe() { const g = game.g; const el = $('topMe'); if (!g) { if (!el.hidden) { el.hidden = true; topKey = ''; } return; } const key = g.score + '|' + (g.tokens | 0); if (key !== topKey) { topKey = key; el.innerHTML = `${icon('xp', 1)} ${g.score}<span class="sep">·</span>${icon('token', 1)} ${g.tokens | 0}`; el.hidden = false; } }
 // --- главный цикл
 const clock = new THREE.Clock(); let acc = 0, feedAcc = 0, frameMs = 0, frames = 0;
 function frame() {
@@ -602,7 +657,7 @@ function frame() {
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
-  acc += dt; if (acc > 0.5) { acc = 0; $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
+  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); updateTopMe(); $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;
@@ -610,5 +665,6 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+if (!mine.some(d => !d.guest) && !intro.seen) setTimeout(() => intro.show(), 400);
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');

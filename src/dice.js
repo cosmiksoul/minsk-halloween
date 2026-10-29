@@ -1,6 +1,7 @@
 // Бросок d20: пиксельный кубик крутится на оверлее, число мельтешит, потом замирает.
 // Режим plain (дуэль): без ярлыка исхода и нейтральным цветом; showDuelResult показывает экран сравнения.
 import { outcomeOf } from './rules.js';
+import { Sfx } from './sfx.js';
 export { outcomeOf };
 const $ = id => document.getElementById(id);
 
@@ -32,7 +33,7 @@ function drawD20(ctx, n, color, angle) {
 export function hideDice() { const box = $('dice'); box.hidden = true; box.className = ''; $('diceCv').hidden = false; $('diceSave').hidden = true; }
 export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hold = false, opts = {}) {
   const box = $('dice'), cv = $('diceCv'), ctx = cv.getContext('2d'); cv.hidden = false; const plain = !!opts.plain;
-  box.hidden = false; box.className = 'rolling'; $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = ''; $('diceSave').hidden = true;
+  box.hidden = false; box.className = 'rolling'; Sfx.play('dice'); $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = ''; $('diceSave').hidden = true;
   const kind = outcomeOf(result), out = OUTCOMES[kind];
   return new Promise(resolve => {
     const t0 = performance.now(); const dur = 1400; let last = 0;
