@@ -58,6 +58,11 @@ button.green:hover { background:#7cff52; color:var(--black); }
 
 #loading { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:var(--bg); font-family:"Press Start 2P", monospace; font-size:11px; z-index:10; }
 #loading .skull { font-size:48px; animation:bob 1s infinite alternate; }
+#loading #ldText { min-height:1.6em; text-align:center; max-width:80vw; line-height:1.6; }
+#loading .bar { width:min(260px, 70vw); height:12px; border:2px solid var(--line); background:#1b1326; border-radius:3px; overflow:hidden; }
+#loading .bar i { display:block; height:100%; width:0; background:repeating-linear-gradient(90deg, var(--green) 0 6px, #2fa812 6px 8px); transition:width .2s linear; }
+#loading #ldPct { font-size:9px; color:var(--muted); }
+#loading.out { opacity:0; transition:opacity .35s; pointer-events:none; }
 @keyframes bob { from { transform:translateY(-6px) } to { transform:translateY(6px) } }
 
 @media (max-width: 700px) {

@@ -18,6 +18,19 @@ import { generateCharacter } from './gen.js';
 import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
 
 const $ = id => document.getElementById(id);
+
+// --- экран загрузки: прогресс по этапам (сеть улиц самая тяжёлая) и сменные подписи
+const LOAD_LINES = ['собираем кости…', 'зовём скелетов с Комаровки…', 'точим кубик d20…', 'раскладываем арканы по городу…', 'включаем фасад Футуриса…', 'наливаем пиво в барах…', 'будим упырей на кладбищах…', 'красим тыквы…', 'заводим Чижовку и Уручье…'];
+const loader = {
+  p: 0, target: 3, line: 0,
+  start() {
+    this.tick = setInterval(() => { const goal = Math.min(99, this.target + 12); this.p = Math.min(goal, this.p + (goal - this.p) * (this.p < this.target ? 0.12 : 0.012)); $('ldBar').style.width = this.p.toFixed(1) + '%'; $('ldPct').textContent = Math.round(this.p) + '%'; }, 80);
+    this.iv = setInterval(() => { this.line = (this.line + 1) % LOAD_LINES.length; $('ldText').textContent = LOAD_LINES[this.line]; }, 1700);
+  },
+  to(v) { this.target = Math.max(this.target, Math.min(100, v)); },
+  done() { this.to(100); this.p = 100; clearInterval(this.iv); clearInterval(this.tick); $('ldBar').style.width = '100%'; $('ldPct').textContent = '100%'; const l = $('loading'); setTimeout(() => { l.classList.add('out'); setTimeout(() => l.remove(), 400); }, 200); },
+};
+loader.start();
 const canvas = $('c');
 const isMobile = innerWidth < 700;
 const MAX_OWN = 5;
@@ -26,7 +39,18 @@ const ARCH_LABEL = { it: 'айтишник', doc: 'медик', build: 'стро
 // --- данные: индекс тайлов, пешеходная сеть, заведения, афиша
 const BASE = 'data/map/';
 const j = u => fetch(u).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
-const [index, net, pois, eventsFile] = await Promise.all([j(BASE + 'index.json'), j(BASE + 'net.json'), j(BASE + 'pois.json'), j('data/events.json').catch(() => ({ events: [] }))]);
+// большой файл читаем потоком, чтобы двигать прогресс по байтам; при gzip размер неизвестен, тогда полоска ползёт по времени
+async function jProgress(u, from, to) {
+  const r = await fetch(u); if (!r.ok) throw new Error(u + ' ' + r.status);
+  const total = r.headers.get('content-encoding') ? 0 : +r.headers.get('content-length') || 0;
+  if (!r.body || !total) { const d = await r.json(); loader.to(to); return d; }
+  const reader = r.body.getReader(); const chunks = []; let got = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length; loader.to(from + (to - from) * Math.min(1, got / total)); }
+  const buf = new Uint8Array(got); let o = 0; for (const c of chunks) { buf.set(c, o); o += c.length; }
+  loader.to(to); return JSON.parse(new TextDecoder().decode(buf));
+}
+const [index, net, pois, eventsFile] = await Promise.all([j(BASE + 'index.json').then(d => (loader.to(8), d)), jProgress(BASE + 'net.json', 10, 48), j(BASE + 'pois.json').then(d => (loader.to(50), d)), j('data/events.json').catch(() => ({ events: [] }))]);
+loader.to(54);
 const events = eventsFile.events || [];
 const venues = buildVenues({ pois, center: index.center }, events);
 
@@ -41,7 +65,7 @@ scene.add(buildGround());
 const mats = makeMaterials();
 const lms = buildLandmarks(index.center); scene.add(lms.group); mats.skip = lms.zones;
 const tiles = new TileManager(scene, index, mats, BASE);
-await tiles.loadBig();
+await tiles.loadBig(); loader.to(64);
 
 // камера
 const VIEW = 260;
@@ -66,7 +90,7 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
-const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspots: projectHotspots(index.center) });
+const sim = new Sim(scene, net, venues, { skelH: 8, center: index.center, hotspots: projectHotspots(index.center) }); loader.to(80);
 const markers = buildMarkers(venues, sim.danceZones); scene.add(markers.group); markers.setScale(sim.H);
 const tarot = new Tarot(scene, sim, index.center, lms.items); mats.tarot = tarot.zones; tarot.setScale(sim.H);
 const shops = new Shops(scene, sim, index.center); shops.setScale(sim.H);
@@ -482,8 +506,8 @@ function frame() {
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;
 }
-await tiles.ready(camera);
+loader.to(88); await tiles.ready(camera);
 frame();
-$('loading').remove();
+loader.done();
 window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест');
