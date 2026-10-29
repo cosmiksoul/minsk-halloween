@@ -23,6 +23,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# Консоль Windows (или пайп) может быть не в UTF-8, тогда print с кириллицей падает с UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tiler import write_outputs, point_in_poly, poly_centroid  # noqa: E402
 
@@ -233,8 +238,11 @@ def main():
     for i, (s, w, n, e) in enumerate(chunks):
         print(f'[{i + 1}/{len(chunks)}] {s:.3f},{w:.3f} – {n:.3f},{e:.3f}')
         res = fetch(args.server, s, w, n, e, cache_dir, args.pause)
-        if len(res.get('elements', [])) < 200:
-            thin.append((i + 1, len(res.get('elements', []))))
+        # порог 200 объектов рассчитан на полный кусок 3 × 3 км; краевые полосы у границы bbox
+        # бывают в несколько раз уже, для них порог пропорционально меньше
+        limit = 200 * ((n - s) * (e - w)) / (CHUNK_LAT * CHUNK_LON)
+        if len(res.get('elements', [])) < limit:
+            thin.append((i + 1, len(res.get('elements', [])), s, w))
         for el in res.get('elements', []):
             uid = el['type'][0] + str(el['id'])
             if uid in seen:
@@ -334,7 +342,7 @@ def main():
         data['trees'] = kept
 
     if thin:
-        print('подозрительно пустые куски (номер: объектов):', ', '.join(f'{i}: {n}' for i, n in thin), '— если это не окраина, удали их файлы из tools/cache и перезапусти')
+        print('подозрительно пустые куски (номер: объектов, юго-западный угол):', ', '.join(f'{i}: {n} ({s:.3f},{w:.3f})' for i, n, s, w in thin), '— если это не окраина, удали их файлы из tools/cache и перезапусти')
     print('зданий', len(data['buildings']), 'дорог', len(data['roads']), 'зелени', len(data['green']), 'воды', len(data['water']), 'деревьев', len(data['trees']), 'заведений', len(data['pois']))
     index = write_outputs(data, args.out, tile=args.tile, source=f'OpenStreetMap, Overpass {time.strftime("%Y-%m-%d")}')
     print('тайлов:', len(index['tiles']), 'bbox:', index['bbox'])

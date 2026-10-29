@@ -12,6 +12,11 @@ import math
 import os
 import sys
 
+# Консоль Windows (или пайп) может быть не в UTF-8, тогда print с кириллицей падает с UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tiler import write_outputs  # noqa: E402
 
