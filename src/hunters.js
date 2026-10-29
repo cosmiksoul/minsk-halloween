@@ -3,9 +3,11 @@
 // быстрее игрока, вблизи по таблице уровня, последние метры по прямой вне графа. При контакте дуэль в game.duel,
 // после стычки уходят к своему кладбищу и исчезают. Угроза спадает только под управлением и без живых охотников,
 // сбрасывается игрой с хозяином заведения (resetAtVenue). Все числа в rules.js.
-import { LEVELS, PURSUIT, HEAT, RPS, levelOf, decayed, hunterBonus, intentOf, pickCemetery } from './rules.js';
+import { LEVELS, PURSUIT, HEAT, RPS, levelOf, decayed, hunterBonus, intentOf, pickCemetery, hunterSpeedFactor } from './rules.js';
 import { makeRng, pickArchetype, makeBio, LINES, pick } from './bio.js';
 import { deviceId } from './store.js';
+
+const VIG_DIST = 120; // м: ближе этого охотника чувствуешь кожей — красная виньетка по краям экрана
 
 const firstName = s => String(s || '').split(' ')[0];
 const bare = n => !n || /^кладбище$/i.test(n.trim());
@@ -25,6 +27,13 @@ export class Hunters {
   get level() { return levelOf(this.heat); }
   get list() { return this.hunters; }
   get controlled() { return this.game.controlled; }
+  nearestDist(p) { let bd = Infinity; for (const h of this.hunters) { if (h.state === 'leave') continue; const d = Math.hypot(h.a.x - p.x, h.a.z - p.z); if (d < bd) bd = d; } return bd; }
+  // красная виньетка по краям экрана, когда охотник ближе VIG_DIST м; элемент создаётся сам, разметку и стили не трогаем
+  vignette(d) {
+    const a = d < VIG_DIST ? Math.min(0.8, (VIG_DIST - d) / VIG_DIST * 0.9) : 0; if (Math.abs(a - (this.vigA || 0)) < 0.02) return; this.vigA = a;
+    if (!this.vig) { if (!a) return; this.vig = document.createElement('div'); this.vig.id = 'vig'; this.vig.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:3;transition:box-shadow .3s'; document.body.appendChild(this.vig); }
+    this.vig.style.boxShadow = a ? `inset 0 0 ${Math.round(60 + a * 140)}px rgba(255,58,92,${a.toFixed(2)})` : 'none';
+  }
   get active() { return this.hunters.filter(h => h.state !== 'leave'); }
   nearest() {
     const p = this.game.player; if (!p) return null; let best = null, bd = Infinity;
@@ -69,7 +78,7 @@ export class Hunters {
   update(dt) {
     const game = this.game, sim = this.sim, p = game.player, g = game.g;
     if (g !== this.cur) { this.cur = g; this.onLoad(g); }
-    if (!g || !p) { for (const h of [...this.hunters]) this.leave(h, null); for (const h of [...this.hunters]) this.step(h, dt, false, 0); return; }
+    if (!g || !p) { for (const h of [...this.hunters]) this.leave(h, null); for (const h of [...this.hunters]) this.step(h, dt, false, 0); this.vignette(Infinity); return; }
     const ctrl = this.controlled; const active = this.active;
     // спад −1 за 20 с после 30 с без прироста: только под управлением и только пока в городе нет живых охотников
     if (ctrl && !active.length && g.heat > 0 && sim.time - g.heatAt > HEAT.idleAfter) { this.decayAcc += dt; while (this.decayAcc >= HEAT.decayPer && g.heat > 0) { this.decayAcc -= HEAT.decayPer; g.heat = Math.max(0, g.heat - 1); g.heatWall = Date.now(); } }
@@ -86,6 +95,7 @@ export class Hunters {
       else if (sim.time - this.lastSpawn >= L.pause) this.spawn(lvl);
     } else if (lvl === 0) this.pendingHalf = 0;
     for (const h of [...this.hunters]) this.step(h, dt, ctrl, lvl);
+    this.vignette(ctrl && p.state !== 'dead' ? this.nearestDist(p) : Infinity);
   }
   step(h, dt, ctrl, lvl) {
     const sim = this.sim, game = this.game, p = game.player, a = h.a;
@@ -94,7 +104,7 @@ export class Hunters {
     if (h.state === 'duel') return;
     const d = Math.hypot(a.x - p.x, a.z - p.z);
     // скорость: за кадром вчетверо быстрее игрока, вблизи по таблице уровня; от базовой скорости игрока, без дебаффов
-    a.speed = d > PURSUIT.offscreen ? p.speed * PURSUIT.offscreenSpeed : p.speed * LEVELS[Math.max(1, h.level)].speed;
+    a.speed = p.speed * hunterSpeedFactor(d, h.level); // плавно от табличной к ×4 между 400 и 800 м, без скачка на границе кадра
     if (!ctrl) {
       // без управления: дальние теряют след через минуту, ближние замирают и ждут до пяти минут
       h.lostSince ||= sim.time;

@@ -9,6 +9,8 @@ import { drawCandy, drawPortrait, drawGhostPortrait, GHOSTS, CATALOG, SHOP_KINDS
 import { PRICES } from './shops.js';
 import { LINES, pick, ageWord } from './bio.js';
 import { ARCANA, ARCANA_BY_ID, drawArcana, drawCardBack } from './tarot.js';
+import { Chests } from './chests.js';
+import { chestOutcome, chestLoot, sprintStep, minskHour } from './rules.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -64,7 +66,7 @@ export class Game {
   constructor(sim, scene, opts) {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.pendingBoss = null; this.restored = false; this.modal = null;
-    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1; this.roadAcc = 0; this.roadSaid = false; this.onRoadLast = false; // проезжая часть: накопленные секунды розыска, пузырь-подсказка раз за сессию, значок 🚗
+    this.candies = new Candies(sim, scene); this.chests = new Chests(sim, scene); this.stamina = 1; this.sprinting = false; this.exhausted = false; this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1; this.roadAcc = 0; this.roadSaid = false; this.onRoadLast = false; // проезжая часть: накопленные секунды розыска, пузырь-подсказка раз за сессию, значок 🚗
     // игра с хозяином заведения и дебаффы: плашка, откат по заведению, «штормит» и «засветился» по сим-времени (не переживают перезагрузку)
     this.host = null; this.hostTimer = null; this.lastPlay = new Map(); this.tipsyUntil = 0; this.seenUntil = 0; this.debugThrow = null; this.ikAt = 0; this.hadDebuff = false;
     $('hostRock').onclick = () => this.playRps('rock'); $('hostScissors').onclick = () => this.playRps('scissors'); $('hostPaper').onclick = () => this.playRps('paper'); $('hostNo').onclick = () => { if (this.modal === 'host') this.closeHost(); };
@@ -82,6 +84,10 @@ export class Game {
     drawCardBack($('tBackCv'));
     this.hudAcc = 0;
     $('askSweet').onclick = () => this.choose('friend'); $('askTrick').onclick = () => this.choose('kill'); $('askNo').onclick = () => this.closeDialog();
+    // спринт: Shift зажат — ×SPRINT.mul, пока есть выносливость; кольцо выбора оранжевое на бегу и серое, когда выдохся
+    addEventListener('keydown', e => { if (e.key === 'Shift' && !e.repeat) this.sprinting = true; });
+    addEventListener('keyup', e => { if (e.key === 'Shift') this.sprinting = false; });
+    addEventListener('blur', () => { this.sprinting = false; });
     addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       // сначала закрываем открытую модалку, управление отпускаем только когда ничего не открыто; кубик и партию Esc не прерывает
@@ -499,7 +505,9 @@ export class Game {
       // «штормит» живёт отдельным множителем: охотники и хвост считают скорость от базовой
       // проезжая часть под управлением: быстрее, но розыск растёт по очку за ROAD.heatPer секунд ходьбы; стоять на дороге бесплатно
       const road = !!this.selected && this.sim.onRoad(p); const tipsy = this.sim.time < this.tipsyUntil;
-      this.speedMul = (tipsy ? RPS.tipsy.speed : 1) * (road ? ROAD.speed : 1); p.speedMul = this.speedMul; p.tipsy = tipsy;
+      const spr = sprintStep(this.stamina, dt, this.sprinting && this.selected && (p.state === 'walk' || p.state === 'cut'), this.exhausted); this.stamina = spr.stamina; this.exhausted = spr.exhausted;
+      this.speedMul = (tipsy ? RPS.tipsy.speed : 1) * (road ? ROAD.speed : 1) * spr.mul; p.speedMul = this.speedMul; p.tipsy = tipsy;
+      this.ring.material.color.setHex(spr.mul > 1 ? 0xff8a2a : this.exhausted ? 0x777777 : 0x4df21e);
       if (road) { const r = roadHeat(this.roadAcc, dt); this.roadAcc = r.acc; for (let i = 0; i < r.points; i++) this.hunters?.gain('road'); if (!this.roadSaid) { this.roadSaid = true; this.sim.say(p, 'по проезжей части быстрее, но заметнее', '', 2.6); } }
       else this.roadAcc = 0;
       if (road !== this.onRoadLast) { this.onRoadLast = road; this.renderHUD(); }
@@ -524,6 +532,7 @@ export class Game {
       }
     }
     if (this.tarot) this.tarot.update(t, p, 12, it => this.collect(it));
+    this.chests.update(p, H, t, this.g, this.controlled && !this.busy && this.modal === null, c => this.openChest(c));
     this.candies.update(p, H, t, kind => {
       const g = this.g;
       if (kind === 'coin') { g.coins++; this.sim.say(p, '🪙 +1', 'beer', 1.6); }
@@ -570,6 +579,21 @@ export class Game {
       const done = v => { clearInterval(iv); box.hidden = true; $('dsYes').onclick = $('dsNo').onclick = null; resolve(v); };
       $('dsYes').onclick = () => done(true); $('dsNo').onclick = () => done(false);
     });
+  }
+  // --- сундук у достопримечательности: бросок d20, от 8 открыт (монеты, иногда жетон), 20 — вдвое и жетон, 1 — мимик (+2 розыска);
+  // закрытый и мимик ждут следующего часа
+  async openChest(c) {
+    const g = this.g, p = this.player; if (!g || !p || this.busy || this.modal !== null || p.state === 'dead') return;
+    this.busy = true; this.sim.stop(p); this.setModal('dice'); (g.chests ||= {})[c.id] = minskHour(Date.now()); this.chests.sync(g);
+    let res;
+    try { res = await rollDice('🧰 ' + c.name, this.debugRoll ?? undefined, true, { plain: true }); } catch (e) { console.warn(e); res = { n: 10 }; }
+    const out = chestOutcome(res.n), loot = chestLoot(Math.random, out);
+    if (loot.coins) g.coins += loot.coins; if (loot.token) g.tokens = (g.tokens | 0) + 1;
+    if (out === 'mimic') { this.hunters?.gain('road'); this.hunters?.gain('road'); }
+    const text = out === 'locked' ? 'заперто до следующего часа' : out === 'mimic' ? 'мимик! визг на весь район' : `+${loot.coins} 🪙${loot.token ? ' · 🎟 +1' : ''}`;
+    showDuelResult(`🧰 ${c.name} · ${text}`, out === 'locked' ? 'fail' : out === 'mimic' ? 'critfail' : out === 'crit' ? 'crit' : 'success');
+    this.log('chest', { name: c.name, roll: res.n, outcome: out, coins: loot.coins, token: loot.token });
+    this.busy = false; if (this.modal === 'dice') this.setModal(null); this.save(); this.renderHUD();
   }
   // --- публикация карточки: первый раз даёт жетон
   onShared(net) {

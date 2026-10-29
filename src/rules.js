@@ -131,7 +131,7 @@ export function duel(foe, foeBonus, me, meBonus) {
 
 // --- прогресс скелета (v2): стак, счёт, журнал, угроза
 export function newProgress() {
-  return { v: 2, hp: CAPS.baseHearts, maxHp: CAPS.baseHearts, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null, hand: null, hands: 0, bestHand: null };
+  return { v: 2, hp: CAPS.baseHearts, maxHp: CAPS.baseHearts, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null, hand: null, hands: 0, bestHand: null, chests: {} };
 }
 function oldScore(g) { return (g.skulls?.length ?? 0) * 3 + (g.friends?.length ?? 0) * 3 + (g.tarot?.length ?? 0) * 5 + (g.visits?.length ?? 0); }
 // старый прогресс (массивы skulls/friends, кап 6 сердец) один раз превращается в v2: счёт по старой формуле,
@@ -149,6 +149,7 @@ export function migrate(g) {
     if (!g.hand || typeof g.hand !== 'object' || !Number.isInteger(g.hand.hour) || !Array.isArray(g.hand.cards) || g.hand.cards.length !== CARD.hand || g.hand.cards.some(c => !c || typeof c !== 'object')) g.hand = null;
     else for (const c of g.hand.cards) { if (!CARD_STATES.includes(c.state)) c.state = 'up'; if (!Number.isFinite(c.coolUntil)) c.coolUntil = 0; }
     if (!Number.isFinite(g.hands)) g.hands = 0; if (g.bestHand === undefined) g.bestHand = null; // собранные руки
+    if (!g.chests || typeof g.chests !== 'object' || Array.isArray(g.chests)) g.chests = {}; // сундуки: место → час Минска, когда открыт
     delete g.resetAt;
     return g;
   }
@@ -174,6 +175,32 @@ export function migrate(g) {
 export const HALLOWEEN = { from: Date.UTC(2026, 9, 31, 15, 0), to: Date.UTC(2026, 10, 1, 3, 0), xpMul: 2 };
 export function isHalloweenNight(now = Date.now()) { return now >= HALLOWEEN.from && now < HALLOWEEN.to; }
 export function addPoints(g, n, now = Date.now()) { const k = n > 0 && isHalloweenNight(now) ? HALLOWEEN.xpMul : 1; g.score = Math.max(0, num(g.score) + n * k); return g.score; }
+
+// --- сундуки у достопримечательностей: раз в час на место, открываются броском d20 от CHEST.roll; 20 — крит, 1 — мимик
+export const CHEST = { coinsMin: 3, coinsMax: 6, tokenChance: 0.1, roll: 8 };
+export function chestOutcome(n) { const r = num(n); return r <= 1 ? 'mimic' : r >= 20 ? 'crit' : r >= CHEST.roll ? 'open' : 'locked'; }
+// содержимое: монеты coinsMin–coinsMax (крит вдвое), жетон с шансом tokenChance (крит всегда); запертый и мимик пусты
+export function chestLoot(rng, outcome) {
+  if (outcome !== 'open' && outcome !== 'crit') return { coins: 0, token: false };
+  const coins = CHEST.coinsMin + Math.floor(rng() * (CHEST.coinsMax - CHEST.coinsMin + 1));
+  return { coins: outcome === 'crit' ? coins * 2 : coins, token: outcome === 'crit' || rng() < CHEST.tokenChance };
+}
+// --- спринт управляемого: ×mul, пока есть выносливость (запас на dur с), восстанавливается за recharge с;
+// выдохся до нуля — не бежит, пока не наберёт min
+export const SPRINT = { mul: 1.6, dur: 4, recharge: 20, min: 0.15 };
+export function sprintStep(st, dt, want, exhausted = false) {
+  let s = clamp(num(st, 1), 0, 1); const d = Math.max(0, num(dt));
+  if (exhausted && s >= SPRINT.min) exhausted = false;
+  if (want && !exhausted && s > 0) { s = Math.max(0, s - d / SPRINT.dur); return { stamina: s, mul: SPRINT.mul, exhausted: s === 0 }; }
+  return { stamina: Math.min(1, s + d / SPRINT.recharge), mul: 1, exhausted };
+}
+// --- скорость охотника от базовой скорости игрока: табличная по уровню до offscreen м, ×offscreenSpeed от 2×offscreen,
+// между ними линейно — без скачка вчетверо на границе кадра
+export function hunterSpeedFactor(d, level) {
+  const near = LEVELS[clamp(level | 0, 1, LEVELS.length - 1)].speed, far = PURSUIT.offscreenSpeed;
+  const k = clamp((num(d) - PURSUIT.offscreen) / PURSUIT.offscreen, 0, 1);
+  return near + (far - near) * k;
+}
 // +1 к максимуму сердец (до капа) и, если healToo, +1 текущего; true, когда максимум вырос
 export function growHearts(g, healToo = true) {
   const grew = g.maxHp < CAPS.hearts;
