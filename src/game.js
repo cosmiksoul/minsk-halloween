@@ -2,7 +2,7 @@
 // посещает заведения ради щита, бросает d20 на «сладость или гадость» с другими скелетами.
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
-import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins } from './rules.js';
+import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat } from './rules.js';
 import { hostOf } from './hosts.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, GHOSTS, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
 import { PRICES } from './shops.js';
@@ -63,7 +63,7 @@ export class Game {
   constructor(sim, scene, opts) {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.restored = false; this.modal = null;
-    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1;
+    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1; this.roadAcc = 0; this.roadSaid = false; this.onRoadLast = false; // проезжая часть: накопленные секунды розыска, пузырь-подсказка раз за сессию, значок 🚗
     // игра с хозяином заведения и дебаффы: плашка, откат по заведению, «штормит» и «засветился» по сим-времени (не переживают перезагрузку)
     this.host = null; this.hostTimer = null; this.lastPlay = new Map(); this.tipsyUntil = 0; this.seenUntil = 0; this.debugThrow = null; this.ikAt = 0; this.hadDebuff = false;
     $('hostRock').onclick = () => this.playRps('rock'); $('hostScissors').onclick = () => this.playRps('scissors'); $('hostPaper').onclick = () => this.playRps('paper'); $('hostNo').onclick = () => { if (this.modal === 'host') this.closeHost(); };
@@ -487,7 +487,12 @@ export class Game {
     const p = this.player, H = this.sim.H;
     if (p) {
       // «штормит» живёт отдельным множителем: охотники и хвост считают скорость от базовой
-      this.speedMul = this.sim.time < this.tipsyUntil ? RPS.tipsy.speed : 1; p.speedMul = this.speedMul; p.tipsy = this.speedMul < 1;
+      // проезжая часть под управлением: быстрее, но розыск растёт по очку за ROAD.heatPer секунд ходьбы; стоять на дороге бесплатно
+      const road = !!this.selected && this.sim.onRoad(p); const tipsy = this.sim.time < this.tipsyUntil;
+      this.speedMul = (tipsy ? RPS.tipsy.speed : 1) * (road ? ROAD.speed : 1); p.speedMul = this.speedMul; p.tipsy = tipsy;
+      if (road) { const r = roadHeat(this.roadAcc, dt); this.roadAcc = r.acc; for (let i = 0; i < r.points; i++) this.hunters?.gain('road'); if (!this.roadSaid) { this.roadSaid = true; this.sim.say(p, 'по проезжей части быстрее, но заметнее', '', 2.6); } }
+      else this.roadAcc = 0;
+      if (road !== this.onRoadLast) { this.onRoadLast = road; this.renderHUD(); }
       if (p.tipsy && this.sim.time - this.ikAt > 10) { this.ikAt = this.sim.time; if (!p.bubble) this.sim.say(p, 'ик', 'beer', 1.4); }
       const dbf = this.sim.time < this.tipsyUntil || this.sim.time < this.seenUntil; this.hudAcc += dt;
       if ((dbf || this.hadDebuff) && this.hudAcc > 1) { this.hudAcc = 0; this.hadDebuff = dbf; this.renderHUD(); }
@@ -588,7 +593,7 @@ export class Game {
   threatHtml() {
     const h = this.hunters, p = this.player; const lvl = h ? h.level : 0; const near = h && p ? h.nearest() : null;
     const hot = !!near && Math.hypot(near.a.x - p.x, near.a.z - p.z) < PURSUIT.nearWarn;
-    return `<span class="thr${lvl ? ' on' : ''}${hot ? ' hot' : ''}" title="угроза ${h ? Math.round(h.heat) : 0}/100${lvl ? ` · уровень ${lvl}${hot ? ' · охотник рядом' : ''}` : ''}">${'🪦'.repeat(lvl)}${'·'.repeat(5 - lvl)}</span>`;
+    return `<span class="thr${lvl ? ' on' : ''}${hot ? ' hot' : ''}" title="угроза ${h ? Math.round(h.heat) : 0}/100${lvl ? ` · уровень ${lvl}${hot ? ' · охотник рядом' : ''}` : ''}">${'🪦'.repeat(lvl)}${'·'.repeat(5 - lvl)}</span>${this.onRoadLast ? '<span class="road" title="проезжая часть: скорость ×1.2, розыск +1 за 4 с">🚗</span>' : ''}`;
   }
   renderHUD() {
     const hud = $('hud'); const p = this.player; const own = this.o.own ? this.o.own() : [];

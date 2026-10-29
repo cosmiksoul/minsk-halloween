@@ -283,3 +283,6 @@ body.drawerOpen #card { left:344px; }
   #card { bottom:64px; }
   #ask, #host { bottom:64px; }
 }
+
+/* значок проезжей части у шкалы розыска */
+#hud .road { margin-left: 4px; filter: drop-shadow(0 0 3px #ffd23a); }
