@@ -12,6 +12,7 @@ import { Game, fmtAt } from './game.js';
 import { Cards } from './cards.js';
 import { Quests } from './quests.js';
 import { Sfx } from './sfx.js';
+import { icon, installFrames, registerIcons } from './ui.js';
 import { beaten } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
@@ -24,6 +25,7 @@ import { generateCharacter } from './gen.js';
 import { ensureFonts, renderShareCard, shareTargets, download, nativeShare } from './share.js';
 
 const $ = id => document.getElementById(id);
+installFrames(); registerIcons(); // рамки панелей и стили иконок до первого рендера
 
 // --- экран загрузки: прогресс по этапам (сеть улиц самая тяжёлая) и сменные подписи
 const LOAD_LINES = ['собираем кости…', 'зовём скелетов с Комаровки…', 'точим кубик d20…', 'раскладываем арканы по городу…', 'включаем фасад Футуриса…', 'наливаем пиво в барах…', 'будим упырей на кладбищах…', 'красим тыквы…', 'заводим Чижовку и Уручье…'];
@@ -149,7 +151,7 @@ ui.spd.oninput = () => { $('spdV').textContent = fmtX(ui.spd.value); };
 ui.pix.oninput = () => { $('pixV').textContent = ui.pix.value; pixel.setPixelSize(+ui.pix.value); };
 $('menuBtn').onclick = () => { const m = $('menu'); m.hidden = !m.hidden; $('menuBtn').classList.toggle('on', !m.hidden); };
 // звук: кнопка в шапке переключает все эффекты, флаг переживает перезагрузку
-const paintSnd = () => { $('sndBtn').textContent = Sfx.muted ? '🔇' : '🔊'; $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
+const paintSnd = () => { $('sndBtn').innerHTML = icon(Sfx.muted ? 'mute' : 'sound', 1); $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
 $('sndBtn').onclick = () => { Sfx.mute(!Sfx.muted); paintSnd(); if (!Sfx.muted) Sfx.play('coin'); }; paintSnd();
 $('bReset').onclick = () => location.reload();
 $('bRot').onclick = () => { rotateTo = (rotateTo ?? controls.getAzimuthalAngle()) + Math.PI / 2; };
@@ -173,7 +175,8 @@ function openDrawer(name) {
 function placeDrawer() { if (isMobile) return; $('drawer').style.top = Math.round($('hud').getBoundingClientRect().bottom + 8) + 'px'; }
 new ResizeObserver(() => { if (drawerTab) placeDrawer(); }).observe($('hud'));
 function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn')) b.classList.remove('on'); }
-for (const b of document.querySelectorAll('.tbtn')) b.onclick = () => openDrawer(b.dataset.drawer);
+const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map' };
+for (const b of document.querySelectorAll('.tbtn')) { b.innerHTML = icon(TAB_ICON[b.dataset.drawer] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => openDrawer(b.dataset.drawer); }
 $('drawerClose').onclick = closeDrawer;
 
 // --- свой скелет: взять управление, переключить, создать
@@ -230,7 +233,7 @@ function showCard(a, refresh) {
   $('bProfile').hidden = !a.custom;
   // босс часа: кнопка боя по состоянию карты (лицом — сразиться, отдыхает — секунды, бита)
   const bc = cards.cardOf(a); const fb = $('bFight'); fb.hidden = !bc || !game.player || !!a.def.dead;
-  if (bc) { fb.disabled = bc.state !== 'up'; fb.textContent = bc.state === 'up' ? '⚔ сразиться' : bc.state === 'cool' ? `отдышись · ${Math.max(0, Math.ceil((bc.coolUntil - Date.now()) / 1000))} с` : 'бита'; }
+  if (bc) { fb.disabled = bc.state !== 'up'; fb.innerHTML = bc.state === 'up' ? icon('boss', 1) + 'сразиться' : bc.state === 'cool' ? `${icon('clock', 1)}отдышись · ${Math.max(0, Math.ceil((bc.coolUntil - Date.now()) / 1000))} с` : 'бита'; }
 }
 $('bFight').onclick = () => { const a = cardAgent; if (!a || !game.player) return; const bc = cards.cardOf(a); if (!bc) return; if (!game.selected) takeControl(game.player); cards.fight(bc); };
 // --- профиль своего скелета: статистика, описание, колода, шаринг, ссылка, удаление

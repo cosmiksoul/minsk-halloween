@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
 import { Sfx } from './sfx.js';
+import { icon } from './ui.js';
 import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
 import { cardLabel, isRed } from './poker.js';
 import { hostOf } from './hosts.js';
@@ -309,8 +310,8 @@ export class Game {
   // чипы дебаффов в HUD: «🍺 0:38», «👀 1:12»
   chipsHtml() {
     const now = this.sim.time; const mmss = s => `${Math.floor(s / 60)}:${String(Math.ceil(s % 60)).padStart(2, '0')}`; let s = '';
-    if (now < this.tipsyUntil) s += `<span class="dbf" title="штормит: скорость ×0,65">🍺 ${mmss(this.tipsyUntil - now)}</span>`;
-    if (now < this.seenUntil) s += `<span class="dbf" title="засветился: лишний охотник с +1">👀 ${mmss(this.seenUntil - now)}</span>`;
+    if (now < this.tipsyUntil) s += `<span class="dbf" title="штормит: скорость ×0,65">${icon('beer', 1)} ${mmss(this.tipsyUntil - now)}</span>`;
+    if (now < this.seenUntil) s += `<span class="dbf" title="засветился: лишний охотник с +1">${icon('wanted', 1)} ${mmss(this.seenUntil - now)}</span>`;
     return s;
   }
   // --- урон и лечение
@@ -321,7 +322,7 @@ export class Game {
   }
   damage(n) {
     const g = this.g; n -= this.useShields(n);
-    if (n > 0) { g.hp = Math.max(0, g.hp - n); Sfx.play('bite'); if (g.hp <= 0) this.die(); }
+    if (n > 0) { g.hp = Math.max(0, g.hp - n); Sfx.play('bite'); this.heartLostAt = Date.now(); this.renderHUD(); if (g.hp <= 0) this.die(); }
   }
   heal(n, raiseMax = false) { const g = this.g; if (raiseMax) g.maxHp = Math.min(CAPS.hearts, g.maxHp + n); g.hp = Math.min(g.maxHp, g.hp + n); }
   // охотник ест стак: щиты поглощают позиции, потом убегает последний друг из хвоста, потом уходит сердце насовсем.
@@ -331,6 +332,7 @@ export class Game {
     if (tailOnly) n = Math.min(n, g.tail.length); // побег друга при крит-провале щиты не блокируют
     else n -= this.useShields(n);
     const lost = n > 0 ? eatStack(g, n) : [];
+    if (lost.some(l => l.kind !== 'friend')) { this.heartLostAt = Date.now(); this.renderHUD(); } // сердце мигает и исчезает
     lost.forEach((l, i) => {
       const say = text => setTimeout(() => this.player === me && this.sim.say(me, text, 'boo', 2.4), 400 + i * 1300);
       if (l.kind === 'friend') {
@@ -587,9 +589,9 @@ export class Game {
     this.renderShop();
   }
   renderShop() {
-    const g = this.g; $('shCoins').textContent = `🪙 ${g.coins}`;
-    $('shopBtns').innerHTML = Object.entries(SHOP_KINDS).map(([k, label]) => `<button data-kind="${k}" ${g.coins < PRICES[k] ? 'disabled' : ''}>${label} · ${PRICES[k]} 🪙</button>`).join('')
-      + `<button data-kind="token" ${canBuyToken(g) ? '' : 'disabled'}>🎟 спас-бросок · ${TOKEN.price} 🪙${(g.tokens | 0) >= TOKEN.cap ? ` · ${g.tokens | 0}/${TOKEN.cap}` : ''}</button>`; // жетон рядом с одеждой, потолок на покупку
+    const g = this.g; $('shCoins').innerHTML = `${icon('coin', 1)} ${g.coins}`;
+    $('shopBtns').innerHTML = Object.entries(SHOP_KINDS).map(([k, label]) => `<button data-kind="${k}" ${g.coins < PRICES[k] ? 'disabled' : ''}>${label} · ${PRICES[k]} ${icon('coin', 1)}</button>`).join('')
+      + `<button data-kind="token" ${canBuyToken(g) ? '' : 'disabled'}>${icon('token', 1)}спас-бросок · ${TOKEN.price} ${icon('coin', 1)}${(g.tokens | 0) >= TOKEN.cap ? ` · ${g.tokens | 0}/${TOKEN.cap}` : ''}</button>`; // жетон рядом с одеждой, потолок на покупку
     const c = this.player.costume; const off = [['hat', 'снять шляпу'], ['prop', 'убрать предмет'], ['pattern', 'без узора'], ['face', 'снять с лица'], ['extra', 'снять аксессуар']].filter(([k]) => c[k] && c[k] !== 'none');
     $('shopFree').innerHTML = off.map(([k, l]) => `<button data-off="${k}">${l}</button>`).join('');
   }
@@ -615,17 +617,26 @@ export class Game {
     this.save(); this.renderShop(); this.o.showCard(p, true);
   }
   // --- интерфейс
-  hearts(g) { let s = ''; for (let i = 0; i < g.maxHp; i++) s += i < g.hp ? '<i class="hp on">♥</i>' : '<i class="hp">♥</i>'; return s; }
+  // сердца иконками: hp полных и maxHp − hp пустых; только что потерянное 300 мс мигает со сдвигом (класс lost); при maxHp > 10 — одно с числом
+  hearts(g) {
+    const hp = Math.max(0, g.hp | 0), max = Math.max(hp, g.maxHp | 0); const lost = Date.now() - (this.heartLostAt || 0) < 400;
+    if (max > 10) return `<span class="hearts" title="сердца ${hp}/${max}">${icon('heart', 1)} ×${hp}/${max}</span>`;
+    let s = ''; for (let i = 0; i < max; i++) s += i < hp ? icon('heart', 1) : i === hp && lost ? icon('heartEmpty', 1).replace('class="ic ', 'class="ic lost ') : icon('heartEmpty', 1);
+    return `<span class="hearts" title="сердца ${hp}/${max}">${s}</span>`;
+  }
   // индикатор угрозы: надгробия по уровню, мигает, когда охотник ближе 300 м
   threatHtml() {
     const h = this.hunters, p = this.player; const lvl = h ? h.level : 0; const near = h && p ? h.nearest() : null;
     const hot = !!near && Math.hypot(near.a.x - p.x, near.a.z - p.z) < PURSUIT.nearWarn;
-    return `<span class="thr${lvl ? ' on' : ''}${hot ? ' hot' : ''}" title="угроза ${h ? Math.round(h.heat) : 0}/100${lvl ? ` · уровень ${lvl}${hot ? ' · охотник рядом' : ''}` : ''}">${'🪦'.repeat(lvl)}${'·'.repeat(5 - lvl)}</span>${this.onRoadLast ? '<span class="road" title="проезжая часть: скорость ×1.2, розыск +1 за 4 с">🚗</span>' : ''}`;
+    // полоса 60×6: заливка по розыску, цвет по уровню от зелёного через оранжевый к красному, деления по 20; 🚗 иконкой, пока игрок на проезжей части
+    const heat = h ? Math.max(0, Math.min(100, h.heat)) : 0; const col = lvl >= 4 ? '#ff3a5c' : lvl >= 2 ? 'var(--accent)' : 'var(--green)';
+    const ticks = [20, 40, 60, 80].map(v => `<i class="tick" style="left:${v}%"></i>`).join('');
+    return `<span class="thr thrWrap${lvl ? ' on' : ''}${hot ? ' hot' : ''}" title="розыск ${Math.round(heat)}/100${lvl ? ` · уровень ${lvl}${hot ? ' · охотник рядом' : ''}` : ''}">${icon('wanted', 1)}<span class="thrBar"><i class="fill" style="width:${heat}%;background:${col}"></i>${ticks}</span></span>${this.onRoadLast ? `<span class="road" title="проезжая часть: скорость ×1.2, розыск +1 за 4 с">${icon('car', 1)}</span>` : ''}`;
   }
   renderHUD() {
     const hud = $('hud'); const p = this.player; const own = this.o.own ? this.o.own() : [];
     if (!p) {
-      hud.innerHTML = this.lastPerished ? `<div class="hudName">☠ ${esc(this.lastPerished)} упокоен навсегда</div><div class="hudRow"><button class="hudPick">взять другого</button><button class="green hudNew">создать нового</button></div>` : `<button class="green hudNew">🦴 создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`;
+      hud.innerHTML = this.lastPerished ? `<div class="hudName">☠ ${esc(this.lastPerished)} упокоен навсегда</div><div class="hudRow"><button class="hudPick">взять другого</button><button class="green hudNew">создать нового</button></div>` : `<button class="green hudNew">создать своего скелета</button><div class="hudHint">ходи по городу, бросай d20, собирай арканы</div>`;
       hud.classList.remove('has'); return;
     }
     const g = this.g; const st = statsOf(g);
@@ -633,9 +644,9 @@ export class Game {
     const cap = this.o.slots ? this.o.slots() : 5; // слоты скелетов на устройстве: по одному, дальше за собранные руки, до пяти
     const avatars = own.length > 1 || own.length < cap ? `<div class="hudOwn">${own.map(o => `<canvas class="av${o.agent === p ? ' cur' : ''}" width="24" height="36" data-seed="${o.def.seed}" title="${esc(o.def.name)}"></canvas>`).join('')}${own.length < cap ? `<button class="avAdd" title="ещё скелет (слотов ${cap}, до пяти за собранные руки)">+</button>` : ''}</div>` : '';
     hud.innerHTML = `<div class="hudTop"><div class="hudName">${esc(p.bio.name)}</div>${avatars}</div>
-      <div class="hudRow">${this.hearts(g)}${'<span class="sh" title="щит: примет одну рану или укус">🎃</span>'.repeat(Math.max(0, g.shields | 0))}</div>
-      <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">XP ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
-      <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span><button class="deck tc" title="арканы: открыть колоду">🃏 ${g.tarot.length}/${ARCANA.length}</button><span class="cn">🪙 ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">🎟 ${g.tokens | 0}</span>${this.cards ? this.cards.myCardHtml() : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
+      <div class="hudRow">${this.hearts(g)}${`<span class="sh" title="щит: примет одну рану или укус">${icon('shield', 1)}</span>`.repeat(Math.max(0, g.shields | 0))}</div>
+      <div class="hudRow"><span class="tl" title="друзья в хвосте">${icon('friend', 1)} ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">${icon('xp', 1)} ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
+      <div class="hudRow"><span class="skc" title="черепа">${icon('skull', 1)} ${st.kills}</span><span class="frc" title="друзей всего">${icon('friend', 1)} ${st.friends}</span><span class="vc" title="заведений">${icon('places', 1)} ${g.seenVenues.length}</span><button class="deck tc" title="арканы: открыть колоду">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</button><span class="cn">${icon('coin', 1)} ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">${icon('token', 1)} ${g.tokens | 0}</span>${this.cards ? this.cards.myCardHtml() : ''}${g.deaths ? `<span class="dc" title="смертей">${icon('skull', 1)} ×${g.deaths}</span>` : ''}</div>
       ${this.cards ? this.cards.hudHtml() : ''}${this.quests ? this.quests.hudHtml() : ''}
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
@@ -649,10 +660,10 @@ export class Game {
     if (a === this.player) {
       const g = this.g, st = statsOf(g); const lvl = this.hunters?.level || 0;
       return `<div class="gm"><div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span></div>
-        <div class="line"><span class="pts">XP ${g.score}</span> · ❤ max ${g.maxHp} · <span class="tl">💚 хвост ${g.tail.length}/${CAPS.tail}</span>${lvl ? ` · <span class="thr on" title="угроза">${'🪦'.repeat(lvl)}</span>` : ''}</div>
-        <div class="line"><span class="skc">💀 ${st.kills}</span> · <span class="frc">🤝 ${st.friends}</span> · <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span> · <span class="cn">🪙 ${g.coins}</span>${g.tokens ? ` · <span class="tk">🎟 ${g.tokens}</span>` : ''}</div></div>`;
+        <div class="line"><span class="pts">${icon('xp', 1)} ${g.score}</span> · ${icon('heart', 1)} max ${g.maxHp} · <span class="tl">${icon('friend', 1)} хвост ${g.tail.length}/${CAPS.tail}</span>${lvl ? ` · <span class="thr on" title="розыск">${icon('wanted', 1)} ${lvl}</span>` : ''}</div>
+        <div class="line"><span class="skc">${icon('skull', 1)} ${st.kills}</span> · <span class="frc">${icon('friend', 1)} ${st.friends}</span> · <span class="tc">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</span> · <span class="vc" title="заведений">${icon('places', 1)} ${g.seenVenues.length}</span> · <span class="cn">${icon('coin', 1)} ${g.coins}</span>${g.tokens ? ` · <span class="tk">${icon('token', 1)} ${g.tokens}</span>` : ''}</div></div>`;
     }
-    if (a.custom && !a.def.guest && a.def.game) { const st = statsOf(a.def.game); return `<div class="gm"><div class="line muted">XP ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}/${ARCANA.length} · гуляет сам</div></div>`; }
+    if (a.custom && !a.def.guest && a.def.game) { const st = statsOf(a.def.game); return `<div class="gm"><div class="line muted">${icon('xp', 1)} ${st.score} · ${icon('heart', 1)} ${st.hearts} · ${icon('friend', 1)} ${st.tail} · ${icon('skull', 1)} ${st.kills} · ${icon('arcana', 1)} ${st.tarot}/${ARCANA.length} · гуляет сам</div></div>`; }
     if (a.ghost) { const s = this.g && this.g.log.find(x => x.kind === 'kill' && x.uid === a.uid); return `<div class="gm"><div class="line ghost">призрак${s ? ` · убит вами в ${esc(fmtAt(s.at))}` : ''}</div></div>`; }
     if (this.player && a.leader === this.player) { const f = this.g && this.g.tail.find(x => x.uid === a.uid); return `<div class="gm"><div class="line friend">ваш друг${f ? ` с ${esc(fmtAt(f.at))}` : ''} · идёт следом</div></div>`; }
     return '';
@@ -665,17 +676,17 @@ export class Game {
     const when = s => `${esc(fmtAt(s.at))}${s.street ? ', ' + esc(s.street) : ''} · d20: ${s.roll ?? '?'}`;
     const kills = g.log.filter(e => e.kind === 'kill' || (e.kind === 'win' && e.intent === 'kill')).slice(0, 30);
     const friends = g.log.filter(e => e.kind === 'friend' || (e.kind === 'win' && e.intent === 'friend')).slice(0, 30);
-    const sk = kills.map(s => { const k = 's' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}убит в ${when(s)}`; return `<span class="sk${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? '👑' : '💀'}</span>`; }).join('');
-    const fr = friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}подружились в ${when(s)}${s.kind === 'friend' && !s.inTail ? ' · машет из толпы' : ''}`; return `<span class="fr${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? '👑' : '💚'}</span>`; }).join('');
-    const vis = g.visits.slice(0, 10).map(v => `<div class="vis">${esc(v.at)} · 🎃 ${esc(v.name)}${v.auto ? ' <span class="muted">(сам)</span>' : ''}</div>`).join('');
+    const sk = kills.map(s => { const k = 's' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}убит в ${when(s)}`; return `<span class="sk${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? icon('boss', 1) : icon('skull', 1)}</span>`; }).join('');
+    const fr = friends.map(s => { const k = 'f' + id++; this.tips[k] = `${who(s)}<br>${s.boss ? '👑 босс · ' : ''}подружились в ${when(s)}${s.kind === 'friend' && !s.inTail ? ' · машет из толпы' : ''}`; return `<span class="fr${s.boss ? ' boss' : ''}" data-tip="${k}">${s.boss ? icon('boss', 1) : icon('friend', 1)}</span>`; }).join('');
+    const vis = g.visits.slice(0, 10).map(v => `<div class="vis">${esc(v.at)} · ${icon('places', 1)} ${esc(v.name)}${v.auto ? ' <span class="muted">(сам)</span>' : ''}</div>`).join('');
     return `<div class="pf">
-      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span> · <span class="pts">XP ${g.score}</span> <span class="muted">· побед ${g.wins} · поражений ${g.losses}</span></div>
-      <div class="line">хвост: <span class="tl">💚 ${g.tail.length}/${CAPS.tail}</span>${g.tail.length ? ' <span class="muted">· ' + g.tail.map(f => esc(firstName(f.name))).join(', ') + '</span>' : ''}</div>
+      <div class="line">${this.hearts(g)} <span class="muted">${g.hp}/${g.maxHp}</span> · <span class="pts">${icon('xp', 1)} ${g.score}</span> <span class="muted">· побед ${g.wins} · поражений ${g.losses}</span></div>
+      <div class="line">хвост: <span class="tl">${icon('friend', 1)} ${g.tail.length}/${CAPS.tail}</span>${g.tail.length ? ' <span class="muted">· ' + g.tail.map(f => esc(firstName(f.name))).join(', ') + '</span>' : ''}</div>
       <div class="line">черепа: ${sk || '<span class="muted">пока нет</span>'}</div>
       <div class="line">друзья: ${fr || '<span class="muted">пока нет</span>'}</div>
-      <div class="line">арканы: <span class="tc">🃏 ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.map(t => { const a = ARCANA_BY_ID[t.id]; return a ? `<span class="arc" data-arc="${a.id}" title="открыть карту">${a.roman} ${esc(a.name)}</span>` : ''; }).join(' ') : ''}</div>
-      <div class="line">монеты: <span class="cn">🪙 ${g.coins}</span> · спас-броски: <span class="tk">🎟 ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
-      <div class="line muted">заведений: ${g.seenVenues.length} · щиты: 🎃 ${g.shields | 0}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
+      <div class="line">арканы: <span class="tc">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</span>${g.tarot.length ? ' · ' + g.tarot.map(t => { const a = ARCANA_BY_ID[t.id]; return a ? `<span class="arc" data-arc="${a.id}" title="открыть карту">${a.roman} ${esc(a.name)}</span>` : ''; }).join(' ') : ''}</div>
+      <div class="line">монеты: <span class="cn">${icon('coin', 1)} ${g.coins}</span> · спас-броски: <span class="tk">${icon('token', 1)} ${g.tokens}</span>${g.shared ? ' <span class="muted">· карточка опубликована</span>' : ''}</div>
+      <div class="line muted">заведений: ${g.seenVenues.length} · щиты: ${icon('places', 1)} ${g.shields | 0}${g.deaths ? ` · смертей: ${g.deaths}` : ''}</div>${vis}</div>`;
   }
   portrait(a, canvas) { if (a.ghost) drawGhostPortrait(canvas, GHOSTS[a.ghostKind] || GHOSTS.npc); else drawPortrait(a.costume, canvas, a.haunted ? { ghost: GHOSTS.hunter } : undefined); }
 }
