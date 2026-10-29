@@ -85,7 +85,7 @@ test('CARD, TOKEN, ROAD, HEAT из спеки', () => {
   assert.deepEqual(CARD, { slots: 52, hand: 5, ringMin: 200, ringMax: 700, ringStep: 300, ringCap: 1600, spacing: 150, cooldown: 60, xpPerRank: 2, handBase: 20, bonus: { low: 0, mid: 1, high: 2, ace: 3 } });
   assert.deepEqual(HAND_MULT, { high: 1, pair: 2, twoPair: 3, three: 4, straight: 6, flush: 8, fullHouse: 10, four: 15, straightFlush: 30 });
   assert.deepEqual(TOKEN, { perHand: 1, price: 12, cap: 3 }); assert.deepEqual(ROAD, { speed: 1.2, heatPer: 4, crowdCost: 4 });
-  assert.equal(HEAT.boss, 10); assert.equal(HEAT.road, 1); assert.equal(QUESTS.length, 6); assert.deepEqual(QUESTS.map(q => q.id), ['trick', 'treat', 'candy', 'coin', 'ghost', 'card']);
+  assert.equal(HEAT.boss, 10); assert.equal(HEAT.road, 1); assert.equal(QUESTS.length, 7); assert.deepEqual(QUESTS.map(q => q.id), ['trick', 'treat', 'candy', 'coin', 'share', 'ghost', 'card']);
 });
 test('cardOfSlot: масти по четвертям, старшинство сверху вниз', () => {
   assert.deepEqual(cardOfSlot(1), { rank: 14, suit: '♠' }); assert.deepEqual(cardOfSlot(13), { rank: 2, suit: '♠' });
