@@ -62,7 +62,7 @@ export class Game {
   constructor(sim, scene, opts) {
     this.sim = sim; this.scene = scene; this.o = opts; // opts: flyTo, showCard, save, onChange, remote
     this.player = null; this.selected = false; this.pending = null; this.busy = false; this.pendingVenue = null; this.restored = false; this.modal = null;
-    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null;
+    this.candies = new Candies(sim, scene); this.tips = {}; this.debugRoll = null; this.debugRollFoe = null; this.respawnAt = 0; this.hunters = null; this.speedMul = 1;
     const ringG = new THREE.RingGeometry(0.7, 1, 24); ringG.rotateX(-Math.PI / 2);
     this.ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.9, depthWrite: false })); this.ring.visible = false; this.ring.position.y = 0.55; scene.add(this.ring);
     this.dest = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false })); this.dest.visible = false; this.dest.position.y = 0.56; scene.add(this.dest); this.destT = 0;
@@ -198,7 +198,8 @@ export class Game {
     this.pending = { npc, action, tries: 0 }; this.pendingVenue = null;
     if (!this.inReach(npc)) { if (!this.sim.moveTo(this.player, npc.x, npc.z)) { this.sim.say(this.player, 'не дойти', 'boo', 1.4); this.sim.release(npc); this.pending = null; } }
   }
-  inReach(npc) { return (npc.x - this.player.x) ** 2 + (npc.z - this.player.z) ** 2 < Math.max(5, this.sim.H * 0.8) ** 2; }
+  // досягаемость в долях роста: прохожие 0.8, охотники PURSUIT.reach (около двух ростов)
+  inReach(npc, mult = 0.8) { return (npc.x - this.player.x) ** 2 + (npc.z - this.player.z) ** 2 < Math.max(5, this.sim.H * mult) ** 2; }
   onArrive(a, node) {
     if (a !== this.player) return;
     const v = this.sim.venueNode.get(node);
@@ -399,6 +400,7 @@ export class Game {
   update(dt, t) {
     const p = this.player, H = this.sim.H;
     if (p) {
+      p.speedMul = this.speedMul; // «штормит» живёт отдельным множителем: охотники и хвост считают скорость от базовой
       if (this.ring.visible) { this.ring.position.set(p.x, 0.55, p.z); const s = H * 0.42; this.ring.scale.set(s, 1, s); }
       if (this.dest.visible) { this.destT -= dt * 1.2; const s = H * 0.3 * (1 + (1 - Math.max(0, this.destT)) * 0.8); this.dest.scale.set(s, 1, s); this.dest.material.opacity = Math.max(0, this.destT); if (this.destT <= 0) this.dest.visible = false; }
       if (p.state === 'dead' && performance.now() >= this.respawnAt) this.respawn();

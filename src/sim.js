@@ -298,6 +298,8 @@ export class Sim {
   }
   moveTo(a, x, z) {
     const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
+    // после прямого подхода агент стоит вне ребра: сначала ставим его на ближайший узел
+    if (a.state === 'approach' || (a.from === a.to && Math.hypot(a.x - g.x[a.from], a.z - g.z[a.from]) > 3)) { const n = g.nearest(a.x, a.z, 140); if (n >= 0) this.teleport(a, n); if (a.state === 'approach') a.state = 'idle'; }
     // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
     let best = null;
     const tryFrom = (start, pre, swap) => { const r = g.route(start, node); if (r && (!best || r.cost + pre < best.cost)) best = { nodes: r.nodes, cost: r.cost + pre, swap }; };
@@ -309,7 +311,9 @@ export class Sim {
     if (a.from === a.to) { if (a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; a.t = 0; } else { a.state = 'idle'; a.dest = null; } }
     return true;
   }
-  stop(a) { a.path = null; a.dest = null; if (a.state === 'walk') a.state = 'idle'; }
+  stop(a) { a.path = null; a.dest = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
+  // прямой подход вне графа (последние метры охотника к игроку, как у попутчиков): цель в метрах, путь не нужен
+  approach(a, x, z) { a.state = 'approach'; a.ax = x; a.az = z; a.path = null; a.dest = null; }
   // стоим на узле заведения?
   venueAt(a) { return a.from === a.to || a.t < 0.05 ? this.venueNode.get(a.from) : a.t > 0.95 ? this.venueNode.get(a.to) : null; }
 
@@ -317,7 +321,7 @@ export class Sim {
     const g = this.graph;
     if (a.state === 'walk') {
       if (a.from === a.to) { a.state = 'idle'; return; }
-      a.t += a.speed * dt / a.len;
+      a.t += a.speed * (a.speedMul || 1) * dt / a.len;
       while (a.t >= 1 && a.state === 'walk') {
         a.from = a.to; a.t = 0;
         if (a.path && a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; }
@@ -326,6 +330,10 @@ export class Sim {
       if (a.state === 'walk') { this.place(a); const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from]; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; }
       // след для друзей
       const tr = a.trail; if (tr) { const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
+    } else if (a.state === 'approach') {
+      const dx = a.ax - a.x, dz = a.az - a.z, d = Math.hypot(dx, dz);
+      if (d < 0.5) a.state = 'idle';
+      else { const step = Math.min(d, a.speed * (a.speedMul || 1) * dt); a.x += dx / d * step; a.z += dz / d * step; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; a.sprite.position.set(a.x, 0.5, a.z); }
     } else if (a.state === 'drink' || a.state === 'dead') {
       a.timer -= dt; if (a.timer <= 0 && a.state === 'drink') { a.state = 'idle'; this.leaveVenue(a); }
     }
@@ -462,7 +470,7 @@ export class Sim {
       let f;
       if (a.ghost) f = FRAMES.idle[0] + (Math.floor(a.anim * 2) % 2);
       else switch (a.state) {
-        case 'walk': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
+        case 'walk': case 'approach': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
         case 'follow': f = a.moving ? FRAMES.walk[Math.floor(a.anim * 6) % 4] : FRAMES.idle[0]; break;
         case 'dance': f = FRAMES.dance[Math.floor(a.anim * 4) % 4]; break;
         case 'drink': f = FRAMES.drink[Math.floor(a.anim * 1.5) % 2]; break;
