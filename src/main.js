@@ -531,9 +531,10 @@ for (const b of document.querySelectorAll('.socials button')) b.onclick = () => 
 // --- клики по сцене: скелеты, маркеры, заметные здания, земля
 const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2(); let downAt = null; const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); const hit = new THREE.Vector3();
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY, e.button]; });
-canvas.addEventListener('pointermove', e => { if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 8) follow = null; });
+const SLOP = e => e.pointerType === 'touch' ? 18 : 6; // пальцем тап дрожит сильнее мыши
+canvas.addEventListener('pointermove', e => { if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > SLOP(e) + 2) follow = null; });
 canvas.addEventListener('pointerup', e => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > SLOP(e)) return;
   if (downAt[2] !== 0) return;
   if (!$('menu').hidden) { $('menu').hidden = true; $('menuBtn').classList.remove('on'); }
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -541,7 +542,7 @@ canvas.addEventListener('pointerup', e => {
   const onGround = !!ray.ray.intersectPlane(groundPlane, hit);
   const th = ray.intersectObjects(tarot.pickables, false);
   if (th.length) { showTarotMarker(tarot.byId[th[0].object.userData.tarot.id]); return; }
-  const a = onGround ? sim.pickAgent(ray, hit.x, hit.z) : null;
+  const a = onGround ? sim.pickAgent(ray, hit.x, hit.z, e.pointerType === 'touch' ? sim.H * 0.6 : 0) : null; // пальцем — с допуском вокруг фигурки
   if (a) {
     if (game.clickAgent(a)) return;
     showCard(a); if (follow) follow = a;
@@ -585,7 +586,7 @@ function drawBubbles() {
     if (n > 90) break;
     if (a.bubble && a.bubble.until < sim.time) a.bubble = null;
     if (a.bubble) place(a, a.bubble.text, 'bub ' + a.bubble.kind, 0.8);
-    else if (a.custom) place(a, a.bio.name.split(' ')[0], 'bub tag' + (a === game.player ? ' me' : ''), 0.4);
+    else if (a.custom) { const boss = a !== game.player && cards.cardOf(a); place(a, a.bio.name.split(' ')[0], 'bub tag' + (a === game.player ? ' me' : boss ? ' boss' : ''), boss ? sim.H * 0.66 + 0.4 : 0.4); } // у босса подпись золотая и над картой в руке
     else if (game.player && a.leader === game.player) place(a, '💚', 'bub tag fr', 0.4);
     else if (game.player && a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }

@@ -118,7 +118,25 @@ export function frame(kind) {
   }
   return `url(${cv.toDataURL('image/png')})`;
 }
-export function installFrames() { const r = document.documentElement.style; r.setProperty('--frame-dark', frame('dark')); r.setProperty('--frame-light', frame('light')); }
+// кнопка 12×12 для border-image (срез 4): чёрный контур без угловых пикселей, фаска 2 px, заливка; нажатая — фаска наоборот
+export const BUTTONS = {
+  dark: ['#2a1c40', '#6d58a0', '#140c20'], on: ['#ff8a2a', '#ffd08a', '#a34d10'], green: ['#4df21e', '#b8ff9a', '#1f8a0a'],
+  sweet: ['#ff5fa2', '#ffb3d6', '#a3225f'], gen: ['#d8c2ff', '#f1e8ff', '#8a6ed1'],
+};
+export function btnFrame(kind, pressed = false) {
+  const [fill, hi, lo] = BUTTONS[kind] || BUTTONS.dark; const top = pressed ? lo : hi, bot = pressed ? hi : lo;
+  const cv = document.createElement('canvas'); cv.width = 12; cv.height = 12; const g = cv.getContext('2d');
+  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  px(1, 1, 10, 10, fill);
+  px(1, 0, 10, 1, '#0b0b0b'); px(1, 11, 10, 1, '#0b0b0b'); px(0, 1, 1, 10, '#0b0b0b'); px(11, 1, 1, 10, '#0b0b0b');
+  px(1, 1, 10, 2, top); px(1, 1, 2, 10, top); px(1, 9, 10, 2, bot); px(9, 1, 2, 10, bot);
+  px(9, 1, 2, 2, fill); px(1, 9, 2, 2, fill); // углы фаски — заливкой, как срез под 45°
+  return `url(${cv.toDataURL('image/png')})`;
+}
+export function installFrames() {
+  const r = document.documentElement.style; r.setProperty('--frame-dark', frame('dark')); r.setProperty('--frame-light', frame('light'));
+  for (const k of Object.keys(BUTTONS)) { r.setProperty(`--btn-${k}`, btnFrame(k)); r.setProperty(`--btn-${k}-p`, btnFrame(k, true)); }
+}
 
 // строка статов одной функцией для HUD, карточки, профиля и доски
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);

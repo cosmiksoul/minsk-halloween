@@ -9,6 +9,7 @@ import { segmentClear } from './geo.js';
 export { Graph };
 
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
+const PICK_V = new THREE.Vector3();
 const ACCEL = 0.22; // с: за сколько управляемый или ведомый набирает скорость (разгон вместо рывка с места)
 const COSTUMES_PER_ARCH = 28; // размер пула текстур на архетип: экономим память при тысячах скелетов
 
@@ -205,7 +206,7 @@ export class Sim {
     oldTex.dispose(); if (oldBase) oldBase.dispose(); a.haunted = true;
   }
   // --- игрок: путь по графу до точки на карте
-  setPlayer(a) { a.player = true; a.trail = a.trail || []; a.followers = a.followers || []; a.speed = WALK_SPEED * 1.3; a.dest = null; this.setAuto(a, true); }
+  setPlayer(a) { a.player = true; a.trail = a.trail || []; a.followers = a.followers || []; a.speed = WALK_SPEED * 2; a.dest = null; this.setAuto(a, true); } // вдвое быстрее прохожего: охотники берут свою скорость от этой
   unsetPlayer(a) { this.setAuto(a, true); a.player = false; a.auto = false; a.speed = WALK_SPEED * (0.8 + a.rng() * 0.5); }
   // автопилот: без управления свой скелет гуляет, пьёт и танцует как все
   setAuto(a, on) {
@@ -443,14 +444,16 @@ export class Sim {
     }
   }
   // кого кликнули: сначала грубо по расстоянию до точки на земле, потом точный raycast по спрайту
-  pickAgent(ray, gx, gz) {
-    const R = (this.H * 3 + 4) ** 2; const hits = []; let best = null, bd = Infinity;
+  // slop > 0 (тап пальцем): если луч не попал ни в один спрайт, берём скелет, до середины тела которого луч проходит ближе slop
+  pickAgent(ray, gx, gz, slop = 0) {
+    const R = (this.H * 3 + 4) ** 2; const hits = []; let best = null, bd = Infinity, near = null, nd = slop;
     for (const a of this.agents) {
       if ((a.x - gx) ** 2 + (a.z - gz) ** 2 > R) continue;
       hits.length = 0; a.sprite.raycast(ray, hits);
       if (hits.length && hits[0].distance < bd) { bd = hits[0].distance; best = a; }
+      else if (slop > 0 && !best) { const d = ray.ray.distanceToPoint(PICK_V.set(a.x, this.H * 0.5, a.z)); if (d < nd) { nd = d; near = a; } }
     }
-    return best;
+    return best || near;
   }
 
   update(dt) {
