@@ -348,3 +348,14 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 .toast { display:flex; align-items:center; gap:6px; background:rgba(14,9,24,.94); color:var(--ink); border:1px solid var(--line); box-shadow:2px 2px 0 var(--black); padding:6px 10px; font-size:11px; line-height:1.4; max-width:min(320px, calc(100vw - 24px)); transform:translateY(-8px); opacity:0; transition:transform .15s ease-out, opacity .15s ease-out; }
 .toast.in { transform:none; opacity:1; } .toast.out { opacity:0; transition:opacity .3s; }
 .toast .ic { flex:0 0 auto; }
+
+/* --- интро: модалка с картинкой 96×64 втрое крупнее и двумя строками текста */
+#intro { position:fixed; inset:0; z-index:11; display:flex; align-items:center; justify-content:center; background:rgba(8,4,16,.82); padding:12px; }
+#intro[hidden] { display:none; }
+.inBox { width:min(560px, 100%); } .inBox .dTitle { color:var(--green); } .inBox .dTitle span { color:var(--muted); font-size:8px; }
+.inRow { display:flex; gap:16px; align-items:center; }
+#inCv { width:288px; height:192px; image-rendering:pixelated; background:#000; border:2px solid var(--line); flex:0 0 auto; }
+.inText { font-size:13px; line-height:1.7; color:var(--ink); }
+.inFoot { display:flex; align-items:center; gap:10px; } .inFoot button { margin-left:auto; font-size:12px; padding:8px 14px; }
+.inDots { display:flex; gap:5px; } .inDot { width:8px; height:8px; background:var(--line); } .inDot.on { background:var(--green); }
+@media (max-width: 700px) { .inRow { flex-direction:column; } #inCv { width:min(288px, 100%); height:auto; aspect-ratio:3/2; } }

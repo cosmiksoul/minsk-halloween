@@ -12,33 +12,34 @@
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "./src/bio.js": "./src/bio.js?v=f109286",
-  "./src/cards.js": "./src/cards.js?v=f109286",
-  "./src/city.js": "./src/city.js?v=f109286",
-  "./src/dice.js": "./src/dice.js?v=f109286",
-  "./src/districts.js": "./src/districts.js?v=f109286",
-  "./src/game.js": "./src/game.js?v=f109286",
-  "./src/gen.js": "./src/gen.js?v=f109286",
-  "./src/geo.js": "./src/geo.js?v=f109286",
-  "./src/graph.js": "./src/graph.js?v=f109286",
-  "./src/hosts.js": "./src/hosts.js?v=f109286",
-  "./src/hunters.js": "./src/hunters.js?v=f109286",
-  "./src/landmarks.js": "./src/landmarks.js?v=f109286",
-  "./src/main.js": "./src/main.js?v=f109286",
-  "./src/poker.js": "./src/poker.js?v=f109286",
-  "./src/post.js": "./src/post.js?v=f109286",
-  "./src/quests.js": "./src/quests.js?v=f109286",
-  "./src/rules.js": "./src/rules.js?v=f109286",
-  "./src/sfx.js": "./src/sfx.js?v=f109286",
-  "./src/share.js": "./src/share.js?v=f109286",
-  "./src/shops.js": "./src/shops.js?v=f109286",
-  "./src/sim.js": "./src/sim.js?v=f109286",
-  "./src/skeletons.js": "./src/skeletons.js?v=f109286",
-  "./src/store.js": "./src/store.js?v=f109286",
-  "./src/tarot.js": "./src/tarot.js?v=f109286",
-  "./src/tiles.js": "./src/tiles.js?v=f109286",
-  "./src/ui.js": "./src/ui.js?v=f109286",
-  "./src/venues.js": "./src/venues.js?v=f109286"
+  "./src/bio.js": "./src/bio.js?v=801125a",
+  "./src/cards.js": "./src/cards.js?v=801125a",
+  "./src/city.js": "./src/city.js?v=801125a",
+  "./src/dice.js": "./src/dice.js?v=801125a",
+  "./src/districts.js": "./src/districts.js?v=801125a",
+  "./src/game.js": "./src/game.js?v=801125a",
+  "./src/gen.js": "./src/gen.js?v=801125a",
+  "./src/geo.js": "./src/geo.js?v=801125a",
+  "./src/graph.js": "./src/graph.js?v=801125a",
+  "./src/hosts.js": "./src/hosts.js?v=801125a",
+  "./src/hunters.js": "./src/hunters.js?v=801125a",
+  "./src/intro.js": "./src/intro.js?v=801125a",
+  "./src/landmarks.js": "./src/landmarks.js?v=801125a",
+  "./src/main.js": "./src/main.js?v=801125a",
+  "./src/poker.js": "./src/poker.js?v=801125a",
+  "./src/post.js": "./src/post.js?v=801125a",
+  "./src/quests.js": "./src/quests.js?v=801125a",
+  "./src/rules.js": "./src/rules.js?v=801125a",
+  "./src/sfx.js": "./src/sfx.js?v=801125a",
+  "./src/share.js": "./src/share.js?v=801125a",
+  "./src/shops.js": "./src/shops.js?v=801125a",
+  "./src/sim.js": "./src/sim.js?v=801125a",
+  "./src/skeletons.js": "./src/skeletons.js?v=801125a",
+  "./src/store.js": "./src/store.js?v=801125a",
+  "./src/tarot.js": "./src/tarot.js?v=801125a",
+  "./src/tiles.js": "./src/tiles.js?v=801125a",
+  "./src/ui.js": "./src/ui.js?v=801125a",
+  "./src/venues.js": "./src/venues.js?v=801125a"
 } }
 </script>
 <script src="config.js"></script>
@@ -100,6 +101,7 @@
     <div class="lg"><i class="chip" style="background:#5a2a0e"></i><b>Коричневое кольцо</b> — площадь, где скелеты танцуют.</div>
     <div class="lg"><i class="chip" style="background:#cdb892"></i><b>Заметные здания</b> — библиотека, «Футурис», телебашня, Ратуша, храмы, стадион: клик открывает описание и адрес.</div>
     <div class="hint">Свой скелет без управления гуляет сам: пьёт, танцует и заходит в бары. Клик по панели слева сверху берёт управление, Esc отпускает. Можно завести до пяти скелетов и переключаться между ними.</div>
+    <div class="btns"><button id="bHow">как играть</button></div>
   </div>
 </div>
 
@@ -243,7 +245,15 @@
   <div id="diceSave" hidden><button id="dsYes" class="green">🎟 спас-бросок</button><button id="dsNo">оставить</button><div class="hint" id="dsHint"></div></div>
 </div>
 
+<!-- интро: четыре слайда один раз на устройство, снова — «как играть» в легенде -->
+<div id="intro" hidden>
+  <div class="dBox inBox panel">
+    <div class="dTitle">КАК ИГРАТЬ <span id="inStep"></span><button class="x" id="inClose" title="пропустить">×</button></div>
+    <div class="inRow"><canvas id="inCv" width="96" height="64"></canvas><div class="inText" id="inText"></div></div>
+    <div class="inFoot"><div class="inDots"></div><button id="inNext" class="green">дальше</button></div>
+  </div>
+</div>
 <div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
-<script type="module" src="src/main.js?v=f109286"></script>
+<script type="module" src="src/main.js?v=801125a"></script>
 </body>
 </html>

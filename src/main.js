@@ -12,6 +12,7 @@ import { Game, fmtAt } from './game.js';
 import { Cards } from './cards.js';
 import { Quests } from './quests.js';
 import { Sfx } from './sfx.js';
+import { initIntro } from './intro.js';
 import { icon, installFrames, registerIcons } from './ui.js';
 import { beaten, cardLabel } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
@@ -141,6 +142,9 @@ if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.
 }
 const quests = new Quests({ game, sim }); game.quests = quests; // онбординг: цепочка квестов на устройство
 game.renderHUD(); cards.start();
+// интро один раз на устройство без своих скелетов; после последнего слайда — форма, заполненная генератором
+const intro = initIntro({ drawCard: (cv, c) => cards.drawCard(cv, c), onCreate: () => { openMine(); $('bGen').onclick(); } });
+$('bHow').onclick = () => { closeDrawer(); intro.show(); };
 
 // --- меню настроек и действий
 const ui = { pop: $('pop'), spd: $('spd'), pix: $('pix') };
@@ -628,5 +632,6 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+if (!mine.some(d => !d.guest) && !intro.seen) setTimeout(() => intro.show(), 400);
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');
