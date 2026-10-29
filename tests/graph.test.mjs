@@ -42,3 +42,27 @@ test('planRoute: цель на текущем ребре позади — раз
   assert.equal(pl.onEdge, true); assert.equal(pl.swap, true); assert.ok(Math.abs(pl.cost - 50) < 1e-6); assert.ok(Math.abs(pl.endX - 30) < 1e-6);
 });
 test('planRoute: до узла без точки на ребре', () => { const pos = { from: g.nearest(0, 0), to: g.nearest(0, 0), t: 0, len: 1 }; const pl = g.planRoute(pos, 100, 100); assert.equal(pl.ep, null); assert.ok(Math.abs(pl.cost - 200) < 1e-6); assert.equal(pl.stopT, null); assert.equal(pl.nodes.length, 2); });
+
+// --- эндгейм (план 2026-10-29-endgame-cards, задача 3): проезжая часть на рёбрах, штраф толпе, кольцо и разброс
+// проспект (major) 0→200 по оси x и тротуар (path) 0→(0,30)→(200,30)→200: тротуар длиннее на 60 м, но короче проспекта вчетверо
+const road = new Graph([{ p: [0, 0, 200, 0], k: 'major', n: 'проспект' }, { p: [0, 0, 0, 30, 200, 30, 200, 0], k: 'path' }]);
+test('рёбра major помечены, isMajor и allMajor', () => {
+  const a = road.nearest(0, 0, 1), b = road.nearest(200, 0, 1), s = road.nearest(0, 30, 1);
+  assert.equal(road.isMajor(a, b), true); assert.equal(road.isMajor(a, s), false); assert.equal(road.allMajor(a), false);
+  const only = new Graph([{ p: [0, 0, 100, 0, 200, 0], k: 'major' }]); assert.equal(only.allMajor(only.nearest(100, 0, 1)), true);
+});
+test('route: толпа идёт тротуаром, игрок по проспекту', () => {
+  const a = road.nearest(0, 0, 1), b = road.nearest(200, 0, 1);
+  assert.ok(Math.abs(road.route(a, b).cost - 200) < 1e-6);
+  const r = road.route(a, b, { crowd: true }); assert.equal(r.nodes.includes(road.nearest(0, 30, 1)), true);
+  assert.equal(road.path(a, b, 110, { crowd: true }).includes(road.nearest(0, 30, 1)), true); assert.equal(road.path(a, b).length >= 1, true);
+});
+test('ring: узлы по цене пути в интервале, без старта', () => {
+  const line = new Graph([{ p: [0, 0, 100, 0, 200, 0, 300, 0, 400, 0], k: 'minor' }]); const s = line.nearest(0, 0, 1);
+  assert.deepEqual(line.ring(s, 150, 350).map(n => line.x[n]).sort((p, q) => p - q), [200, 300]); assert.deepEqual(line.ring(s, 500, 900), []);
+});
+test('pickSpaced: разброс и добор ближайшими', () => {
+  const line = new Graph([{ p: [0, 0, 100, 0, 200, 0, 300, 0, 400, 0], k: 'minor' }]); const rng = () => 0.5;
+  const picked = line.pickSpaced(line.ring(line.nearest(0, 0, 1), 100, 400), 2, 150, rng, 0, 0); assert.equal(picked.length, 2); assert.ok(Math.abs(line.x[picked[0]] - line.x[picked[1]]) >= 150);
+  const more = line.pickSpaced([line.nearest(400, 0, 1)], 3, 150, rng, 0, 0); assert.equal(more.length, 3); assert.equal(new Set(more).size, 3);
+});
