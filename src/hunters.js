@@ -114,7 +114,7 @@ export class Hunters {
     }
     if (d < PURSUIT.direct) {
       // последние метры по прямой вне графа, как попутчики: с конца пути, цель обновляется, когда игрок ушёл дальше 3 м
-      if (a.state === 'idle' || (a.state === 'approach' && Math.hypot(p.x - a.ax, p.z - a.az) > 3)) sim.approach(a, p.x, p.z);
+      if (a.state === 'idle' || a.state === 'walk' || (a.state === 'approach' && Math.hypot(p.x - a.ax, p.z - a.az) > 3)) sim.approach(a, p.x, p.z);
     } else {
       if (a.state === 'approach') sim.stop(a);
       // путь по графу: перестраиваем раз в 25 с, при уходе игрока от прежней цели на 150 м или когда дошли до старой цели
@@ -163,7 +163,7 @@ export class Hunters {
     this.game.renderHUD(); return h;
   }
   // лишний охотник от «засветился»: сверх лимита, с половины дистанции, с +1 к кубику, пока дебафф активен
-  extra() { return this.spawn(Math.max(1, this.level), { half: true, extra: true }); }
+  extra(level = Math.max(1, this.level)) { return this.spawn(Math.max(1, level), { half: true, extra: true }); }
   // после стычки: охотник уходит к своему кладбищу, набег пишется в базу (запись в журнал игрока уже сделала дуэль)
   finish(h, outcome) {
     this.sim.say(h.a, outcome === 'skull' || outcome === 'heart' ? pick(h.a.rng, LINES.scared) : 'ушёл в туман', outcome === 'skull' || outcome === 'heart' ? 'boo' : '', 2.4);

@@ -237,16 +237,16 @@ function logText(e, fem) {
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
   const rr = Array.isArray(e.rolls) && e.rolls.length >= 3 ? `, ${e.rolls[0]}${e.rolls[1] ? '+' + e.rolls[1] : ''} против ${e.rolls[2]}` : '';
   switch (e.kind) {
-    case 'kill': return `убил${v('', 'а')} ${nm}, d20 ${e.roll ?? '?'}`;
-    case 'friend': return `подружил${v('ся', 'ась')} с ${nm}` + (e.inTail === false ? ' · машет из толпы' : '');
-    case 'fail': return `провалил${v('', 'а')} ${e.action === 'kill' ? 'гадость' : 'сладость'} с ${nm}, d20 ${e.roll ?? '?'}`;
+    case 'kill': return `гадость удалась: ${nm}, d20 ${e.roll ?? '?'}`;
+    case 'friend': return `сладость удалась: ${nm}` + (e.inTail === false ? ' · машет из толпы' : '');
+    case 'fail': return `провал (${e.action === 'kill' ? 'гадость' : 'сладость'}): ${nm}, d20 ${e.roll ?? '?'}`;
     case 'spawn': return `с ${e.cem ? esc(genitiveCem(e.cem)) : 'кладбища'} вылез${his} ${nm}`;
     case 'bit': return `${nm} укусил${his}, ${vs}`;
-    case 'win': return `побил${v('', 'а')} ${nm}, ${e.boss ? 'босс-' : ''}${e.intent === 'kill' ? 'череп' : 'сердечко'}, ${vs}`;
+    case 'win': return `победа над охотником: ${nm}, ${e.boss ? 'босс-' : ''}${e.intent === 'kill' ? 'череп' : 'сердечко'}, ${vs}`;
     case 'lost': return `${nm} потерял${his} след`;
-    case 'raid_bit': return e.outcome === 'rip' ? `твой скелет упокоил ${nm} навсегда${e.place ? ' · ' + esc(e.place) : ''}${rr}` : `твой скелет укусил ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
+    case 'raid_bit': return e.outcome === 'rip' ? `твой скелет упокоил навсегда гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}` : `твой скелет укусил гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
     case 'raid_beaten': return `${nm} побил${his} твоего скелета${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
-    case 'raid_lost': return `твой скелет потерял ${nm}${e.place ? ' · ' + esc(e.place) : ''}`;
+    case 'raid_lost': return `твой скелет потерял гостя: ${nm}${e.place ? ' · ' + esc(e.place) : ''}`;
     case 'tarot': return `аркана ${nm}`;
     case 'visit': return `заведение ${nm}`;
     case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
