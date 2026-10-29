@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-29-async-hunters-design.md`
 
+**Статус (2026-10-29):** реализован целиком в PR #6 (ветка `claude/minsk-skeleton-game-logic-137cbh`),
+чек‑лист в конце пройден локальной сессией в браузере. Этот план описывает редакцию 2 спеки и
+больше не правится. Правки по редакции 3 (без «+1 сердца» за босса, смерть за половину монет и
+пермасмерть, бессрочные щиты, сброс розыска только через игру с хозяином, охотники за кадром
+вчетверо быстрее, одно поле `game.modal` и прочее, список в конце спеки) идут первыми задачами плана
+`docs/superpowers/plans/2026-10-29-venues-rps.md`.
+
 ## Как читать этот план
 
 - Код проекта на момент написания плана: `origin/main` после PR #3. Параллельная ветка переписывает `sim.js`, `game.js`, `main.js`, `index.html`, `style.css` (толпа, автопилот, новый UI). Этот план ссылается на функции по именам из `main`, они должны пережить переписывание: `Game.setPlayer/restore/resolve/damage/die/respawn/visit/collect/buy/renderHUD/update`, `Sim.moveTo/teleport/remove/say/streetOf/spawnCustom/befriend/unfriend/ghostify/stop`, `Remote.upsert/others/top`, `rollDice/hideDice`. Если в новой ветке что‑то переименовано, план применяется к преемнику.
@@ -303,7 +310,7 @@ git commit -m "Дуэль: встречный бросок d20 с бонусам
     - `constructor({ sim, game, cemeteries, remote })` — `cemeteries`: элементы `cemeteries.json` с добавленным `node` (вычисляет `main.js`: `sim.graph.nearest(x, z, PURSUIT.cemNodeR)`, элементы с `node < 0` отброшены).
     - `update(dt)` — раз в кадр после `game.update`.
     - `gain(kind: 'kill' | 'friend' | 'tarot' | 'raidWin' | 'minute')` — `heat = min(100, heat + HEAT[kind])`, `heatAt = sim.time` (для `minute` `heatAt` не трогается, чтобы ходьба не останавливала спад), при росте уровня пузырь «🪦 угроза N» и `game.renderHUD()`; работает только при управляемом скелете.
-    - `resetAtVenue(kind: 'venue' | 'costume'): boolean` — для `venue` требует `canReset(g, sim.time)` и управляемого скелета; ставит `heat = 0`, `resetAt = sim.time`; охотники дальше `PURSUIT.seenDist` (или все при `costume`) переходят в `leave` с записью `lost`; пузырь «🪦 залёг на дно» или «🎭 не узнают»; возвращает, сработало ли.
+    - `resetAtVenue(kind: 'venue' | 'costume', amount = 100): boolean` — для `venue` требует `canReset(g, sim.time)` и управляемого скелета; ставит `heat = max(0, heat − amount)`, `resetAt = sim.time`; охотники дальше `PURSUIT.seenDist` (или все при `costume`) переходят в `leave` с записью `lost`; пузырь «🪦 залёг на дно» или «🎭 не узнают»; возвращает, сработало ли. Параметр `amount` нужен следующему плану (заведения, спека `2026-10-29-venues-rps-design.md`): там сброс станет платным и частичным при проигрыше, а щиты на 20 секунд в `visit` будут заменены бессрочными. В этом плане `visit` не усложнять.
     - `reset()` — `heat = 0`, всех в `leave` без записей (смерть).
     - `get heat(): number`, `get level(): number`, `get list(): Array<Hunter>`, `nearest(): Hunter | null` (ближайший активный к игроку).
     - `spawn(): Hunter | null` — отладка, немедленное появление по текущему уровню (если уровень 0, берёт уровень 1).
@@ -474,7 +481,7 @@ git commit -m "Журнал персонажа: лента боёв, набег�
 
 1. `node --test tests/` зелёный.
 2. Свежий браузер без `localStorage`: создать скелета, `★ 0`, `❤ 3/3`, `💚 0/10`, `🪦 ·····`.
-3. Старый прогресс: вставить в `localStorage` запись v1 с 13 друзьями и 8 черепами, перезагрузить: счёт `69`, хвост 10, журнал 21 запись.
+3. Старый прогресс: вставить в `localStorage` запись v1 с 13 друзьями и 8 черепами, перезагрузить: счёт `70` (13·3 + 8·3 + 5 + 2), хвост 10, журнал 21 запись.
 4. Гадость с `debugRoll = 20` → `❤ 4/4`, `★ 2`; сладость ×10 → хвост 10, одиннадцатая «машет из толпы».
 5. `hunters.setHeat(100)` → `🪦🪦🪦🪦🪦`, через паузу пять упырей; дуэль с `debugRollFoe = 20, debugRoll = 1` съедает две позиции; с полным хвостом подпись «ты +2».
 6. Посещение бара при угрозе 60 → 0, далёкие уходят, ближний продолжает; повторное посещение через минуту не сбрасывает.

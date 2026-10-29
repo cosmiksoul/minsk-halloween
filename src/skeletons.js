@@ -75,7 +75,8 @@ function line(ctx, x0, y0, x1, y1, color, w = 2) {
   }
 }
 
-export function drawFrame(ctx, ox, f, C) {
+// opts.ghost — палитра призрака: вместо ног рисуется хвост-подол (аура-обводка добавляется в drawStrip)
+export function drawFrame(ctx, ox, f, C, opts = {}) {
   const P = pose(f);
   const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(ox + x + P.dx, y + P.dy, w, h); };
   const L = (x0, y0, x1, y1, c, w) => line(ctx, ox + x0 + P.dx, y0 + P.dy, ox + x1 + P.dx, y1 + P.dy, c, w);
@@ -95,11 +96,22 @@ export function drawFrame(ctx, ox, f, C) {
   }
   if (C.extra === 'tail') { L(14, 26, 20, 30, C.extraColor || '#8e1b1b', 1); R(20, 29, 2, 2, '#e8303a'); }
 
-  // --- ноги
-  L(10, 27, P.lk[0], P.lk[1], bone); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1], bone);
-  L(13, 27, P.rk[0], P.rk[1], bone); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1], bone);
-  R(P.lf[0] - 1, P.lf[1], 3, 1, C.shoes || bone); R(P.rf[0], P.rf[1], 3, 1, C.shoes || bone);
-  if (C.body === 'tracksuit') { L(10, 27, P.lk[0], P.lk[1], C.c1); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1] - 1, C.c1); L(13, 27, P.rk[0], P.rk[1], C.c1); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1] - 1, C.c1); }
+  // --- ноги (у призрака-охотника вместо них хвост-подол, подол меняется по кадрам)
+  if (opts.ghost) {
+    const G = opts.ghost, w = f % 2; // фаза колыхания
+    // хвост-подол: сужается и расходится на три пряди, пряди колышутся по кадрам, на концах светлые искры
+    R(8, 26, 8, 2, G.body); R(8, 28, 8, 2, G.body); R(9, 30, 6, 1, G.body);
+    R(7 + w, 31, 2, 2, G.body); R(11, 31, 2, 3, G.body); R(14 + w, 31, 2, 2, G.body);
+    R(6 + w, 33, 1, 1, G.light); R(16 - w, 33, 1, 1, G.light); R(11, 34, 1, 1, G.dark);
+    R(8, 27, 1, 3, G.light); R(15, 27, 1, 3, G.dark);
+    // искры вокруг фигуры мерцают по кадрам
+    const sp = [[4, 12], [20, 20], [3, 24], [21, 9], [5, 19], [19, 28]]; for (let i = 0; i < 3; i++) { const q = sp[(f + i * 2) % sp.length]; R(q[0], q[1], 1, 1, G.light); }
+  } else {
+    L(10, 27, P.lk[0], P.lk[1], bone); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1], bone);
+    L(13, 27, P.rk[0], P.rk[1], bone); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1], bone);
+    R(P.lf[0] - 1, P.lf[1], 3, 1, C.shoes || bone); R(P.rf[0], P.rf[1], 3, 1, C.shoes || bone);
+    if (C.body === 'tracksuit') { L(10, 27, P.lk[0], P.lk[1], C.c1); L(P.lk[0], P.lk[1], P.lf[0], P.lf[1] - 1, C.c1); L(13, 27, P.rk[0], P.rk[1], C.c1); L(P.rk[0], P.rk[1], P.rf[0], P.rf[1] - 1, C.c1); }
+  }
 
   // --- таз, позвоночник, рёбра
   R(9, 25, 6, 2, bone);
@@ -159,8 +171,9 @@ export function drawFrame(ctx, ox, f, C) {
   } else {
     R(11, 16, 2, 1, bone);
     R(8, 6 + hd, 8, 8, bone); R(9, 14 + hd, 6, 2, bone);
-    R(9, 8 + hd, 2, 2, DARK); R(13, 8 + hd, 2, 2, DARK); R(11, 11 + hd, 2, 1, shade(bone));
-    R(10, 9 + hd, 1, 1, C.eye); R(14, 9 + hd, 1, 1, C.eye);
+    const sock = opts.ghost ? opts.ghost.dark : DARK, pupil = opts.ghost ? opts.ghost.light : C.eye; // у призрака глазницы светятся
+    R(9, 8 + hd, 2, 2, sock); R(13, 8 + hd, 2, 2, sock); R(11, 11 + hd, 2, 1, shade(bone));
+    R(10, 9 + hd, 1, 1, pupil); R(14, 9 + hd, 1, 1, pupil);
     R(10, 14 + hd, 1, 1, shade(bone)); R(12, 14 + hd, 1, 1, shade(bone)); R(14, 14 + hd, 1, 1, shade(bone));
     switch (C.face) {
       case 'glasses': R(9, 8 + hd, 3, 1, '#333'); R(13, 8 + hd, 3, 1, '#333'); R(9, 9 + hd, 1, 1, '#333'); R(11, 9 + hd, 1, 1, '#333'); R(13, 9 + hd, 1, 1, '#333'); R(15, 9 + hd, 1, 1, '#333'); R(12, 8 + hd, 1, 1, '#333'); break;
@@ -234,29 +247,51 @@ export function drawFrame(ctx, ox, f, C) {
   if (P.mug) { const m = P.mug; R(m[0], m[1], 4, 5, '#f0a020'); R(m[0], m[1] - 1, 4, 1, '#fff6e0'); R(m[0] + 4, m[1] + 1, 1, 3, '#f0a020'); R(m[0], m[1] + 1, 1, 3, '#ffd060'); }
 }
 
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
 function shade(hex) {
   const n = parseInt(hex.slice(1), 16); const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return `rgb(${r * 0.65 | 0},${g * 0.65 | 0},${b * 0.65 | 0})`;
 }
 
-export function drawStrip(C) {
+export function drawStrip(C, opts = {}) {
   const cv = document.createElement('canvas'); cv.width = FW * NF; cv.height = FH;
   const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
-  for (let f = 0; f < NF; f++) drawFrame(ctx, f * FW, f, C);
+  if (!opts.ghost) { for (let f = 0; f < NF; f++) drawFrame(ctx, f * FW, f, C); return cv; }
+  // призрак-охотник: аура-обводка цвета призрака вокруг силуэта, поверх сам скелет с хвостом
+  const tmp = document.createElement('canvas'); tmp.width = FW; tmp.height = FH; const t = tmp.getContext('2d'); t.imageSmoothingEnabled = false;
+  const sil = document.createElement('canvas'); sil.width = FW; sil.height = FH; const s = sil.getContext('2d'); s.imageSmoothingEnabled = false;
+  const tint = rgba(opts.ghost.body, 0.22);
+  for (let f = 0; f < NF; f++) {
+    t.globalCompositeOperation = 'source-over'; t.clearRect(0, 0, FW, FH); drawFrame(t, 0, f, C, opts);
+    t.globalCompositeOperation = 'source-atop'; t.fillStyle = tint; t.fillRect(0, 0, FW, FH); // спектральный оттенок костей и одежды
+    s.globalCompositeOperation = 'source-over'; s.clearRect(0, 0, FW, FH); s.drawImage(tmp, 0, 0);
+    s.globalCompositeOperation = 'source-in'; s.fillStyle = opts.ghost.light; s.fillRect(0, 0, FW, FH);
+    ctx.save(); ctx.beginPath(); ctx.rect(f * FW, 0, FW, FH); ctx.clip(); // обводка не должна залезать в соседний кадр
+    ctx.globalAlpha = 0.28; for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]]) ctx.drawImage(sil, f * FW + dx, dy); // внешнее свечение
+    ctx.globalAlpha = 0.8; for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) ctx.drawImage(sil, f * FW + dx, dy); // аура-обводка
+    ctx.globalAlpha = 0.92; ctx.drawImage(tmp, f * FW, 0); ctx.restore();
+  }
   return cv;
 }
 
-export function drawPortrait(C, canvas) {
+export function drawPortrait(C, canvas, opts = {}) {
   const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (opts.ghost) { const strip = drawStrip(C, opts); ctx.drawImage(strip, 4 * FW, 0, FW, FH, 0, 0, canvas.width, canvas.height); return; }
   const tmp = document.createElement('canvas'); tmp.width = FW; tmp.height = FH;
   const t = tmp.getContext('2d'); t.imageSmoothingEnabled = false; drawFrame(t, 0, 4, C);
   ctx.drawImage(tmp, 0, 0, FW, FH, 0, 0, canvas.width, canvas.height);
 }
 
-// --- зелёный призрак: в него превращается убитый скелет. Два варианта подола чередуются по кадрам.
-export const GHOST = { body: '#4df21e', light: '#9dff7a', dark: '#2fb312', eye: '#0b0b0b' };
-export function drawGhostFrame(ctx, ox, f) {
+// --- призраки-простыни: убитый прохожий голубой, упокоенный игрок золотой; охотник — зелёный скелет с хвостом и аурой.
+// Два варианта подола чередуются по кадрам.
+export const GHOSTS = {
+  npc: { body: '#5ad8ff', light: '#c2efff', dark: '#2a9fd0', eye: '#0b0b0b' },
+  player: { body: '#ffd23a', light: '#fff0a6', dark: '#c99a00', eye: '#0b0b0b' },
+  hunter: { body: '#4df21e', light: '#9dff7a', dark: '#2fb312', eye: '#0b0b0b' },
+};
+export const GHOST = GHOSTS.npc;
+export function drawGhostFrame(ctx, ox, f, GHOST = GHOSTS.npc) {
   const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(ox + x, y, w, h); };
   R(8, 6, 8, 1, GHOST.body); R(6, 7, 12, 1, GHOST.body); R(5, 8, 14, 1, GHOST.body); R(4, 9, 16, 20, GHOST.body);
   R(4, 9, 1, 20, GHOST.dark); R(19, 9, 1, 20, GHOST.dark); R(6, 10, 1, 9, GHOST.light); R(7, 9, 2, 1, GHOST.light);
@@ -264,15 +299,15 @@ export function drawGhostFrame(ctx, ox, f) {
   else { R(5, 29, 3, 3, GHOST.body); R(10, 29, 3, 2, GHOST.body); R(15, 29, 4, 3, GHOST.body); R(16, 31, 1, 1, GHOST.dark); }
   R(8, 13, 2, 3, GHOST.eye); R(14, 13, 2, 3, GHOST.eye); R(11, 19, 2, 3, GHOST.eye); R(8, 13, 1, 1, '#ffffff'); R(14, 13, 1, 1, '#ffffff');
 }
-export function drawGhostStrip() {
+export function drawGhostStrip(G = GHOSTS.npc) {
   const cv = document.createElement('canvas'); cv.width = FW * NF; cv.height = FH;
   const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
-  for (let f = 0; f < NF; f++) drawGhostFrame(ctx, f * FW, f);
+  for (let f = 0; f < NF; f++) drawGhostFrame(ctx, f * FW, f, G);
   return cv;
 }
-export function drawGhostPortrait(canvas) {
+export function drawGhostPortrait(canvas, G = GHOSTS.npc) {
   const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const tmp = document.createElement('canvas'); tmp.width = FW; tmp.height = FH; const t = tmp.getContext('2d'); drawGhostFrame(t, 0, 0);
+  const tmp = document.createElement('canvas'); tmp.width = FW; tmp.height = FH; const t = tmp.getContext('2d'); drawGhostFrame(t, 0, 0, G);
   ctx.drawImage(tmp, 0, 0, FW, FH, 0, 0, canvas.width, canvas.height);
 }
 

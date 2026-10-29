@@ -10,7 +10,8 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, migrate, logPush } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush } from './rules.js';
+import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
@@ -105,7 +106,7 @@ sim.setPopulation(isMobile ? 120 : 260);
 let mine = local.load();
 const saveMine = () => local.save(mine);
 const remote = makeRemote(); let remoteTimer = 0;
-const own = () => mine.filter(d => !d.guest).map(def => ({ def, agent: sim.agents.find(a => a.def === def) })).filter(o => o.agent);
+const own = () => mine.filter(d => !d.guest && !d.dead).map(def => ({ def, agent: sim.agents.find(a => a.def === def) })).filter(o => o.agent);
 const b64 = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 const shareLink = def => { const st = statsOf(def.game); return location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed, o: def.costume || undefined, b: def.about ? def.about.slice(0, 240) : undefined, st: [st.kills, st.friends, st.tarot, st.visits], sc: st.score })); };
@@ -117,13 +118,14 @@ let rotateTo = null, follow = null, cardAgent = null;
 const game = new Game(sim, scene, {
   tarot, shops, save: saveMine, own,
   showCard: (a, refresh) => { showCard(a, refresh); if (refresh && !$('profile').hidden && profileAgent === a) renderProfile(a); },
-  onChange: () => { if (remote && game.player) { clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(game.player.def, game.player.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
+  onChange: () => { if (remote && game.player) { const p = game.player; clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(p.def, p.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
+  onPerish: p => { if (remote) { clearTimeout(remoteTimer); remote.upsert(p.def, p.def.game); } renderMine(); if (cardAgent === p) showCard(p); if (!$('tabBoard').hidden) renderBoard(false); },
 });
 const hunters = new Hunters({ sim, game, cemeteries: cems, remote }); game.hunters = hunters;
-for (const def of mine) sim.spawnCustom(def, def.game?.x, def.game?.z);
+for (const def of mine) { const a = sim.spawnCustom(def, def.game?.x, def.game?.z); if (def.dead) sim.ghostify(a, 'player'); } // упокоенные стоят в городе золотыми призраками
 if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.name)) { const a = sim.spawnCustom(fromLink); setTimeout(() => { showCard(a); flyTo(a.x, a.z); }, 300); }
 {
-  const playable = mine.find(d => d.player && !d.guest) || mine.find(d => !d.guest);
+  const playable = mine.find(d => d.player && !d.guest && !d.dead) || mine.find(d => !d.guest && !d.dead);
   if (playable) { const a = sim.agents.find(x => x.def === playable); if (a) { game.setPlayer(a); flyTo(a.x, a.z); } }
 }
 game.renderHUD();
@@ -163,12 +165,12 @@ $('drawerClose').onclick = closeDrawer;
 
 // --- свой скелет: взять управление, переключить, создать
 function takeControl(a) {
-  if (!a || !a.custom || a.def.guest) return;
+  if (!a || !a.custom || a.def.guest || a.def.dead) return;
   if (game.player !== a) game.setPlayer(a);
   game.select(true); showCard(a); flyTo(a.x, a.z); follow = a; $('bFollow').classList.add('on'); renderMine();
 }
 $('hud').onclick = e => {
-  if (e.target.closest('.hudNew') || e.target.closest('.avAdd')) { openMine(); return; }
+  if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
   const av = e.target.closest('canvas.av'); if (av) { const o = own().find(x => String(x.def.seed) === av.dataset.seed); if (o) takeControl(o.agent); return; }
   if (game.player) takeControl(game.player);
 };
@@ -187,28 +189,29 @@ $('bProfile').onclick = () => openProfile(cardAgent);
 $('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; previewMine(); };
 function openMine() { const full = own().length >= MAX_OWN; $('mnLimit').hidden = !full; $('mSubmit').disabled = full; $('mine').hidden = false; renderMine(); previewMine(); if (!isMobile && !full) setTimeout(() => $('mName').focus(), 50); }
 function closeMine() { $('mine').hidden = true; }
-function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
+function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest && !x.dead); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
 
 function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(controls.target); controls.target.set(x, 0, z); camera.position.copy(controls.target).add(off); }
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 // статистика гостя: по ссылке приходит массив [💀, 💚, 🃏, 🎃], из базы — объект { kills, friends } и счёт
 const guestStats = d => { const s = d.stats; if (!s) return ''; const v = Array.isArray(s) ? { kills: s[0], friends: s[1], tarot: s[2], visits: s[3] } : s; return ` · 💀 ${v.kills ?? 0} · 💚 ${v.friends ?? 0}` + (v.tarot != null ? ` · 🃏 ${v.tarot}` : '') + (v.visits != null ? ` · 🎃 ${v.visits}` : '') + (d.score != null ? ` · ★ ${d.score}` : ''); };
+const ripText = d => `☠ упокоен навсегда${d.diedStreet ? ' у ' + d.diedStreet : ''}${d.diedAt ? ', ' + fmtAt(d.diedAt) : ''}`;
 function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
   cardAgent = a; $('card').hidden = false;
   game.portrait(a, $('cardPic'));
   $('cName').textContent = a.bio.name; $('cName').className = 'name' + (a === game.player ? ' player' : a.custom ? ' mine' : a.ghost ? ' ghost' : '');
   const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;
-  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.guest ? (a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
+  $('cMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'}` + (a.custom ? (a.def.dead ? ' · упокоен навсегда' : a.def.guest ? (a.def.ghoul ? ' · упырь' : a.def.remote ? ' · гость из сети' : ' · гость по ссылке') : a === game.player ? (game.selected ? ' · вы управляете' : ' · ваш скелет, гуляет сам') : ' · ваш скелет') : '') + (hh ? ` · охотник · ${hh.state === 'leave' ? 'уходит' : 'идёт к тебе'} · ${hh.intent === 'kill' ? '👀 убивать' : '🤝 дружить'}` : '');
   $('cJob').textContent = 'При жизни: ' + a.bio.job;
-  $('cStatus').textContent = 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
+  $('cStatus').textContent = a.custom && a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + (a.custom && a.def.guest ? guestStats(a.def) : '');
   $('cState').textContent = 'Состояние: ' + stateOf(a);
   $('cGame').innerHTML = game.cardHtml(a);
   $('bFollow').classList.toggle('on', follow === a);
   const ownAgent = a.custom && !a.def.guest;
   $('bSelect').hidden = !(ownAgent && a === game.player); $('bSelect').textContent = game.selected ? 'отпустить' : 'управлять'; $('bSelect').classList.toggle('on', game.selected && a === game.player);
-  $('bPlay').hidden = !(ownAgent && a !== game.player);
+  $('bPlay').hidden = !(ownAgent && a !== game.player && !a.def.dead);
   $('bProfile').hidden = !a.custom;
 }
 // --- профиль своего скелета: статистика, описание, колода, шаринг, ссылка, удаление
@@ -216,18 +219,18 @@ let profileAgent = null;
 function renderProfile(a) {
   $('pfName').textContent = a.bio.name; game.portrait(a, $('pfPic'));
   $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
-  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').textContent = 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a);
+  $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').textContent = a.def.dead ? ripText(a.def) : 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a);
   $('pfAbout').textContent = a.def.about ? 'О себе: ' + a.def.about : '';
   $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def).replace(/^ · /, '')}</div>` : '') : game.profileHtml(a);
   const ownAgent = !a.def.guest;
-  $('pfSelect').hidden = !ownAgent || (a === game.player && game.selected); $('pfPlay').hidden = true;
+  $('pfSelect').hidden = !ownAgent || !!a.def.dead || (a === game.player && game.selected); $('pfPlay').hidden = true;
   $('pfDeck').hidden = !(ownAgent && a === game.player); $('pfShare').hidden = !(ownAgent && a === game.player);
   $('pfDelete').hidden = !ownAgent;
   renderLog();
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
 // --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
-const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠' };
+const LOG_ICON = { kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
 function logText(e, fem) {
   const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
@@ -240,13 +243,15 @@ function logText(e, fem) {
     case 'bit': return `${nm} укусил${his}, ${vs}`;
     case 'win': return `побил${v('', 'а')} ${nm}, ${e.boss ? 'босс-' : ''}${e.intent === 'kill' ? 'череп' : 'сердечко'}, ${vs}`;
     case 'lost': return `${nm} потерял${his} след`;
-    case 'raid_bit': return `твой скелет укусил ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
+    case 'raid_bit': return e.outcome === 'rip' ? `твой скелет упокоил ${nm} навсегда${e.place ? ' · ' + esc(e.place) : ''}${rr}` : `твой скелет укусил ${nm}${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
     case 'raid_beaten': return `${nm} побил${his} твоего скелета${e.place ? ' · ' + esc(e.place) : ''}${rr}`;
     case 'raid_lost': return `твой скелет потерял ${nm}${e.place ? ' · ' + esc(e.place) : ''}`;
     case 'tarot': return `аркана ${nm}`;
     case 'visit': return `заведение ${nm}`;
     case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
-    case 'death': return `рассыпал${v('ся', 'ась')}`;
+    case 'death': return `рассыпал${v('ся', 'ась')}${e.coinsLost ? `, −${e.coinsLost} 🪙` : ''}`;
+    case 'rip': return `упокоен${v('', 'а')} навсегда`;
+    case 'rps': { const bonus = e.bonus === 'shield' ? '+щит' : e.bonus === 'refund' ? 'ставка обратно' : '+' + esc(e.bonus || ''); const reset = e.reset >= 100 ? 'чист' : `−${(e.reset || 0) / 20}`; return `сыграл${v('', 'а')} с ${esc(e.host || '?')} в «${esc(e.place || '?')}»: ${THROW_ICON[e.mine] || '?'} против ${THROW_ICON[e.theirs] || '?'}, ${e.won ? 'выиграл' : 'проиграл'}${v('', 'а')} · ${bonus} · розыск ${reset}`; }
     default: return esc(e.kind);
   }
 }
@@ -280,11 +285,13 @@ $('profile').addEventListener('click', e => { const el = e.target.closest('[data
 let popupVenue = null, popupTarot = null, popupShop = null, popupBld = null; const maxVisits = () => Math.max(1, ...venues.map(v => v.visits));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtDate = d => ({ '2026-10-29': '29 октября', '2026-10-30': '30 октября', '2026-10-31': '31 октября', '2026-11-01': '1 ноября', '2026-11-02': '2 ноября' }[d] || d);
-function resetPopup() { popupVenue = popupTarot = popupShop = popupBld = null; for (const id of ['pType', 'pAddr', 'pHours', 'pRate', 'pInside']) $(id).textContent = ''; $('pEvents').innerHTML = ''; $('pWeb').innerHTML = ''; $('popup').hidden = false; }
+function resetPopup() { popupVenue = popupTarot = popupShop = popupBld = null; for (const id of ['pType', 'pAddr', 'pHours', 'pRate', 'pInside', 'pHost']) $(id).textContent = ''; $('pEvents').innerHTML = ''; $('pWeb').innerHTML = ''; $('popup').hidden = false; }
 function closePopup() { $('popup').hidden = true; popupVenue = popupTarot = popupShop = popupBld = null; }
 const nearCount = (x, z, r = 60) => sim.agents.filter(a => !a.ghost && (a.x - x) ** 2 + (a.z - z) ** 2 < r * r).length;
+// хозяин заведения: имя всегда, любимый жест после первой партии (его помнит прогресс)
+function hostLine(kind, place) { const h = hostOf(kind, place); const fav = game.g && game.g.hosts && game.g.hosts[h.key]; return `хозяин: ${h.name}` + (fav ? ` · любит ${THROW_NAME[fav]}` : ''); }
 function showShopPopup(sh) {
-  resetPopup(); popupShop = sh;
+  resetPopup(); popupShop = sh; $('pHost').textContent = hostLine('shop', sh);
   $('pName').textContent = sh.name; $('pType').textContent = 'магазин одежды' + (sh.node < 0 ? ' · вне пешеходной сети' : ''); $('pAddr').textContent = sh.addr ? 'адрес: ' + sh.addr : '';
   $('pInside').textContent = 'случайная вещь за монетки: шляпы, одежда, предметы, узоры, аксессуары';
   $('pGo').hidden = !(game.player && sh.node >= 0); $('pGo').textContent = '🛍 зайти своим скелетом';
@@ -300,7 +307,7 @@ function showTarotMarker(it) {
   $('pGo').hidden = !(game.player && it.node >= 0 && !done); $('pGo').textContent = '🃏 дойти своим скелетом';
 }
 function showVenue(v) {
-  resetPopup(); popupVenue = v; $('pGo').textContent = '🎃 зайти своим скелетом';
+  resetPopup(); popupVenue = v; $('pGo').textContent = '🎃 зайти своим скелетом'; $('pHost').textContent = hostLine('bar', v);
   $('pName').textContent = v.name;
   $('pType').textContent = (VENUE_TYPES[v.type] || v.type) + (v.node < 0 ? ' · вне пешеходной сети' : '');
   $('pAddr').textContent = v.addr ? 'адрес: ' + v.addr : '';
@@ -389,7 +396,8 @@ $('mineForm').onsubmit = e => {
 };
 function renderMine() {
   const list = mine.filter(d => !d.guest);
-  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${list.length}/${MAX_OWN}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}" data-s="${d.seed}"><span class="n">${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? (st => ` · ★ ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}`)(statsOf(d.game)) : ''}</span></div>`).join('') : '';
+  const alive = list.filter(d => !d.dead).length;
+  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${alive}/${MAX_OWN}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}${d.dead ? ' dead' : ''}" data-s="${d.seed}"><span class="n">${d.dead ? '☠ ' : ''}${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.dead ? `<span class="k">упокоен ${esc(fmtAt(d.diedAt))}</span>` : d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? (st => ` · ★ ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}`)(statsOf(d.game)) : ''}</span></div>`).join('') : '';
   if (!$('tabBoard').hidden) renderBoard(false);
 }
 $('mineList').onclick = e => {
@@ -401,10 +409,10 @@ $('mineList').onclick = e => {
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
 const SCORE_HINT = 'счёт: победа +2, поражение −1, аркана +5, новое заведение +1';
-function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="st" title="сердца и хвост">❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="st" title="сердца и хвост">${r.dead ? '☠ упокоен' : `❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}`}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
-  const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses }; }).sort((a, b) => b.score - a.score);
+  const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses, dead: !!d.dead }; }).sort((a, b) => b.score - a.score);
   const list = (rows, empty) => rows.length ? rows.map((r, i) => boardRow(r, i, r.id === myId)).join('') : `<div class="hint">${empty}</div>`;
   if (!remote) {
     body.innerHTML = '<div class="day">скелеты в этом браузере</div>' + list(localRows, 'пока никого: создай своего скелета') + `<div class="hint">${SCORE_HINT}. Общий рейтинг всех игроков появится, когда в config.js будет вписан Supabase (README, раздел «База»)</div>`;
@@ -425,14 +433,14 @@ if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(r
     if (row.at > newest) newest = row.at;
     if (row.hunter_device !== deviceId()) continue;
     const def = mine.find(d => !d.guest && deviceId() + ':' + d.seed === row.hunter); if (!def) continue;
-    const kind = row.outcome === 'bit' || row.outcome === 'killed' ? 'raid_bit' : row.outcome === 'skull' || row.outcome === 'heart' ? 'raid_beaten' : 'raid_lost';
+    const kind = row.outcome === 'bit' || row.outcome === 'killed' || row.outcome === 'rip' ? 'raid_bit' : row.outcome === 'skull' || row.outcome === 'heart' ? 'raid_beaten' : 'raid_lost';
     def.game = migrate(def.game); logPush(def.game, { kind, name: row.victim_name, place: row.place, rolls: row.rolls, level: row.level, outcome: row.outcome, at: row.at }); n++;
   }
   local.set('raids.seen', newest); if (!n) return; saveMine();
   if (game.player) sim.say(game.player, `📜 пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'music', 4);
   if (game.o.onLog) game.o.onLog();
 });
-if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0 }); } });
+if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead }); if (r.dead) sim.ghostify(a, 'player'); } });
 
 // --- поделиться карточкой персонажа
 let shareFormat = 'post';
@@ -443,8 +451,8 @@ async function renderShare() {
   renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
   $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
 }
-function openShare() { if (!game.player) return; $('share').hidden = false; $('shrNative').hidden = !navigator.share; renderShare(); }
-$('shrClose').onclick = () => { $('share').hidden = true; };
+function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; renderShare(); }
+$('shrClose').onclick = () => { if (game.modal === 'share') game.setModal(null); };
 for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
 const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: ★ ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
 $('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
