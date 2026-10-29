@@ -8,6 +8,7 @@ import { cardLabel, cardName, beaten, isRed, handRank } from './poker.js';
 import { makeBio, makeRng, pickArchetype } from './bio.js';
 import { deviceId } from './store.js';
 import { Sfx } from './sfx.js';
+import { icon } from './ui.js';
 
 const mmss = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -168,12 +169,28 @@ export class Cards {
     this.sim.say(me, `🃏 рука собрана: ${hr.name} · +${xp} XP · 🎟 +1${slotNew ? ' · 🦴 новый слот' : ''}`, 'music', 5);
     game.save(); game.renderHUD();
   }
-  // --- HUD: полоса из пяти карт (лицом, серая с секундами отката, рубашкой), ранг руки и время до конца часа; своя карта в колоде
+  // --- HUD: рука объектом — пять карт canvas (лицом, серая с mm:ss отката поверх, рубашкой), ранг руки, под ними трекер цели
   hudHtml() {
     const hand = this.hand; if (!hand) return '';
     const now = Date.now(); const hr = handRank(hand.cards);
-    const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}">${c.state === 'down' ? '🂠' : cardLabel(c.rank, c.suit)}${c.state === 'cool' ? `<small class="cd">${Math.max(0, Math.ceil((c.coolUntil - now) / 1000))}</small>` : ''}</span>`).join('');
-    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><span class="handT" title="до конца часа">⏳ ${mmss(hourLeft(now))}</span></div>`;
+    const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}"><canvas class="hcc" width="32" height="44" data-slot="${c.slot}"></canvas>${c.state === 'cool' ? `<small class="cd">${mmss(Math.max(0, Math.ceil((c.coolUntil - now) / 1000)))}</small>` : ''}</span>`).join('');
+    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><div class="handTr">${this.trackerText(now)}</div></div>`;
+  }
+  // карты руки на HUD дорисовываются после вставки разметки теми же рисовалками, что над головами боссов
+  drawHandCards() { const hand = this.hand; if (!hand) return; for (const cv of document.querySelectorAll('#hud canvas.hcc')) { const c = hand.cards.find(c => String(c.slot) === cv.dataset.slot); if (c) this.drawCard(cv, c); } }
+  // ближайший к игроку босс с картой лицом: для трекера и стрелки у края экрана
+  nearestUp() {
+    const p = this.player; if (!p) return null; let best = null, bd = Infinity;
+    for (const b of this.bosses) { if (b.card.state !== 'up' || !this.sim.agents.includes(b.a)) continue; const d = Math.hypot(b.a.x - p.x, b.a.z - p.z); if (d < bd) { bd = d; best = b; } }
+    return best ? { a: best.a, card: best.card, d: bd } : null;
+  }
+  // «Рука 2/5 · ⏳ 37:12 · до босса 340 м»; когда все пять биты — «Рука собрана · пара ×2 · ⏳ 37:12»
+  trackerText(now = Date.now()) {
+    const hand = this.hand; if (!hand) return '';
+    const down = hand.cards.filter(c => c.state === 'down').length; const t = `${icon('clock', 1)} ${mmss(hourLeft(now))}`;
+    if (down === hand.cards.length) { const hr = handRank(hand.cards); return `Рука собрана · ${hr.name} ×${hr.mult} · ${t}`; }
+    const nb = this.nearestUp();
+    return `Рука ${down}/${hand.cards.length} · ${t}${nb ? ` · до босса ${Math.round(nb.d)} м` : ''}`;
   }
   myCardHtml() { const mc = this.myCard(); return mc ? `<span class="myCard" title="твоя карта в колоде часа: место ${mc.slot} в топ-52">карта ${cardLabel(mc.rank, mc.suit)}</span>` : ''; }
   // камера к боссу карты и его карточка (клик по полосе на HUD)
@@ -196,7 +213,7 @@ export class Cards {
     let changed = false;
     for (const c of hand.cards) if (c.state === 'cool' && now >= (c.coolUntil || 0)) { c.state = 'up'; c.coolUntil = 0; this.redraw(c); changed = true; }
     if (changed) { this.game.save(); this.game.renderHUD(); }
-    const t = document.querySelector('#hud .handT'); if (t) t.textContent = '⏳ ' + mmss(hourLeft(now));
-    for (const el of document.querySelectorAll('#hud .hc.cool .cd')) { const c = hand.cards.find(c => String(c.slot) === el.parentElement.dataset.slot); if (c) el.textContent = String(Math.max(0, Math.ceil((c.coolUntil - now) / 1000))); }
+    const tr = document.querySelector('#hud .handTr'); if (tr) tr.innerHTML = this.trackerText(now); // трекер цели в том же тике
+    for (const el of document.querySelectorAll('#hud .hc.cool .cd')) { const c = hand.cards.find(c => String(c.slot) === el.parentElement.dataset.slot); if (c) el.textContent = mmss(Math.max(0, Math.ceil((c.coolUntil - now) / 1000))); }
   }
 }

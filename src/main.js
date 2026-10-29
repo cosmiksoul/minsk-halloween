@@ -13,7 +13,7 @@ import { Cards } from './cards.js';
 import { Quests } from './quests.js';
 import { Sfx } from './sfx.js';
 import { icon, installFrames, registerIcons } from './ui.js';
-import { beaten } from './poker.js';
+import { beaten, cardLabel } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
 import { hostOf } from './hosts.js';
@@ -363,6 +363,7 @@ function updatePopup() {
 }
 $('pClose').onclick = closePopup;
 $('hmark').onclick = () => { const h = hunters.nearest(); if (h) { flyTo(h.a.x, h.a.z); showCard(h.a); } };
+$('bmark').innerHTML = icon('boss', 2); $('bmark').onclick = () => { const slot = +$('bmark').dataset.slot; if (slot) cards.flyTo(slot); }; // стрелка на босса руки
 $('pGo').onclick = () => {
   if (!game.player) return; takeControl(game.player);
   if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.nx, popupTarot.nz); else if (popupShop) game.clickShop(popupShop); else if (popupBld) { const [gx, gz] = popupBld.go || [popupBld.x, popupBld.z]; game.clickGround(gx, gz); }
@@ -566,6 +567,17 @@ function drawBubbles() {
       const d = Math.hypot(nh.a.x - game.player.x, nh.a.z - game.player.z); hm.classList.toggle('hot', d < PURSUIT.nearWarn); hm.title = `${nh.a.bio.name} · ${Math.round(d)} м`; hm.hidden = false;
     }
   } else hm.hidden = true;
+  // стрелка на ближайшего босса руки (карта лицом) у края экрана, пока он вне кадра: только под управлением и когда рука есть
+  const bm = $('bmark'); const nb = game.player && game.selected && cards.hand ? cards.nearestUp() : null;
+  if (nb) {
+    v3.set(nb.a.x, sim.H, nb.a.z).project(camera);
+    if (v3.x > -1 && v3.x < 1 && v3.y > -1 && v3.y < 1) bm.hidden = true;
+    else {
+      const k = 1 / Math.max(Math.abs(v3.x), Math.abs(v3.y), 1e-6); const m = 26, mTop = isMobile ? 26 : 64; // сверху ниже шапки, чтобы стрелка не пряталась под кнопками
+      bm.style.left = Math.max(m, Math.min(w - m, (v3.x * k + 1) / 2 * w)) + 'px'; bm.style.top = Math.max(mTop, Math.min(h - (isMobile ? 80 : m), (1 - v3.y * k) / 2 * h)) + 'px';
+      bm.title = `${cardLabel(nb.card.rank, nb.card.suit)} · ${nb.card.name} · ${Math.round(nb.d)} м`; bm.dataset.slot = nb.card.slot; bm.hidden = false;
+    }
+  } else bm.hidden = true;
   const pt = popupVenue || popupTarot || popupShop || popupBld;
   if (pt) {
     const y = popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : popupBld ? (popupBld.top || 10) + 4 : popupTarot.baseY + tarot.size;

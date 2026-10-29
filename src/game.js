@@ -650,6 +650,7 @@ export class Game {
       ${this.cards ? this.cards.hudHtml() : ''}${this.quests ? this.quests.hudHtml() : ''}
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
+    this.cards?.drawHandCards();
   }
   // блок в карточке скелета
   cardHtml(a) {

@@ -330,3 +330,15 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 .tbtn, #menuBtn, #sndBtn, .tabs2 button, .socials button, .item .k { border-radius:0; }
 #sndBtn .ic, #menuBtn .ic { margin:0; }
 .hudRow .ic { vertical-align:-3px; }
+
+/* --- рука объектом: карты canvas на HUD, трекер цели, стрелка на босса у края экрана */
+#hud .hand { flex-wrap:wrap; gap:4px; align-items:flex-start; }
+#hud .hc { min-width:0; height:auto; padding:0; border:0; background:none; border-radius:0; display:inline-block; position:relative; }
+#hud .hc canvas.hcc { display:block; width:32px; height:44px; image-rendering:pixelated; }
+#hud .hc.up:hover canvas { transform:translateY(-2px); }
+#hud .hc.down canvas { opacity:.85; }
+#hud .hc.cool .cd, #hud .hc .cd { position:absolute; left:0; right:0; bottom:3px; text-align:center; font-size:8px; line-height:1.3; background:rgba(27,19,38,.85); color:#fff; border-radius:0; padding:0; font-variant-numeric:tabular-nums; }
+#hud .handR { margin-left:0; align-self:center; }
+#hud .handTr { width:100%; font-size:10px; color:var(--ink); display:flex; gap:3px; align-items:center; flex-wrap:wrap; }
+#bmark { position:fixed; left:0; top:0; z-index:5; transform:translate(-50%,-50%); cursor:pointer; filter:drop-shadow(0 0 5px #ffd23a); transition:left .15s linear, top .15s linear; user-select:none; line-height:0; }
+#bmark[hidden] { display:none; }
