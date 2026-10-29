@@ -14,7 +14,7 @@ const mmss = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 export class Cards {
-  constructor({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }) {
+  constructor({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }) { this.imgCache = new Map();
     this.sim = sim; this.game = game; this.scene = scene; this.remote = remote || null; this.hunters = hunters || null;
     this.addSlot = addSlot || (() => false); this.flyToFn = flyTo || null; this.showCard = showCard || null;
     this.deck = []; this.deckHour = null; this.bosses = []; this.acc = 0; this.token = 0; this.dealing = false;
@@ -92,13 +92,13 @@ export class Cards {
     for (const c of hand.cards) {
       const def = { name: c.name, gender: c.gender, age: c.age, job: c.job, arch: c.arch, seed: c.seed, costume: c.costume || undefined, guest: true, boss: true, slot: c.slot, ghoul: !!c.ghoul, owner: c.owner || null };
       const a = this.sim.spawnCustom(def, c.x, c.z); this.sim.drive(a, true); this.sim.teleport(a, c.node); a.to = a.from; a.t = 0; a.state = 'idle'; a.path = null; this.sim.place(a);
-      const sprite = this.makeSprite(c); this.scene.add(sprite); const b = { card: c, a, sprite }; this.bosses.push(b); this.placeSprite(b);
+      const b = { card: c, a }; this.bosses.push(b); // карта рисуется в подписи над головой (main.drawBubbles), поверх домов
     }
   }
   // уход боссов: со словами «карта бита» через две секунды (смена часа) или сразу (смена скелета)
   clearBosses(say) {
     const list = this.bosses; this.bosses = [];
-    const drop = b => { if (this.sim.agents.includes(b.a)) this.sim.remove(b.a); this.scene.remove(b.sprite); b.sprite.material.map.dispose(); b.sprite.material.dispose(); };
+    const drop = b => { if (this.sim.agents.includes(b.a)) this.sim.remove(b.a); };
     for (const b of list) { if (say) { this.sim.say(b.a, 'карта бита', '', 2); setTimeout(() => drop(b), 2000); } else drop(b); }
   }
   onPlayerChange() { this.token++; this.dealing = false; this.clearBosses(false); this.start(); }
@@ -111,11 +111,11 @@ export class Cards {
     return { slot: i + 1, ...cardOfSlot(i + 1) };
   }
   labelForRank(i) { if (!(i >= 1 && i <= CARD.slots)) return null; const c = cardOfSlot(i); return cardLabel(c.rank, c.suit); }
-  // --- спрайт карты над головой: номинал и масть, красные масти красным, рубашка у битой, серая у отдыхающей
-  makeSprite(c) {
-    const cv = document.createElement('canvas'); cv.width = 32; cv.height = 44; this.drawCard(cv, c);
-    const tex = new THREE.CanvasTexture(cv); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.4, fog: false })); sp.center.set(0.5, 0); sp.renderOrder = 4; return sp;
+  // --- картинка карты для подписи над боссом: data URL, кэш по номиналу, масти и состоянию (рубашка у битой, серая у отдыхающей)
+  cardImage(c) {
+    const k = `${c.rank}${c.suit}${c.state}`; let u = this.imgCache.get(k);
+    if (!u) { const cv = document.createElement('canvas'); cv.width = 32; cv.height = 44; this.drawCard(cv, c); u = cv.toDataURL('image/png'); this.imgCache.set(k, u); }
+    return u;
   }
   drawCard(cv, c) {
     const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
@@ -126,8 +126,7 @@ export class Cards {
     g.font = 'bold 12px monospace'; g.fillText(c.rank === 10 ? '10' : cardLabel(c.rank, '').slice(0, 2), 3, 3);
     g.textAlign = 'center'; g.font = '18px serif'; g.fillText(c.suit, 16, 20);
   }
-  redraw(card) { const b = this.bosses.find(b => b.card === card); if (!b) return; this.drawCard(b.sprite.material.map.image, card); b.sprite.material.map.needsUpdate = true; }
-  placeSprite(b) { const H = this.sim.H; b.sprite.position.set(b.a.x, H * 1.05, b.a.z); b.sprite.scale.set(H * 0.42, H * 0.58, 1); }
+  redraw() { /* подпись над боссом берёт картинку по состоянию карты сама */ }
   // --- бой: только по явному «сразиться»; скелет идёт к боссу как к прохожему, дуэль стартует по приходу (Game.update)
   fight(card) {
     const game = this.game, p = this.player; if (!p || !card) return false;
@@ -173,7 +172,7 @@ export class Cards {
     const hand = this.hand; if (!hand) return '';
     const now = Date.now(); const hr = handRank(hand.cards);
     const cards = hand.cards.map(c => `<span class="hc ${c.state}${isRed(c.suit) ? ' red' : ''}" data-slot="${c.slot}" title="${esc(c.name)} · ${cardName(c.rank, c.suit)}${c.state === 'cool' ? ' · отдыхает' : c.state === 'down' ? ' · бита' : ''}"><canvas class="hcc" width="32" height="44" data-slot="${c.slot}"></canvas>${c.state === 'cool' ? `<small class="cd">${mmss(Math.max(0, Math.ceil((c.coolUntil - now) / 1000)))}</small>` : ''}</span>`).join('');
-    return `<div class="hand" title="карты часа: клик по карте летит к боссу">${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><div class="handTr">${this.trackerText(now)}</div></div>`;
+    return `<div class="hand" title="карты часа: клик по карте летит к боссу"><div class="handT">${icon('hand', 1)} Мёртвая рука</div>${cards}<span class="handR" title="ранг руки по покеру">${hr.name} ×${hr.mult}</span><div class="handTr">${this.trackerText(now)}</div></div>`;
   }
   // карты руки на HUD дорисовываются после вставки разметки теми же рисовалками, что над головами боссов
   drawHandCards() { const hand = this.hand; if (!hand) return; for (const cv of document.querySelectorAll('#hud canvas.hcc')) { const c = hand.cards.find(c => String(c.slot) === cv.dataset.slot); if (c) this.drawCard(cv, c); } }
@@ -194,9 +193,8 @@ export class Cards {
   myCardHtml() { const mc = this.myCard(); return mc ? `<span class="myCard" title="твоя карта в колоде часа: место ${mc.slot} в топ-52">карта ${cardLabel(mc.rank, mc.suit)}</span>` : ''; }
   // камера к боссу карты и его карточка (клик по полосе на HUD)
   flyTo(slot) { const b = this.bosses.find(b => b.card.slot === slot); if (!b) return; if (this.flyToFn) this.flyToFn(b.a.x, b.a.z); if (this.showCard) this.showCard(b.a); }
-  // раз в секунду: смена часа (не посреди боя), откаты, таймер на HUD; каждый кадр — спрайты за боссами и ростом
+  // раз в секунду: смена часа (не посреди боя), откаты, таймер на HUD
   update(dt) {
-    if (this.sim.H !== this.lastH) { this.lastH = this.sim.H; for (const b of this.bosses) this.placeSprite(b); } // боссы стоят: спрайты двигаем только при смене роста
     this.acc += dt; if (this.acc < 1) return; this.acc = 0;
     const g = this.game.g, p = this.player, hand = this.hand; if (!g || !p || this.dealing) return;
     const now = Date.now(), hour = minskHour(now);

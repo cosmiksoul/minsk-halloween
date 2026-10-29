@@ -143,8 +143,7 @@ if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.
 const quests = new Quests({ game, sim }); game.quests = quests; // онбординг: цепочка квестов на устройство
 game.renderHUD(); cards.start();
 // интро один раз на устройство без своих скелетов; после последнего слайда — форма, заполненная генератором
-const intro = initIntro({ drawCard: (cv, c) => cards.drawCard(cv, c), onCreate: () => { openMine(); $('bGen').onclick(); } });
-$('bHow').onclick = () => { closeDrawer(); intro.show(); };
+const intro = initIntro({ drawCard: (cv, c) => cards.drawCard(cv, c) }); // после интро — карта и кнопка «создать», форму не навязываем
 
 // --- меню настроек и действий
 const ui = { pop: $('pop'), spd: $('spd'), pix: $('pix') };
@@ -158,6 +157,7 @@ $('menuBtn').onclick = () => { const m = $('menu'); m.hidden = !m.hidden; $('men
 // звук: кнопка в шапке переключает все эффекты, флаг переживает перезагрузку
 const paintSnd = () => { $('sndBtn').innerHTML = icon(Sfx.muted ? 'mute' : 'sound', 1); $('sndBtn').classList.toggle('off', Sfx.muted); $('sndBtn').title = Sfx.muted ? 'звук выключен' : 'звук включён'; };
 $('sndBtn').onclick = () => { Sfx.mute(!Sfx.muted); paintSnd(); if (!Sfx.muted) Sfx.play('coin'); }; paintSnd();
+$('ambChk').checked = Sfx.ambientOn; $('ambChk').onchange = () => Sfx.ambient($('ambChk').checked); // фоновый эмбиент отдельно от эффектов
 $('bReset').onclick = () => location.reload();
 $('bRot').onclick = () => { rotateTo = (rotateTo ?? controls.getAzimuthalAngle()) + Math.PI / 2; };
 $('bNorth').onclick = () => { rotateTo = 0; };
@@ -167,7 +167,7 @@ $('bRand').onclick = () => { const a = sim.agents[Math.floor(Math.random() * sim
 $('bNew').onclick = () => { openMine(); $('menu').hidden = true; $('menuBtn').classList.remove('on'); };
 
 // --- выезжающая панель: места, афиша, лидеры, легенда
-const DRAWER_TITLES = { places: 'Места', events: 'Афиша', board: 'Лидеры', legend: 'Карта и правила' };
+const DRAWER_TITLES = { places: 'Места', events: 'Афиша', board: 'Лидеры', legend: 'Легенда' };
 let drawerTab = null;
 function openDrawer(name) {
   if (drawerTab === name) { closeDrawer(); return; }
@@ -180,8 +180,10 @@ function openDrawer(name) {
 function placeDrawer() { if (isMobile) return; $('drawer').style.top = Math.round($('hud').getBoundingClientRect().bottom + 8) + 'px'; }
 new ResizeObserver(() => { if (drawerTab) placeDrawer(); }).observe($('hud'));
 function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn')) b.classList.remove('on'); }
-const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map' };
-for (const b of document.querySelectorAll('.tbtn')) { b.innerHTML = icon(TAB_ICON[b.dataset.drawer] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => openDrawer(b.dataset.drawer); }
+const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map', deck: 'arcana', how: 'dice' };
+// кнопки шапки: ящики по data-drawer, остальные действия по data-act (колода арканов, «как играть»)
+const TOP_ACT = { deck: () => game.openDeck(), how: () => { closeDrawer(); intro.show(); } };
+for (const b of document.querySelectorAll('.tbtn')) { const k = b.dataset.drawer || b.dataset.act; b.innerHTML = icon(TAB_ICON[k] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => (b.dataset.drawer ? openDrawer(b.dataset.drawer) : TOP_ACT[b.dataset.act]?.()); }
 $('drawerClose').onclick = closeDrawer;
 
 // --- свой скелет: взять управление, переключить, создать
@@ -215,7 +217,7 @@ function updateMbar() {
   act.onclick = fn;
 }
 $('mbHand').innerHTML = icon('hand', 2) + '<small>рука</small>'; $('mbHand').onclick = () => { const hud = $('hud'); hud.classList.toggle('handOpen'); if (hud.classList.contains('handOpen')) hud.classList.add('min'); };
-$('mbMap').innerHTML = icon('map', 2) + '<small>карта</small>'; $('mbMap').onclick = () => openDrawer('legend');
+$('mbMap').innerHTML = icon('map', 2) + '<small>легенда</small>'; $('mbMap').onclick = () => openDrawer('legend');
 $('mnClose').onclick = () => closeMine();
 $('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
 addEventListener('keydown', e => {
@@ -574,11 +576,11 @@ addEventListener('pointerup', () => { downAt = null; });
 const bubLayer = $('bubbles'); const pool = []; const v3 = new THREE.Vector3();
 function drawBubbles() {
   let n = 0; const w = innerWidth, h = innerHeight;
-  const place = (a, text, cls, dy) => {
+  const place = (a, text, cls, dy, html = null) => {
     v3.set(a.x, sim.H + dy + (a.state === 'dance' ? sim.H * 0.07 : 0) + (a.ghost ? sim.H * 0.2 : 0), a.z).project(camera);
     if (v3.z > 1 || v3.x < -1.1 || v3.x > 1.1 || v3.y < -1.1 || v3.y > 1.1) return;
     let el = pool[n]; if (!el) { el = document.createElement('div'); bubLayer.appendChild(el); pool.push(el); }
-    el.className = cls; el.textContent = text;
+    el.className = cls; if (html) el.innerHTML = html; else el.textContent = text;
     el.style.transform = `translate(${((v3.x + 1) / 2 * w) | 0}px, ${((1 - v3.y) / 2 * h) | 0}px) translate(-50%,-100%)`;
     el.style.display = ''; n++;
   };
@@ -586,7 +588,10 @@ function drawBubbles() {
     if (n > 90) break;
     if (a.bubble && a.bubble.until < sim.time) a.bubble = null;
     if (a.bubble) place(a, a.bubble.text, 'bub ' + a.bubble.kind, 0.8);
-    else if (a.custom) { const boss = a !== game.player && cards.cardOf(a); place(a, a.bio.name.split(' ')[0], 'bub tag' + (a === game.player ? ' me' : boss ? ' boss' : ''), boss ? sim.H * 0.66 + 0.4 : 0.4); } // у босса подпись золотая и над картой в руке
+    else if (a.custom) { // у босса подпись золотая: сверху карта часа, под ней имя; у себя оранжевая
+      const boss = a !== game.player && cards.cardOf(a); const nm = a.bio.name.split(' ')[0];
+      place(a, nm, 'bub tag' + (a === game.player ? ' me' : boss ? ' boss' : ''), 0.4, boss ? `<i class="tagCard" style="background-image:url(${cards.cardImage(boss)})"></i><span>${nm.replace(/[<&]/g, ch => ch === '<' ? '&lt;' : '&amp;')}</span>` : null);
+    }
     else if (game.player && a.leader === game.player) place(a, '💚', 'bub tag fr', 0.4);
     else if (game.player && a.state === 'wait' && a.waitFor === game.player) place(a, '…', 'bub tag', 0.4);
   }
@@ -658,7 +663,7 @@ function frame() {
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
-  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); updateTopMe(); $('stPop').textContent = sim.agents.length; $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
+  acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); updateTopMe(); $('stPop').textContent = sim.agents.length; $('stCity').textContent = sim.potential().toLocaleString('ru-RU'); $('stMeet').textContent = sim.stats.meetings; $('stBeer').textContent = sim.stats.beers; $('stDance').textContent = sim.stats.dances; if (cardAgent && !$('card').hidden) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); }
   pixel.render(scene, camera, clock.elapsedTime);
   frameMs = frameMs * 0.95 + (performance.now() - t0) * 0.05; frames++;

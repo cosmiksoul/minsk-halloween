@@ -102,7 +102,8 @@ i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
 #tip b { color:var(--green); }
 .bub.tag.me { color:var(--accent); border-color:var(--accent); box-shadow:2px 2px 0 var(--accent); } .bub.tag.me::after { border-top-color:var(--accent); }
 .bub.tag.fr { font-size:9px; padding:2px 3px; }
-.bub.tag.boss { color:#ffd23a; border-color:#ffd23a; box-shadow:2px 2px 0 #ffd23a; } .bub.tag.boss::after { border-top-color:#ffd23a; } /* босс с картой часа: золото, охотники и гости — зелёные, свой — оранжевый */
+.bub.tag.boss { color:#ffd23a; border-color:#ffd23a; box-shadow:2px 2px 0 #ffd23a; } .bub.tag.boss::after { border-top-color:#ffd23a; }
+.bub.tag.boss { display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px 5px 3px; } .bub.tag.boss .tagCard { display:block; width:24px; height:33px; background-size:100% 100%; image-rendering:pixelated; filter:drop-shadow(1px 1px 0 #0b0b0b); } /* сверху карта часа, под ней имя; поверх домов, как все подписи */ /* босс с картой часа: золото, охотники и гости — зелёные, свой — оранжевый */
 body.playing #c { cursor:crosshair; }
 
 #ask, #host { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
@@ -380,8 +381,9 @@ button .ic { vertical-align:-3px; margin-right:3px; }
 #top { justify-content:flex-start; }
 #topMe { margin-left:auto; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; } #topMe[hidden] { display:none; } #topMe .sep { color:var(--muted); }
 #menu { left:12px; right:auto; }
-#tabLegend .tStats { display:block; margin-bottom:8px; }
-@media (max-width: 700px) { #topMe { display:flex; font-size:9px; padding:5px 6px; } #menu { left:8px; right:8px; width:auto; } #tabLegend .tStats { display:block; white-space:normal; } }
+#stats { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:4; white-space:nowrap; font-size:10px; max-width:calc(100vw - 24px); overflow:hidden; text-overflow:ellipsis; }
+#stats b { color:var(--accent); } #stats b#stCity { color:var(--green); }
+@media (max-width: 700px) { #topMe { display:flex; font-size:9px; padding:5px 6px; } #menu { left:8px; right:8px; width:auto; } #stats { bottom:70px; font-size:8px; padding:3px 6px; } }
 /* карты колоды у строк доски: canvas 24×33 */
 #tabBoard canvas.bcv { width:24px; height:33px; image-rendering:pixelated; vertical-align:middle; margin-right:4px; }
 #tabBoard .item { grid-template-columns:auto auto 1fr auto; }
@@ -412,3 +414,11 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
 #drawer .tabBody::-webkit-scrollbar, #menu::-webkit-scrollbar, .dBox::-webkit-scrollbar, .dGrid::-webkit-scrollbar, #pfGame::-webkit-scrollbar, #journal::-webkit-scrollbar, .mnBox #mineList::-webkit-scrollbar { width:8px; }
 #drawer .tabBody::-webkit-scrollbar-track, #menu::-webkit-scrollbar-track, .dBox::-webkit-scrollbar-track, .dGrid::-webkit-scrollbar-track, #pfGame::-webkit-scrollbar-track, #journal::-webkit-scrollbar-track, .mnBox #mineList::-webkit-scrollbar-track { background:#140c20; }
 #drawer .tabBody::-webkit-scrollbar-thumb, #menu::-webkit-scrollbar-thumb, .dBox::-webkit-scrollbar-thumb, .dGrid::-webkit-scrollbar-thumb, #pfGame::-webkit-scrollbar-thumb, #journal::-webkit-scrollbar-thumb, .mnBox #mineList::-webkit-scrollbar-thumb { background:var(--line); border:1px solid #0b0b0b; } #drawer .tabBody::-webkit-scrollbar-thumb:hover { background:#6d58a0; }
+
+/* --- полиш: подпись блока руки, автор в интро и настройках, галочка фонового звука, плитка арканов крупнее */
+#hud .handT { flex-basis:100%; font-family:"Press Start 2P", monospace; font-size:7px; color:#d8c2ff; margin-bottom:1px; }
+.inAuthor { font-size:8px; color:var(--muted); text-decoration:none; } .inAuthor:hover { color:#d8c2ff; text-decoration:underline; } .inAuthor[hidden] { display:none; }
+#menu a.author { color:#d8c2ff; }
+#menu label.chk { display:flex; align-items:center; gap:6px; font-size:10px; cursor:pointer; } #menu label.chk input { accent-color:var(--green); margin:0; }
+.dGrid { grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:10px 8px; }
+.slot canvas { width:64px; height:96px; transition:transform .12s steps(2); } .slot.on:hover canvas { transform:translateY(-3px) scale(1.04); }
