@@ -106,6 +106,8 @@ test('questBonus, nextQuest, questFor', () => {
   assert.equal(questBonus(2), 2); assert.equal(questBonus(0), 5); assert.equal(questBonus(28), 28);
   assert.equal(nextQuest([]).id, 'trick'); assert.equal(nextQuest(['trick']).id, 'treat'); assert.equal(nextQuest(QUESTS.map(q => q.id)), null);
   assert.equal(questFor(['trick'], 'friend').id, 'treat'); assert.equal(questFor(['trick'], 'kill'), null); assert.equal(questFor([], 'card'), null);
+  const four = ['trick', 'treat', 'candy', 'coin']; assert.equal(nextQuest(four).id, 'share'); assert.equal(questFor(four, 'share').kind, 'share'); assert.equal(questFor(four, 'win'), null);
+  assert.equal(QUESTS.length, 7); assert.equal(QUESTS.map(q => q.id).join(','), 'trick,treat,candy,coin,share,ghost,card');
 });
 test('slotsOf: не меньше одного и живых, не больше пяти', () => { assert.equal(slotsOf(0, 0), 1); assert.equal(slotsOf(undefined, 3), 3); assert.equal(slotsOf(2, 1), 2); assert.equal(slotsOf(9, 1), 5); });
 test('canBuyToken и buyToken: цена 12, потолок 3', () => {

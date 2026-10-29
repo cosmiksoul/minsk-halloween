@@ -574,6 +574,7 @@ export class Game {
   // --- публикация карточки: первый раз даёт жетон
   onShared(net) {
     const g = this.g; if (!g) return false;
+    this.quests?.onEvent('share', 0); // квест онбординга «карточка»: засчитывается любая публикация
     if (!g.shared) { g.shared = { net, at: clock() }; g.tokens++; this.sim.say(this.player, '🎟 +1 спас-бросок', 'music', 3); this.save(); this.renderHUD(); this.o.showCard(this.player, true); return true; }
     return false;
   }

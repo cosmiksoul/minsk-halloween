@@ -42,6 +42,7 @@ export const QUESTS = [
   { id: 'treat', title: 'первая сладость', hint: 'кликни по прохожему и выбери сладость', kind: 'friend' },
   { id: 'candy', title: 'конфета', hint: 'конфеты лежат на дорожках, подойди', kind: 'candy' },
   { id: 'coin', title: 'монетка', hint: 'монетки блестят у дорог', kind: 'coin' },
+  { id: 'share', title: 'карточка', hint: 'открой профиль своего скелета и поделись карточкой', kind: 'share' },
   { id: 'ghost', title: 'призрак', hint: 'за шалости приходят призраки с кладбищ', kind: 'win' },
   { id: 'card', title: 'карта', hint: 'на карте стоят пять карт часа, бей слабую', kind: 'card' },
 ];
