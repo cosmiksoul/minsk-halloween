@@ -2,7 +2,7 @@
 // а также состояния для игры: игрок, ожидание, друг-попутчик, призрак.
 import * as THREE from 'three';
 import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip, GHOSTS } from './skeletons.js';
-import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES } from './bio.js';
+import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES, chatLine } from './bio.js';
 import { Graph } from './graph.js';
 import { CUT, shouldCut } from './rules.js';
 import { segmentClear } from './geo.js';
@@ -11,6 +11,7 @@ export { Graph };
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
 const PICK_V = new THREE.Vector3();
 const ACCEL = 0.22; // с: за сколько управляемый или ведомый набирает скорость (разгон вместо рывка с места)
+const HSCALE = { pension: 0.94, student: 0.97, sport: 1.05, knight: 1.05, build: 1.03, cosmo: 1.04 }; // рост по архетипу, плюс личный разброс ±6 %
 const COSTUMES_PER_ARCH = 28; // размер пула текстур на архетип: экономим память при тысячах скелетов
 
 export class Sim {
@@ -53,10 +54,11 @@ export class Sim {
   addAgent(arch, costume, baseTex, bio, rng, from, custom) {
     const g = this.graph; const tex = baseTex.clone();
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5 }));
-    sprite.center.set(0.5, 0); sprite.scale.set(this.H * FW / FH, this.H, 1);
+    const hs = custom ? 1 : (HSCALE[arch.id] || 1) * (0.94 + rng() * 0.12); // свой скелет — эталонного роста
+    sprite.center.set(0.5, 0); sprite.scale.set(this.H * FW / FH * hs, this.H * hs, 1);
     const e = pick(rng, g.adj[from]);
     const a = { id: this.seed++, uid: 0, arch: arch.id, costume, bio, tex, base: custom ? baseTex : null, sprite, rng, from, to: e.to, len: e.len, t: rng(), speed: WALK_SPEED * (0.8 + rng() * 0.5),
-      state: 'walk', timer: 0, anim: rng() * 10, face: 1, cooldown: rng() * 10, thirst: 30 + rng() * 180, path: null, target: null, bubble: null, script: null, partner: null, x: 0, z: 0, lastDance: -100, venue: null, custom: !!custom,
+      state: 'walk', timer: 0, anim: rng() * 10, face: 1, cooldown: rng() * 10, thirst: 30 + rng() * 180, path: null, target: null, bubble: null, script: null, partner: null, x: 0, z: 0, lastDance: -100, venue: null, custom: !!custom, hs,
       player: false, ghost: false, leader: null, waitFor: null, home: null, dest: null, moving: false, auto: false, driven: false, ambient: false, ck: null, born: this.time };
     sprite.userData.agent = a;
     this.place(a); this.scene.add(sprite); this.agents.push(a); this.sprites.push(sprite);
@@ -133,7 +135,7 @@ export class Sim {
     while (count() < n) this.spawn();
     while (count() > n) { const a = [...this.agents].reverse().find(x => !x.custom && !x.ambient && !x.leader && !x.ghost && x.state !== 'wait'); if (!a) break; this.remove(a); }
   }
-  setHeight(h) { this.H = h; for (const a of this.agents) a.sprite.scale.set(h * FW / FH, h, 1); }
+  setHeight(h) { this.H = h; for (const a of this.agents) { const s = h * (a.hs || 1); a.sprite.scale.set(s * FW / FH, s, 1); } }
   // сколько скелетов было бы на всех улицах города сразу: та же формула, что у crowd() для кадра, но на всю застроенную площадь графа
   potential() { const km2 = this.graph.grid.size * this.graph.cell ** 2 / 1e6; return Math.round((km2 * 70 + this.hotTotal * 5) * this.density); }
 
@@ -155,7 +157,7 @@ export class Sim {
     const dur = 5.5 + a.rng() * 3; a.timer = b.timer = dur;
     let pool = LINES.chat;
     if (a.custom || b.custom) pool = LINES.chat.concat(LINES.toYou || []);
-    const lines = [pick(a.rng, pool), pick(b.rng, pool), pick(a.rng, LINES.chat)];
+    const lines = [chatLine(a.rng, a.arch, pool), chatLine(b.rng, b.arch, pool), chatLine(a.rng, a.arch)]; // часть реплик — по архетипу
     a.script = [{ at: dur - 0.2, text: lines[0] }, { at: dur - 4.6, text: lines[2] }]; b.script = [{ at: dur - 2.4, text: lines[1] }];
     this.stats.meetings++;
   }
@@ -470,7 +472,7 @@ export class Sim {
         if (a.state === 'walk') {
           if (a.player) { const tr = a.trail; const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
           if (!a.ghost) { a.thirst -= dt; if (a.thirst <= 0 && !a.target) this.goDrink(a); }
-          if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6);
+          if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) { if (a.ghost || a.rng() < 0.5) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6); else this.say(a, pick(a.rng, LINES.mutter), '', 2); } // «бу» или бормотание под нос
           this.place(a);
           const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from];
           a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1;

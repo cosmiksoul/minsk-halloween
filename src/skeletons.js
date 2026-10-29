@@ -6,7 +6,7 @@ export const FW = 24, FH = 36;
 export const FRAMES = { walk: [0, 1, 2, 3], idle: [4], dance: [5, 6, 7, 8], drink: [9, 10], talk: [11, 12] };
 export const NF = 13;
 
-const BONES = ['#ece6c9', '#f4f1e3', '#d9d3a9', '#c9d6b0', '#d8cfc0', '#e6dcc0'];
+const BONES = ['#ece6c9', '#f4f1e3', '#d9d3a9', '#c9d6b0', '#d8cfc0', '#e6dcc0', '#cfe0cf', '#d6dde8'];
 const EYES = ['#1b1326', '#1b1326', '#ff7a1a', '#7dff5a', '#ff3a3a', '#5ad8ff', '#ffd23a'];
 const CLOTH = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#2c3e50', '#e84393', '#6c5ce7', '#fdcb6e', '#00b894', '#b33939', '#218c74', '#474787', '#ffb142'];
 const DARK = '#1b1326';
@@ -17,13 +17,16 @@ export const CATALOG = {
   hat: { witch: 'шляпа ведьмы', top: 'цилиндр', party: 'праздничный колпак', beanie: 'шапка-бини', crown: 'корона', cowboy: 'ковбойская шляпа', hard: 'каска', chef: 'колпак повара', bandana: 'бандана', horns: 'рожки', halo: 'нимб', cat: 'кошачьи ушки', viking: 'шлем викинга', cap: 'кепка', beret: 'берет', ushanka: 'ушанка', kerchief: 'платок', pumpkin: 'тыква на голову', wizard: 'колпак мага', sombrero: 'сомбреро', headphones: 'наушники', santa: 'колпак Санты', cone: 'дорожный конус', bunny: 'заячьи уши', bucket: 'ведро', tiara: 'диадема', helmet: 'шлем космонавта', fez: 'феска', flowers: 'венок из цветов', antlers: 'рога оленя', propeller: 'кепка с пропеллером', mohawk: 'ирокез' },
   body: { hoodie: 'худи', shirtTie: 'рубашка с галстуком', coat: 'белый халат', dress: 'платье', robe: 'мантия звездочёта', vest: 'жилет дорожника', stripes: 'тельняшка', suit: 'костюм', apron: 'фартук', tracksuit: 'спортивка', scarf: 'шарф', cape: 'плащ', capeRed: 'плащ вампира', tshirt: 'футболка с принтом', jersey: 'игровая футболка', armor: 'латы', kimono: 'кимоно', sweater: 'свитер с узором', leather: 'косуха', overalls: 'комбинезон', tux: 'смокинг', poncho: 'пончо', cassock: 'ряса' },
   prop: { phone: 'телефон', balloon: 'шарик', guitar: 'гитара', umbrella: 'зонт', laptop: 'ноутбук', flower: 'цветок', broom: 'метла', sword: 'меч', bag: 'сумка', torch: 'факел', cane: 'трость', book: 'книга', lantern: 'фонарь', mic: 'микрофон', camera: 'фотоаппарат', coffee: 'стакан кофе', scythe: 'коса', lollipop: 'леденец', flag: 'флажок', cat: 'кот на руках' },
-  pattern: { stripes: 'полоски', dots: 'горошек', checks: 'клетка', star: 'звезда', heart: 'сердце' },
-  face: { glasses: 'очки', shades: 'тёмные очки', paint: 'боевой раскрас', mask: 'маска-домино', mustache: 'усы', monocle: 'монокль' },
+  pattern: { stripes: 'полоски', dots: 'горошек', checks: 'клетка', star: 'звезда', heart: 'сердце', zigzag: 'зигзаг', skull: 'череп на груди', bat: 'летучая мышь на груди', pumpkin: 'тыковка на груди', web: 'паутинка', bones: 'кости крест-накрест' },
+  face: { glasses: 'очки', shades: 'тёмные очки', paint: 'боевой раскрас', mask: 'маска-домино', mustache: 'усы', monocle: 'монокль', eyepatch: 'повязка на глаз', beard: 'борода', scar: 'трещина в черепе', fangs: 'клыки', blush: 'румянец', goldtooth: 'золотой зуб' },
   extra: { wings: 'крылья', batwings: 'крылья летучей мыши', tail: 'хвост чёрта', necklace: 'цепочка', badge: 'значок' },
+  pet: { crow: 'ворон на плече', rat: 'крыса на плече', bat: 'летучая мышь', spider: 'паук на нитке', dog: 'пёсик у ног', cat: 'кот у ног' },
 };
-export const SHOP_KINDS = { hat: 'шляпа', body: 'одежда', prop: 'предмет в руке', pattern: 'узор на одежде', face: 'лицо', extra: 'аксессуар', colors: 'перекраска' };
+export const SHOP_KINDS = { hat: 'шляпа', body: 'одежда', prop: 'предмет в руке', pattern: 'узор на одежде', face: 'лицо', extra: 'аксессуар', pet: 'питомец', colors: 'перекраска' };
 export const PALETTE = CLOTH.concat(['#ffffff', '#111111', '#ff5fa2', '#5ad8ff', '#ffd23a', '#9dff7a', '#8e1b1b', '#3d1f6b']);
 export const randomItem = (kind, rng) => { const keys = Object.keys(CATALOG[kind]); return keys[Math.floor(rng() * keys.length)]; };
+// питомцы по архетипу: у ведьмы кот и ворон, у пенсионера пёсик; у остальных любой, но редко
+const PET_BY_ARCH = { witch: ['cat', 'crow', 'bat', 'spider'], pension: ['dog', 'cat'], goth: ['bat', 'rat', 'crow', 'spider'], angel: ['dog', 'cat'], vamp: ['bat', 'rat'], pump: ['crow', 'spider'], pirate: ['rat', 'crow'], cosmo: ['dog'] };
 export const CLOTH_BODIES = new Set(['hoodie', 'tshirt', 'jersey', 'sweater', 'tracksuit', 'dress', 'apron', 'kimono', 'overalls', 'poncho']);
 export function randomCostume(rng, arch) {
   const c = {
@@ -32,11 +35,13 @@ export function randomCostume(rng, arch) {
     c1: pick(rng, CLOTH), c2: pick(rng, CLOTH), c3: pick(rng, CLOTH),
   };
   if (arch.id === 'raver') { const g = rng() < 0.5; c.c1 = g ? ACID : '#141414'; c.c2 = g ? '#141414' : ACID; c.c3 = ACID; c.eye = ACID; c.bone = '#e6f0d8'; }
-  // редкие детали, чтобы толпа была разнообразнее
-  c.pattern = rng() < 0.15 ? randomItem('pattern', rng) : 'none';
-  c.face = rng() < 0.12 ? randomItem('face', rng) : 'none';
-  c.extra = rng() < 0.06 ? randomItem('extra', rng) : 'none';
+  if (arch.id === 'goth') { c.c1 = pick(rng, ['#1b1326', '#2d1b4e', '#111111', '#3d1f6b', '#8e1b1b']); c.c2 = pick(rng, ['#8e1b1b', '#6c5ce7', '#f2f2f2']); c.c3 = c.c2; c.eye = pick(rng, ['#ff3a3a', '#8e44ad', '#1b1326']); c.bone = '#f4f1e3'; }
+  // редкие детали, чтобы толпа была разнообразнее (порядок бросков сохранён: костюмы по зерну не меняются, питомец — последним)
+  c.pattern = rng() < 0.2 ? randomItem('pattern', rng) : 'none';
+  c.face = rng() < 0.16 ? randomItem('face', rng) : 'none';
+  c.extra = rng() < 0.08 ? randomItem('extra', rng) : 'none';
   c.shoes = rng() < 0.3 ? pick(rng, CLOTH) : null;
+  const pets = PET_BY_ARCH[arch.id]; c.pet = pets ? (rng() < 0.3 ? pick(rng, pets) : 'none') : (rng() < 0.08 ? randomItem('pet', rng) : 'none');
   return c;
 }
 
@@ -150,6 +155,12 @@ export function drawFrame(ctx, ox, f, C, opts = {}) {
       case 'checks': for (let y = 17; y <= 25; y++) for (let x = 8; x < 16; x++) if (((x >> 1) + (y >> 1)) % 2) R(x, y, 1, 1, shade(C.c1)); break;
       case 'star': R(11, 19, 2, 1, pc); R(10, 20, 4, 1, pc); R(11, 21, 2, 1, pc); R(10, 22, 1, 1, pc); R(13, 22, 1, 1, pc); break;
       case 'heart': R(10, 19, 2, 1, pc); R(13, 19, 2, 1, pc); R(10, 20, 5, 1, pc); R(11, 21, 3, 1, pc); R(12, 22, 1, 1, pc); break;
+      case 'zigzag': for (let x = 8; x < 16; x++) { R(x, 19 + (x & 1), 1, 1, pc); R(x, 23 + (x & 1), 1, 1, pc); } break;
+      case 'skull': R(10, 19, 4, 3, '#f2f2f2'); R(11, 22, 2, 1, '#f2f2f2'); R(10, 20, 1, 1, shade(C.c1)); R(13, 20, 1, 1, shade(C.c1)); break;
+      case 'bat': R(9, 19, 6, 1, DARK); R(11, 20, 2, 2, DARK); R(8, 20, 1, 1, DARK); R(15, 20, 1, 1, DARK); R(10, 18, 1, 1, DARK); R(13, 18, 1, 1, DARK); break;
+      case 'pumpkin': R(10, 19, 4, 4, '#f07a1a'); R(11, 18, 2, 1, '#3a7a2a'); R(11, 20, 1, 1, DARK); R(13, 20, 1, 1, DARK); R(11, 22, 3, 1, DARK); break;
+      case 'web': R(9, 20, 5, 1, pc); R(11, 18, 1, 5, pc); R(9, 18, 1, 1, pc); R(13, 18, 1, 1, pc); R(9, 22, 1, 1, pc); R(13, 22, 1, 1, pc); R(10, 19, 1, 1, pc); R(12, 19, 1, 1, pc); R(10, 21, 1, 1, pc); R(12, 21, 1, 1, pc); break;
+      case 'bones': for (let i = 0; i < 5; i++) { R(9 + i, 18 + i, 1, 1, '#f2f2f2'); R(13 - i, 18 + i, 1, 1, '#f2f2f2'); } R(8, 17, 2, 1, '#f2f2f2'); R(13, 17, 2, 1, '#f2f2f2'); R(8, 23, 2, 1, '#f2f2f2'); R(13, 23, 2, 1, '#f2f2f2'); break;
     }
   }
   if (C.extra === 'necklace') { R(10, 16, 4, 1, '#ffd23a'); R(11, 17, 2, 1, '#ffd23a'); }
@@ -182,6 +193,12 @@ export function drawFrame(ctx, ox, f, C, opts = {}) {
       case 'mask': R(8, 8 + hd, 8, 2, C.c2); R(10, 9 + hd, 1, 1, C.eye); R(14, 9 + hd, 1, 1, C.eye); R(9, 8 + hd, 1, 1, shade(C.c2)); break;
       case 'mustache': R(10, 12 + hd, 4, 1, '#3a2410'); R(9, 13 + hd, 1, 1, '#3a2410'); R(14, 13 + hd, 1, 1, '#3a2410'); break;
       case 'monocle': R(13, 8 + hd, 3, 1, '#ffd23a'); R(13, 10 + hd, 3, 1, '#ffd23a'); R(13, 9 + hd, 1, 1, '#ffd23a'); R(15, 9 + hd, 1, 1, '#ffd23a'); L(16, 11 + hd, 17, 16, '#ffd23a', 1); break;
+      case 'eyepatch': R(13, 8 + hd, 2, 2, '#111'); R(9, 7 + hd, 6, 1, '#111'); R(8, 8 + hd, 1, 1, '#111'); R(15, 8 + hd, 1, 1, '#111'); break;
+      case 'beard': { const bc = '#6b4a2a'; R(8, 13 + hd, 1, 2, bc); R(15, 13 + hd, 1, 2, bc); R(9, 15 + hd, 6, 1, bc); R(10, 16 + hd, 4, 1, bc); R(11, 17 + hd, 2, 1, bc); break; }
+      case 'scar': { const sc = '#8a7a5a'; R(12, 6 + hd, 1, 1, sc); R(11, 7 + hd, 1, 1, sc); R(12, 8 + hd, 1, 1, sc); R(11, 9 + hd, 1, 1, sc); R(12, 10 + hd, 1, 1, sc); break; }
+      case 'fangs': R(10, 15 + hd, 1, 2, '#ffffff'); R(13, 15 + hd, 1, 2, '#ffffff'); R(10, 17 + hd, 1, 1, '#e8303a'); break;
+      case 'blush': R(8, 11 + hd, 2, 1, '#ff9ac0'); R(14, 11 + hd, 2, 1, '#ff9ac0'); break;
+      case 'goldtooth': R(12, 14 + hd, 1, 2, '#ffd23a'); R(13, 13 + hd, 1, 1, '#ffffff'); break;
     }
   }
 
@@ -245,6 +262,20 @@ export function drawFrame(ctx, ox, f, C, opts = {}) {
     case 'cat': R(h[0] - 1, h[1] - 4, 4, 3, '#333'); R(h[0] - 1, h[1] - 5, 1, 1, '#333'); R(h[0] + 2, h[1] - 5, 1, 1, '#333'); R(h[0], h[1] - 3, 1, 1, '#ffd23a'); R(h[0] + 2, h[1] - 3, 1, 1, '#ffd23a'); R(h[0] + 3, h[1] - 2, 2, 1, '#333'); break;
   }
   if (P.mug) { const m = P.mug; R(m[0], m[1], 4, 5, '#f0a020'); R(m[0], m[1] - 1, 4, 1, '#fff6e0'); R(m[0] + 4, m[1] + 1, 1, 3, '#f0a020'); R(m[0], m[1] + 1, 1, 3, '#ffd060'); }
+
+  // --- питомец: на плече едет с телом (R), у ног и в воздухе стоит на месте (Q) и шевелится по кадрам; у призраков питомцев нет
+  if (C.pet && C.pet !== 'none' && !opts.ghost) {
+    const Q = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(ox + x, y, w, h); };
+    const k = f % 2, j = f % 3;
+    switch (C.pet) {
+      case 'crow': R(4, 14, 4, 3, '#1b1b22'); R(3, 13, 2, 2, '#1b1b22'); R(2, 14, 1, 1, '#ffd23a'); R(3, 13, 1, 1, '#f2f2f2'); R(8, 14, 1, 1, '#1b1b22'); if (k) R(5, 13, 2, 1, '#1b1b22'); break;
+      case 'rat': R(16, 15, 4, 2, '#8a8a92'); R(20, 15, 2, 2, '#8a8a92'); R(21, 14, 1, 1, '#ff9ac0'); R(21, 15, 1, 1, DARK); R(22, 16, 1, 1, '#ff9ac0'); R(19, 17, 1, 1, '#d8a0a0'); R(20, 18, 1, 1, '#d8a0a0'); break;
+      case 'bat': { const y = 2 + k, bc = '#2d1b4e'; Q(19, y + 1, 3, 2, bc); Q(19, y + 1, 1, 1, '#ff3a3a'); Q(21, y + 1, 1, 1, '#ff3a3a'); if (k) { Q(17, y + 2, 2, 1, bc); Q(22, y + 2, 2, 1, bc); } else { Q(17, y, 2, 1, bc); Q(22, y, 2, 1, bc); Q(16, y - 1, 1, 1, bc); Q(23, y - 1, 1, 1, bc); } break; }
+      case 'spider': Q(2, 0, 1, 5 + j, '#bbbbbb'); Q(1, 5 + j, 3, 2, '#1b1b22'); Q(0, 5 + j, 1, 1, '#1b1b22'); Q(4, 5 + j, 1, 1, '#1b1b22'); Q(0, 7 + j, 1, 1, '#1b1b22'); Q(4, 7 + j, 1, 1, '#1b1b22'); Q(1, 5 + j, 1, 1, '#ff3a3a'); Q(3, 5 + j, 1, 1, '#ff3a3a'); break;
+      case 'dog': { const c = '#c98a3a'; Q(0, 31, 5, 2, c); Q(4, 29, 2, 3, c); Q(5, 28, 1, 1, shade(c)); Q(6, 30, 1, 1, DARK); Q(5, 29, 1, 1, DARK); Q(k ? 0 : 1, 30, 1, 1, c); Q(k, 33, 1, 2, c); Q(3 + k, 33, 1, 2, c); Q(4, 31, 1, 1, '#e8303a'); break; }
+      case 'cat': { const c = '#3a3a44'; Q(19, 31, 4, 2, c); Q(21, 29, 3, 2, c); Q(21, 28, 1, 1, c); Q(23, 28, 1, 1, c); Q(21, 29, 1, 1, '#7dff5a'); Q(23, 29, 1, 1, '#7dff5a'); Q(18, 30 - k, 1, 2 + k, c); Q(19, 33, 1, 2, c); Q(22, 33, 1, 2, c); break; }
+    }
+  }
 }
 
 function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
