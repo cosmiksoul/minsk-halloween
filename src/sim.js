@@ -9,6 +9,7 @@ import { segmentClear } from './geo.js';
 export { Graph };
 
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
+const ACCEL = 0.22; // с: за сколько управляемый или ведомый набирает скорость (разгон вместо рывка с места)
 const COSTUMES_PER_ARCH = 28; // размер пула текстур на архетип: экономим память при тысячах скелетов
 
 export class Sim {
@@ -28,9 +29,9 @@ export class Sim {
     // на Революционной три бара делят один узел, и по узлу их не различить — явный визит считается по входу
     for (const v of venues) { v.node = this.graph.nearest(v.x, v.z, 80); const T = this.graph.targetPoint(v.x, v.z, 140); if (T) { v.tx = T.x; v.tz = T.z; if (v.node < 0) v.node = T.node; } if (v.node >= 0) this.venueNode.set(v.node, v); }
     this.active = venues.filter(v => v.node >= 0);
-    const [lat0, lon0] = opts.center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
+    this.center = opts.center; const [lat0, lon0] = opts.center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
     const pr = (lat, lon) => [(lon - lon0) * kx, -(lat - lat0) * kz];
-    this.danceZones = [[...pr(53.9025, 27.5620), 'Октябрьская площадь', 50], [...pr(53.9083, 27.5752), 'площадь Победы', 50], [...pr(53.9045, 27.5560), 'площадь Свободы', 45], [...pr(53.9010, 27.5490), 'Зыбицкая', 60], [...pr(53.8980, 27.5530), 'Немига', 45]];
+    this.danceZones = [[...pr(53.9025, 27.5620), 'Октябрьская площадь', 50], [...pr(53.9083, 27.5752), 'площадь Победы', 50], [...pr(53.9045, 27.5560), 'площадь Свободы', 45], [...pr(53.9050, 27.5578), 'Зыбицкая', 40], [...pr(53.9052, 27.5530), 'Немига', 40]];
     [this.cx, this.cz] = pr(53.9030, 27.5600); // центр тусовки
     // оживлённые районы: узлы в радиусе каждого, вес для выбора
     this.hotspots = (opts.hotspots || []).map(h => ({ ...h, nodes: this.graph.within(h.x, h.z, h.r) })).filter(h => h.nodes.length >= 5);
@@ -309,11 +310,14 @@ export class Sim {
 
   // конец маршрута к точке вне графа (клик по газону): последние метры напрямик, если прямая свободна; иначе остаёмся на дорожке
   lastLegCut(a) { const l = a.lastLeg; if (!l) return false; a.lastLeg = null; if (!this.clear(a.x, a.z, l.x, l.z)) return false; this.startCut(a, l.x, l.z, { kind: 'free' }, false); return true; }
+  // разгон управляемого и ведомого: скорость подтягивается к целевой за ACCEL с, а не включается рывком; в покое сбрасывается
+  ramp(a, dt) { const target = a.speed * (a.speedMul || 1); const v = a.vel || 0; a.vel = v + (target - v) * Math.min(1, dt / ACCEL); return a.vel; }
   updatePlayer(a, dt) {
     const g = this.graph;
+    if (a.state !== 'walk' && a.state !== 'cut') a.vel = 0;
     if (a.state === 'walk') {
       if (a.from === a.to) { a.state = 'idle'; return; }
-      a.t += a.speed * (a.speedMul || 1) * dt / a.len;
+      a.t += this.ramp(a, dt) * dt / a.len;
       // цель посреди ребра (прохожий, конфета): встаём на точке, не доходя до узла; onArrive без узла, чтобы не «зайти» в бар в 30 м
       if (a.stopT != null && !(a.path && a.path.length) && a.t >= a.stopT) {
         a.t = a.stopT; a.stopT = null; a.state = 'idle'; a.dest = null; a.path = null; this.place(a); if (this.lastLegCut(a)) return; if (this.onArrive) this.onArrive(a, -1); return;
@@ -329,7 +333,7 @@ export class Sim {
     } else if (a.state === 'cut') {
       // срезка: по прямой к точке со своей скоростью и множителем «штормит», с анимацией ходьбы и следом для друзей
       const c = a.cut; if (!c) { a.state = 'idle'; a.free = true; return; }
-      const dx = c.x - a.x, dz = c.z - a.z, d = Math.hypot(dx, dz); const step = a.speed * (a.speedMul || 1) * dt;
+      const dx = c.x - a.x, dz = c.z - a.z, d = Math.hypot(dx, dz); const step = this.ramp(a, dt) * dt;
       if (d > Math.max(step, 0.5)) { a.x += dx / d * step; a.z += dz / d * step; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; a.sprite.position.set(a.x, 0.5, a.z); }
       else {
         a.x = c.x; a.z = c.z; a.cut = null; const th = c.then; const g2 = this.graph;

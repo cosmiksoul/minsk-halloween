@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
+import { CHEST, chestOutcome, chestLoot, SPRINT, sprintStep, hunterSpeedFactor, isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -152,4 +152,32 @@ test('isHalloweenNight: 31.10 18:00 – 01.11 06:00 по Минску', () => {
 test('addPoints: ночью Хэллоуина плюс удваивается, минус нет', () => {
   const night = Date.UTC(2026, 9, 31, 20, 0), day = Date.UTC(2026, 9, 30, 20, 0);
   const g = newProgress(); assert.equal(addPoints(g, 5, day), 5); assert.equal(addPoints(g, 5, night), 15); assert.equal(addPoints(g, -1, night), 14);
+});
+
+test('chestOutcome и chestLoot: пороги, монеты, жетон, крит', () => {
+  assert.equal(chestOutcome(1), 'mimic'); assert.equal(chestOutcome(7), 'locked'); assert.equal(chestOutcome(8), 'open'); assert.equal(chestOutcome(20), 'crit');
+  assert.deepEqual(chestLoot(() => 0.5, 'locked'), { coins: 0, token: false }); assert.deepEqual(chestLoot(() => 0.5, 'mimic'), { coins: 0, token: false });
+  const l = chestLoot(() => 0.5, 'open'); assert.ok(l.coins >= CHEST.coinsMin && l.coins <= CHEST.coinsMax); assert.equal(l.token, false);
+  assert.equal(chestLoot(() => 0.05, 'open').token, true);
+  const c = chestLoot(() => 0.99, 'crit'); assert.equal(c.coins, CHEST.coinsMax * 2); assert.equal(c.token, true);
+});
+
+test('sprintStep: расход, усталость и восстановление', () => {
+  let s = sprintStep(1, 2, true); assert.equal(s.mul, SPRINT.mul); assert.ok(Math.abs(s.stamina - 0.5) < 1e-9); assert.equal(s.exhausted, false);
+  s = sprintStep(s.stamina, 3, true); assert.equal(s.stamina, 0); assert.equal(s.exhausted, true);
+  s = sprintStep(0, 1, true, true); assert.equal(s.mul, 1); assert.ok(Math.abs(s.stamina - 1 / SPRINT.recharge) < 1e-9); assert.equal(s.exhausted, true);
+  s = sprintStep(SPRINT.min, 0, true, true); assert.equal(s.exhausted, false); assert.equal(s.mul, SPRINT.mul);
+  assert.equal(sprintStep(0.5, 10, false).stamina, 1); assert.equal(sprintStep('x', 0, false).stamina, 1);
+});
+
+test('hunterSpeedFactor: табличная вблизи, ×4 вдали, плавно между', () => {
+  assert.equal(hunterSpeedFactor(100, 1), LEVELS[1].speed); assert.equal(hunterSpeedFactor(400, 1), LEVELS[1].speed);
+  assert.equal(hunterSpeedFactor(800, 1), PURSUIT.offscreenSpeed); assert.equal(hunterSpeedFactor(5000, 3), PURSUIT.offscreenSpeed);
+  assert.ok(Math.abs(hunterSpeedFactor(600, 1) - (LEVELS[1].speed + PURSUIT.offscreenSpeed) / 2) < 1e-9);
+  assert.equal(hunterSpeedFactor(100, 0), LEVELS[1].speed); assert.equal(hunterSpeedFactor(100, 9), LEVELS[5].speed);
+});
+
+test('newProgress и migrate: сундуки', () => {
+  assert.deepEqual(newProgress().chests, {}); assert.deepEqual(migrate({ ...newProgress(), chests: [1] }).chests, {});
+  const g = migrate({ ...newProgress(), chests: { lib: 5 } }); assert.equal(g.chests.lib, 5);
 });
