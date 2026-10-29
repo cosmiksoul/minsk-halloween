@@ -27,7 +27,7 @@ export class Remote {
     try {
       const r = await fetch(this.url + '/rest/v1/' + path, { ...init, headers: this.headers(init.headers || {}) });
       if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
-      this.ok = true; return r.status === 204 ? null : await r.json();
+      this.ok = true; const text = await r.text(); return text ? JSON.parse(text) : null; // на return=minimal сервер отвечает 201 с пустым телом
     } catch (e) { this.ok = false; this.lastError = String(e); console.warn('remote', e); return null; }
   }
   // сохранить / обновить своего скелета вместе с игровым прогрессом

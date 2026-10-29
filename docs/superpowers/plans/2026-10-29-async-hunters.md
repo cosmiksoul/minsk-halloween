@@ -377,7 +377,9 @@ git commit -m "Охотники с кладбищ: шкала угрозы, пр
 
 - [ ] **Step 1: `store.js`**
 
-По Interfaces. `scoreOf` импортируется из `rules.js` (реэкспорт из Task 1 остаётся).
+По Interfaces. `scoreOf` импортируется из `rules.js` (реэкспорт из Task 1 остаётся). Уже сделано в ветке и проверено на живом проекте: `Remote.call` читает тело через `r.text()` и парсит только непустое, потому что на `Prefer: return=minimal` сервер отвечает `201` без тела, и прежний `r.json()` ронял `ok` после каждого апсерта. Не откатывать.
+
+Проект Supabase уже создан пользователем 2026-10-29 (`hdfqadnfcgseqtxlwlga`), таблицы `skeletons` и `encounters` созданы по финальной схеме ниже, `config.js` в ветке заполнен. Временно в `skeletons` добавлены колонки `x int, z int`, чтобы текущий `upsert` не падал до этой задачи; после неё их можно удалить (`alter table skeletons drop column x, drop column z;`), это необязательно.
 
 - [ ] **Step 2: Доска в `main.js`**
 
