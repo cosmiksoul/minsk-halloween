@@ -250,3 +250,16 @@ export function statsOf(g) {
     wins: num(g.wins), losses: num(g.losses), deaths: num(g.deaths), hands: num(g.hands), bestHand: g.bestHand || null,
   };
 }
+
+// магнит тапа: ближайший к точке экрана предмет в пределах допуска. Предмет — отрезок на экране (у скелета ноги→голова, у маркера точка)
+// с шириной w: расстояние считается до оси минус половина ширины, так что попадание внутрь фигурки отрицательно и всегда выигрывает
+function segDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2)) : 0;
+  return Math.hypot(px - (x1 + dx * t), py - (y1 + dy * t));
+}
+export function magnetPick(tap, items, slop) {
+  let best = null, bd = slop;
+  for (const it of items) { const d = segDist(tap[0], tap[1], it.x1, it.y1, it.x2, it.y2) - (it.w || 0) / 2; if (d < bd) { bd = d; best = it; } }
+  return best;
+}

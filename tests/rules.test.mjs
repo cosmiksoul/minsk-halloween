@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHEST, chestOutcome, chestLoot, SPRINT, sprintStep, hunterSpeedFactor, isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
+import { magnetPick, CHEST, chestOutcome, chestLoot, SPRINT, sprintStep, hunterSpeedFactor, isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -180,4 +180,17 @@ test('hunterSpeedFactor: табличная вблизи, ×4 вдали, пла
 test('newProgress и migrate: сундуки', () => {
   assert.deepEqual(newProgress().chests, {}); assert.deepEqual(migrate({ ...newProgress(), chests: [1] }).chests, {});
   const g = migrate({ ...newProgress(), chests: { lib: 5 } }); assert.equal(g.chests.lib, 5);
+});
+
+test('magnetPick: ближайший предмет в допуске, отрезок с шириной, за допуском — null', () => {
+  const items = [
+    { ref: 'a', x1: 100, y1: 100, x2: 100, y2: 60, w: 10 }, // фигурка: ноги (100,100) → голова (100,60), ширина 10
+    { ref: 'b', x1: 140, y1: 100, x2: 140, y2: 100, w: 0 }, // точка-маркер
+  ];
+  assert.equal(magnetPick([112, 80], items, 28).ref, 'a'); // 12 px от оси минус полширины = 7
+  assert.equal(magnetPick([130, 100], items, 28).ref, 'b'); // до точки 10, до фигурки 30 − 5 = 25
+  assert.equal(magnetPick([100, 20], items, 28), null); // над головой 40 − 5 = 35 > 28
+  assert.equal(magnetPick([100, 20], items, 36).ref, 'a');
+  assert.equal(magnetPick([100, 80], items, 1).ref, 'a'); // внутри фигурки расстояние отрицательное
+  assert.equal(magnetPick([0, 0], [], 28), null);
 });
