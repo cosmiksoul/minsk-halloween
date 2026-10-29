@@ -30,9 +30,10 @@ export class Shops {
     const [lat0, lon0] = center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
     const tex = shopTexture();
     this.items = SHOPS.map(s => {
-      const x = (s.lon - lon0) * kx, z = -(s.lat - lat0) * kz; const node = sim.graph.nearest(x, z, 220);
+      const x = (s.lon - lon0) * kx, z = -(s.lat - lat0) * kz; const n0 = sim.graph.nearest(x, z, 220); const T = sim.graph.targetPoint(x, z, 220); // вход — точка сети, как у заведений
+      const node = n0 >= 0 ? n0 : T ? T.node : -1;
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(x, 14, z); sp.userData.phase = Math.random() * 6;
-      const it = { ...s, x, z, node, sp }; sp.userData.shop = it; this.group.add(sp); return it;
+      const it = { ...s, x, z, node, tx: T ? T.x : undefined, tz: T ? T.z : undefined, sp }; sp.userData.shop = it; this.group.add(sp); return it;
     });
     this.byNode = new Map(); for (const it of this.items) if (it.node >= 0) this.byNode.set(it.node, it);
     this.pickables = this.items.map(it => it.sp);

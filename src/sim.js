@@ -24,7 +24,9 @@ export class Sim {
     this.density = 1; this.cap = 900; this.crowdTimer = 0; this.lastFp = null;
     // заведения привязываем к узлам графа
     this.venues = venues; this.venueNode = new Map();
-    for (const v of venues) { v.node = this.graph.nearest(v.x, v.z, 80); if (v.node >= 0) this.venueNode.set(v.node, v); }
+    // узел — для прохожих и списков (80 м); вход для игрока (tx, tz) — точка сети, куда приведёт moveTo, своя у каждого бара:
+    // на Революционной три бара делят один узел, и по узлу их не различить — явный визит считается по входу
+    for (const v of venues) { v.node = this.graph.nearest(v.x, v.z, 80); const T = this.graph.targetPoint(v.x, v.z, 140); if (T) { v.tx = T.x; v.tz = T.z; if (v.node < 0) v.node = T.node; } if (v.node >= 0) this.venueNode.set(v.node, v); }
     this.active = venues.filter(v => v.node >= 0);
     const [lat0, lon0] = opts.center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
     const pr = (lat, lon) => [(lon - lon0) * kx, -(lat - lat0) * kz];
