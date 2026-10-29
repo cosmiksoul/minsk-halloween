@@ -39,9 +39,19 @@ export class Graph {
     this.walkable = []; for (let i = 0; i < this.x.length; i++) if (this.ok[i]) this.walkable.push(i);
     this.cell = 40; this.grid = new Map();
     for (const i of this.walkable) { const k = this.key(this.x[i], this.z[i]); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(i); }
+    // сетка рёбер: ребро записано во все клетки, через которые проходит, — длинное ребро (проспект, мост в сотни метров)
+    // находится по точке рядом с ним, а не только по его концам, которые могут быть дальше радиуса поиска
+    this.ea = []; this.eb = []; this.egrid = new Map();
+    for (const a of this.walkable) for (const e of this.adj[a]) {
+      if (e.to < a) continue; const i = this.ea.length; this.ea.push(a); this.eb.push(e.to);
+      const ax = this.x[a], az = this.z[a], bx = this.x[e.to], bz = this.z[e.to]; const steps = Math.ceil(e.len / (this.cell / 2)); let last = null;
+      for (let s = 0; s <= steps; s++) { const t = steps ? s / steps : 0; const k = this.ekey(ax + (bx - ax) * t, az + (bz - az) * t); if (k === last) continue; last = k; (this.egrid.get(k) || this.egrid.set(k, []).get(k)).push(i); }
+    }
+    this.estamp = new Int32Array(this.ea.length); this.egen = 0;
     const n = this.x.length; this.dist = new Float64Array(n); this.stamp = new Int32Array(n); this.closed = new Int32Array(n); this.prevN = new Int32Array(n); this.gen = 0;
   }
   key(x, z) { return Math.floor(x / this.cell) + ',' + Math.floor(z / this.cell); }
+  ekey(x, z) { return Math.floor(x / this.cell) * 1e5 + Math.floor(z / this.cell); } // числовой ключ клетки для сетки рёбер (быстрее строк; город ±750 клеток)
   nearest(x, z, maxR = 120) {
     let best = -1, bd = maxR * maxR; const c = this.cell, r = Math.ceil(maxR / c);
     const cx = Math.floor(x / c), cz = Math.floor(z / c);
@@ -103,15 +113,17 @@ export class Graph {
     }
     return best;
   }
-  // ближайшая проекция точки на рёбра узлов в радиусе maxR: { from, to, t, x, z, d } или null (для возврата на дорожку со свободной точки)
+  // ближайшая проекция точки на ребро сети в радиусе maxR по сетке рёбер: { from, to, t, x, z, d } или null
+  // (цель клика, возврат на дорожку со свободной точки); длинные рёбра находятся, даже если их концы далеко
   nearestEdgePoint(x, z, maxR = 140) {
-    let best = null, bd = Infinity;
-    for (const n of this.within(x, z, maxR)) {
-      const ax = this.x[n], az = this.z[n];
-      for (const e of this.adj[n]) {
-        const dx = this.x[e.to] - ax, dz = this.z[e.to] - az; const l2 = dx * dx + dz * dz || 1e-9;
+    let best = null, bd = maxR * maxR; const c = this.cell, r = Math.ceil(maxR / c); const cx = Math.floor(x / c), cz = Math.floor(z / c); const gen = ++this.egen, st = this.estamp;
+    for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+      const l = this.egrid.get((cx + i) * 1e5 + (cz + j)); if (!l) continue;
+      for (const ei of l) {
+        if (st[ei] === gen) continue; st[ei] = gen;
+        const a = this.ea[ei], b = this.eb[ei]; const ax = this.x[a], az = this.z[a], dx = this.x[b] - ax, dz = this.z[b] - az; const l2 = dx * dx + dz * dz || 1e-9;
         const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); const px = ax + dx * t, pz = az + dz * t;
-        const d2 = (x - px) ** 2 + (z - pz) ** 2; if (d2 < bd) { bd = d2; best = { from: n, to: e.to, t, x: px, z: pz, d: Math.sqrt(d2) }; }
+        const d2 = (x - px) ** 2 + (z - pz) ** 2; if (d2 < bd) { bd = d2; best = { from: a, to: b, t, x: px, z: pz, d: Math.sqrt(d2) }; }
       }
     }
     return best;
