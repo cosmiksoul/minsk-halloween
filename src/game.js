@@ -417,14 +417,14 @@ export class Game {
         this.sim.say(npc, pick(npc.rng, LINES.scared), 'boo', 2.4); this.sim.ghostify(npc);
         g.kills++; const grew = growHearts(g);
         this.sim.say(me, grew ? '💀 +1 череп · ❤ +1' : '💀 +1 череп', '', 2.4);
-        this.log('kill', info); this.hunters?.gain('kill');
+        this.log('kill', info); this.hunters?.gain('kill'); this.quests?.onEvent('kill', POINTS.win);
       } else {
         // хвост до десяти: одиннадцатый остаётся другом в городе, в журнал и очки попадает, следом не идёт
         const inTail = g.tail.length < CAPS.tail;
         this.sim.say(npc, pick(npc.rng, LINES.yes), 'music', 2.4);
         if (inTail) { this.sim.befriend(npc, me); g.tail.push({ ...info }); this.sim.say(me, `💚 новый друг · хвост ${g.tail.length}/${CAPS.tail}`, '', 2.4); }
         else { this.sim.release(npc); this.sim.say(me, '💚 друзей уже десять, помашет из толпы', '', 2.8); }
-        g.friendsTotal = (g.friendsTotal | 0) + 1; this.log('friend', { ...info, inTail }); this.hunters?.gain('friend');
+        g.friendsTotal = (g.friendsTotal | 0) + 1; this.log('friend', { ...info, inTail }); this.hunters?.gain('friend'); this.quests?.onEvent('friend', POINTS.win);
       }
       g.wins++; this.points(POINTS.win);
       const coins = res.kind === 'crit' ? 4 : 2; g.coins += coins; later(`🪙 +${coins} · XP +${POINTS.win}`, 'beer', 2600);
@@ -477,7 +477,7 @@ export class Game {
       outcome = h.intent === 'kill' ? 'skull' : 'heart';
       if (r.crit) this.heal(1);
       g.coins += 4; g.wins++; this.points(POINTS.win);
-      this.log('win', base); this.hunters?.gain('raidWin');
+      this.log('win', base); this.hunters?.gain('raidWin'); this.quests?.onEvent('win', POINTS.win);
       this.sim.say(me, h.intent === 'kill' ? '👑💀 босс-череп' : '👑💚 босс-сердечко', 'music', 2.8);
       later(`🪙 +4 · XP +${POINTS.win}`, 'beer', 2600);
     } else {
@@ -525,7 +525,7 @@ export class Game {
       const g = this.g;
       if (kind === 'coin') { g.coins++; this.sim.say(p, '🪙 +1', 'beer', 1.6); }
       else if (g.hp < g.maxHp) { this.heal(1); this.sim.say(p, pick(p.rng, LINES.candy), 'beer', 1.6); } else this.sim.say(p, 'сладко, но сыт', 'beer', 1.4);
-      this.save(); this.renderHUD();
+      this.save(); this.renderHUD(); this.quests?.onEvent(kind === 'coin' ? 'coin' : 'candy', 0); // конфеты и монеты журнал не пишут: квест отсюда
     });
   }
   // --- арканы таро
@@ -631,7 +631,7 @@ export class Game {
       <div class="hudRow">${this.hearts(g)}${'<span class="sh" title="щит: примет одну рану или укус">🎃</span>'.repeat(Math.max(0, g.shields | 0))}</div>
       <div class="hudRow"><span class="tl" title="друзья в хвосте">💚 ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">XP ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
       <div class="hudRow"><span class="skc" title="черепа">💀 ${st.kills}</span><span class="frc" title="друзей всего">🤝 ${st.friends}</span><span class="vc" title="заведений">🎃 ${g.seenVenues.length}</span><button class="deck tc" title="арканы: открыть колоду">🃏 ${g.tarot.length}/${ARCANA.length}</button><span class="cn">🪙 ${g.coins}</span><span class="tk" title="спас-броски: переброс d20 после провала или проигранной дуэли">🎟 ${g.tokens | 0}</span>${this.cards ? this.cards.myCardHtml() : ''}${g.deaths ? `<span class="dc">☠ ${g.deaths}</span>` : ''}</div>
-      ${this.cards ? this.cards.hudHtml() : ''}
+      ${this.cards ? this.cards.hudHtml() : ''}${this.quests ? this.quests.hudHtml() : ''}
       <div class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по панели — взять управление'}</div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
   }

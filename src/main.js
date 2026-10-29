@@ -10,6 +10,7 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game, fmtAt } from './game.js';
 import { Cards } from './cards.js';
+import { Quests } from './quests.js';
 import { beaten } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
 import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf } from './rules.js';
@@ -135,6 +136,7 @@ if (fromLink && !mine.some(d => d.seed === fromLink.seed && d.name === fromLink.
   const playable = mine.find(d => d.player && !d.guest && !d.dead) || mine.find(d => !d.guest && !d.dead);
   if (playable) { const a = sim.agents.find(x => x.def === playable); if (a) { game.setPlayer(a); flyTo(a.x, a.z); } }
 }
+const quests = new Quests({ game, sim }); game.quests = quests; // онбординг: цепочка квестов на устройство
 game.renderHUD(); cards.start();
 
 // --- меню настроек и действий
@@ -243,7 +245,7 @@ function renderProfile(a) {
 }
 function openProfile(a) { if (!a || !a.custom) return; profileAgent = a; renderProfile(a); $('profile').hidden = false; }
 // --- журнал персонажа: лента боёв, набегов и находок в профиле; клик по записи с участником открывает его карточку
-const LOG_ICON = { card: '🎴', cardBit: '🩸', hand: '🏆', kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
+const LOG_ICON = { card: '🎴', cardBit: '🩸', hand: '🏆', quest: '🎯', kill: '💀', friend: '💚', fail: '💢', spawn: '🪦', bit: '🩸', win: '👑', lost: '🌫', raid_bit: '🩸', raid_beaten: '👑', raid_lost: '🌫', tarot: '🃏', visit: '🎃', buy: '🛍', death: '☠', rip: '☠', rps: '🎲' };
 function logText(e, fem) {
   const v = (m, f) => fem ? f : m, nm = esc(e.name || '?'), his = e.gender === 'f' ? 'а' : '';
   const vs = `${e.foe ?? '?'}${e.bonus ? '+' + e.bonus : ''} против ${e.roll ?? '?'}${e.meBonus ? '+' + e.meBonus : ''}`;
@@ -262,6 +264,7 @@ function logText(e, fem) {
     case 'card': return `${esc(e.cardName || e.card || 'карта')} ${beaten(e.rank)}: ${nm}, ${vs}`;
     case 'cardBit': return `${nm} (${esc(e.card || '?')}) укусил${his}, ${vs}`;
     case 'hand': return `рука собрана: ${esc(e.name || '?')} ×${e.mult ?? 1}, +${e.xp ?? 0} XP`;
+    case 'quest': return `квест «${esc(e.title || e.id || '?')}»: +${e.bonus ?? 0} XP`;
     case 'tarot': return `аркана ${nm}`;
     case 'visit': return `заведение ${nm}`;
     case 'buy': return `купил${v('', 'а')} ${esc(e.item || '')}`;
@@ -606,5 +609,5 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');
