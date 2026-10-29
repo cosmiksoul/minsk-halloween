@@ -4,7 +4,7 @@
 const LS = 'minsk-skeletons.custom';
 
 // счёт для доски почёта считается в rules.js (накопитель у v2, старая формула у прежнего прогресса)
-import { scoreOf } from './rules.js';
+import { scoreOf, statsOf } from './rules.js';
 export { scoreOf };
 
 export const local = {
@@ -31,16 +31,21 @@ export class Remote {
       this.ok = true; const text = await r.text(); return text ? JSON.parse(text) : null; // на return=minimal сервер отвечает 201 с пустым телом
     } catch (e) { this.ok = false; this.lastError = String(e); console.warn('remote', e); return null; }
   }
-  // сохранить / обновить своего скелета вместе с игровым прогрессом
+  // сохранить / обновить своего скелета вместе с игровым прогрессом: костюм, стак и счётчики; позиция в сеть не уходит
   upsert(def, game) {
-    const row = { id: deviceId() + ':' + def.seed, device: deviceId(), name: def.name, gender: def.gender, age: def.age, job: def.job, arch: def.arch, seed: def.seed,
-      hp: game?.hp ?? 3, kills: game?.skulls?.length ?? 0, friends: game?.friends?.length ?? 0, visits: game?.visits?.length ?? 0, deaths: game?.deaths ?? 0, tarot: game?.tarot?.length ?? 0, coins: game?.coins ?? 0, score: scoreOf(game), x: game?.x ?? null, z: game?.z ?? null, updated_at: new Date().toISOString() };
+    const st = statsOf(game);
+    const row = { id: deviceId() + ':' + def.seed, device: deviceId(), name: def.name, gender: def.gender, age: def.age, job: def.job, arch: def.arch, seed: def.seed, costume: def.costume ?? null,
+      hp: game?.hp ?? 3, kills: st.kills, friends: st.friends, visits: st.visits, deaths: st.deaths, tarot: st.tarot, coins: game?.coins ?? 0, score: st.score, wins: st.wins, losses: st.losses, hearts: st.hearts, tail: st.tail, updated_at: new Date().toISOString() };
     return this.call(this.table + '?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
   }
-  // чужие скелеты: последние активные, кроме своих
-  others(limit = 30) { return this.call(`${this.table}?select=id,name,gender,age,job,arch,seed,kills,friends,hp,updated_at&device=neq.${encodeURIComponent(deviceId())}&order=updated_at.desc&limit=${limit}`); }
-  // доска почёта
-  top(limit = 10) { return this.call(`${this.table}?select=id,device,name,job,arch,kills,friends,visits,deaths,tarot,score,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
+  // чужие скелеты: последние активные, кроме своих; с костюмом и счётом — это же пул охотников
+  others(limit = 30) { return this.call(`${this.table}?select=id,device,name,gender,age,job,arch,seed,costume,kills,friends,hp,score,updated_at&device=neq.${encodeURIComponent(deviceId())}&order=updated_at.desc&limit=${limit}`); }
+  // доска почёта: счёт и живой стак
+  top(limit = 10) { return this.call(`${this.table}?select=id,device,name,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
+  // набег: стычка чужого охотника с моим скелетом (пишет клиент жертвы)
+  logEncounter(row) { return this.call('encounters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); }
+  // набеги с моим участием (как охотник или жертва) новее отметки
+  raids(sinceIso, limit = 50) { const me = encodeURIComponent(deviceId()); return this.call(`encounters?or=(hunter_device.eq.${me},victim_device.eq.${me})&at=gt.${encodeURIComponent(sinceIso)}&order=at.desc&limit=${limit}`); }
   remove(def) { return this.call(`${this.table}?id=eq.${encodeURIComponent(deviceId() + ':' + def.seed)}`, { method: 'DELETE' }); }
 }
 

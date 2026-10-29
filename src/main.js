@@ -366,7 +366,7 @@ $('mineList').onclick = e => {
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
 const SCORE_HINT = 'счёт: победа +2, поражение −1, аркана +5, новое заведение +1';
-function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
+function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="st" title="сердца и хвост">❤ ${r.hearts ?? '?'} · 💚 ${r.tail ?? 0}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
   const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses }; }).sort((a, b) => b.score - a.score);
