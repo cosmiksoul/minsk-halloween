@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip, GHOSTS } from './skeletons.js';
 import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES } from './bio.js';
 import { Graph } from './graph.js';
+import { CUT, shouldCut } from './rules.js';
+import { segmentClear } from './geo.js';
 export { Graph };
 
 const WALK_SPEED = 3.4; // м/с: скелеты выше людей, поэтому и шаг шире
@@ -130,6 +132,7 @@ export class Sim {
   setHeight(h) { this.H = h; for (const a of this.agents) a.sprite.scale.set(h * FW / FH, h, 1); }
 
   place(a) {
+    if (a.free || a.state === 'cut') { a.sprite.position.set(a.x, 0.5, a.z); return; } // вне графа координаты хранятся прямо
     const g = this.graph; a.x = g.x[a.from] + (g.x[a.to] - g.x[a.from]) * a.t; a.z = g.z[a.from] + (g.z[a.to] - g.z[a.from]) * a.t;
     a.sprite.position.set(a.x, 0.5, a.z);
   }
@@ -139,7 +142,7 @@ export class Sim {
   // улица для журнала: имя узла, иначе ближайший именованный узел в 150 м, иначе «во дворах»
   streetOf(a) { const g = this.graph; return g.names[a.from] || g.names[a.to] || g.nearestNamed(a.x, a.z, 150) || 'во дворах'; }
   // поставить скелета в узел графа
-  teleport(a, node) { const g = this.graph; a.from = node; const e = pick(a.rng, g.adj[node]); a.to = e ? e.to : node; a.len = e ? e.len : 1; a.t = 0; a.path = null; a.stopT = null; a.target = null; this.place(a); }
+  teleport(a, node) { const g = this.graph; a.free = false; a.cut = null; a.lastLeg = null; if (a.state === 'cut') a.state = 'idle'; a.from = node; const e = pick(a.rng, g.adj[node]); a.to = e ? e.to : node; a.len = e ? e.len : 1; a.t = 0; a.path = null; a.stopT = null; a.target = null; this.place(a); }
 
   startTalk(a, b) {
     a.state = b.state = 'talk'; a.partner = b; b.partner = a;
@@ -167,6 +170,7 @@ export class Sim {
   // убитый скелет становится призраком: прохожий голубым, упокоенный игрок золотым
   ghostify(a, kind = 'npc') {
     if (a.ghost) return;
+    if (a.free || a.state === 'cut') this.snap(a);
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
     if (a.leader) this.unfriend(a);
     this.leaveVenue(a);
@@ -203,8 +207,11 @@ export class Sim {
   // автопилот: без управления свой скелет гуляет, пьёт и танцует как все
   setAuto(a, on) {
     if (a.state === 'dead') { a.auto = on; return; } // мёртвый лежит до респауна, что бы ни нажимали
+    if (a.state === 'cut') this.stop(a);
     if (a.auto === on) return;
-    a.auto = on; a.path = null; a.stopT = null; a.target = null; a.dest = null; a.script = null;
+    // отпустили управление на газоне: сначала срезкой на ближайшее ребро (auto включится по приходе), иначе встать на него сразу
+    if (on && a.free) { const P = this.graph.nearestEdgePoint(a.x, a.z, CUT.snapR); if (P && this.clear(a.x, a.z, P.x, P.z, true)) { this.startCut(a, P.x, P.z, { kind: 'auto', P }, false); return; } this.snap(a); }
+    a.auto = on; a.path = null; a.stopT = null; a.target = null; a.dest = null; a.script = null; a.lastLeg = null;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
     this.leaveVenue(a); a.waitFor = null;
     if (on) { a.state = 'walk'; a.cooldown = 4; a.thirst = 30 + a.rng() * 120; if (a.from === a.to) this.teleport(a, a.from); }
@@ -214,45 +221,90 @@ export class Sim {
   drive(a, on) {
     a.driven = !!on;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
-    this.leaveVenue(a); a.script = null; a.path = null; a.stopT = null; a.target = null; a.waitFor = null; a.dest = null;
+    this.leaveVenue(a); a.script = null; a.path = null; a.stopT = null; a.target = null; a.waitFor = null; a.dest = null; a.lastLeg = null;
+    if (a.free || a.state === 'cut') this.snap(a);
     if (on) a.state = 'idle'; else { a.state = 'walk'; a.cooldown = 6; if (a.from === a.to) this.teleport(a, a.from); }
   }
   edgePoint(node, x, z) { return this.graph.edgePoint(node, x, z); }
-  // идти к точке (x, z): по графу до ближайшего узла, а если точка лежит на ребре рядом — до самой точки (a.stopT)
-  moveTo(a, x, z) {
-    const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
-    // после прямого подхода (охотник) агент стоит вне ребра: сначала ставим его на ближайший узел
-    if (a.state === 'approach' || (a.from === a.to && Math.hypot(a.x - g.x[a.from], a.z - g.z[a.from]) > 3)) { const n = g.nearest(a.x, a.z, 140); if (n >= 0) this.teleport(a, n); if (a.state === 'approach') a.state = 'idle'; }
-    const ep = this.edgePoint(node, x, z); a.stopT = null;
-    // точка на текущем ребре: дойти до неё или развернуться, не бегая через узлы
-    if (ep && a.from !== a.to && ((a.from === node && a.to === ep.to) || (a.from === ep.to && a.to === node))) {
-      const s = a.from === node ? ep.t : 1 - ep.t;
-      if (a.t > s) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; a.stopT = 1 - s; } else a.stopT = s;
-      a.path = []; a.dest = node; a.state = 'walk'; a.timer = 0; a.routeCost = Math.abs(a.stopT - a.t) * a.len; return true;
-    }
-    // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
-    let best = null;
-    const tryFrom = (start, pre, swap) => { const r = g.route(start, node); if (r && (!best || r.cost + pre < best.cost)) best = { nodes: r.nodes, cost: r.cost + pre, swap }; };
-    if (a.from === a.to || a.t <= 0) { tryFrom(a.from, 0, false); if (best) { a.to = a.from; a.t = 0; } }
-    else { tryFrom(a.to, (1 - a.t) * a.len, false); tryFrom(a.from, a.t * a.len, true); }
-    if (!best) return false;
-    if (best.swap) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; }
-    a.path = best.nodes; a.dest = node; a.state = 'walk'; a.timer = 0; a.routeCost = best.cost;
-    if (ep) {
-      // по какому ребру приходим в узел: если по тому, где лежит точка, встать на ней; иначе дойти до узла и свернуть к точке
-      const n = a.path.length, atNode = a.from === a.to;
-      const prev = n >= 2 ? a.path[n - 2] : n === 1 ? (atNode ? a.from : a.to) : (atNode ? -1 : a.from);
-      if (prev === ep.to) a.stopT = 1 - ep.t; else { a.path.push(ep.to); a.stopT = ep.t; }
-    }
-    if (a.from === a.to) { if (a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; a.t = 0; } else { a.state = 'idle'; a.dest = null; } }
-    return true;
+  // свободен ли отрезок для срезки: препятствия загруженных тайлов через blockedAt (без него всё открыто).
+  // Точки графа открыты по определению (по ним ходит весь город, хоть тротуар у проспекта и лежит в ленте дороги,
+  // а вход в арку — на контуре дома): свою точку не проверяем, конец тоже, если он на графе (endOpen); газон проверяем
+  clear(ax, az, bx, bz, endOpen = false) {
+    const isB = this.blockedAt || (() => false); const len = Math.hypot(bx - ax, bz - az);
+    if (len <= CUT.step) return endOpen || !isB(bx, bz);
+    const k = CUT.step / len, ex = endOpen ? bx - (bx - ax) * k : bx, ez = endOpen ? bz - (bz - az) * k : bz;
+    return segmentClear(ax + (bx - ax) * k, az + (bz - az) * k, ex, ez, CUT.step, isB);
   }
-  stop(a) { a.path = null; a.stopT = null; a.dest = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
+  // мгновенно поставить свободного агента на ближайшее ребро (призраки, запасной случай)
+  snap(a) {
+    const g = this.graph; const P = g.nearestEdgePoint(a.x, a.z, CUT.snapR);
+    a.free = false; a.cut = null; a.lastLeg = null; if (a.state === 'cut') a.state = 'idle';
+    if (P) { a.from = P.from; a.to = P.to; a.t = P.t; a.len = Math.hypot(g.x[P.to] - g.x[P.from], g.z[P.to] - g.z[P.from]) || 0.1; this.place(a); }
+    else this.teleport(a, g.nearest(a.x, a.z, 1e9));
+  }
+  // запасной путь: вернуться в точку начала срезки (она на графе по построению) и встать на ребро там
+  snapBack(a) { if (a.cutFrom) { a.x = a.cutFrom.x; a.z = a.cutFrom.z; } this.snap(a); }
+  // начать срезку: прямой ход к (x, z), по приходе — then (встать на граф, остаться свободным, применить план, включить автопилот)
+  startCut(a, x, z, then, say) {
+    if (!a.free && a.state !== 'cut') a.cutFrom = { x: a.x, z: a.z };
+    a.cut = { x, z, then }; a.state = 'cut'; a.path = null; a.stopT = null; a.dest = null; a.target = null; a.lastLeg = null;
+    a.routeCost = Math.hypot(x - a.x, z - a.z) + (then.plan ? then.plan.cost : 0);
+    if (say && a.rng() < CUT.say) this.say(a, pick(a.rng, LINES.cut), '', 1.6);
+  }
+  // положение на графе в конце плана: точка на ребре или узел
+  endPose(plan) { return plan.ep ? { from: plan.node, to: plan.ep.to, t: plan.ep.t } : { from: plan.node, to: plan.node, t: 0 }; }
+  // применить план маршрута к агенту (прежняя запись moveTo: разворот, путь, точка на ребре, цена)
+  applyPlan(a, plan) {
+    const g = this.graph; a.stopT = null;
+    if (plan.onEdge) {
+      if (plan.swap) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; }
+      a.stopT = plan.stopT; a.path = []; a.dest = plan.node; a.state = 'walk'; a.timer = 0; a.routeCost = plan.cost; return;
+    }
+    if (plan.atNode) { a.to = a.from; a.t = 0; } else if (plan.swap) { const f = a.from; a.from = a.to; a.to = f; a.t = 1 - a.t; }
+    a.path = plan.nodes.slice(); a.dest = plan.node; a.state = 'walk'; a.timer = 0; a.routeCost = plan.cost; a.stopT = plan.stopT;
+    if (a.from === a.to) { if (a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; a.t = 0; } else { a.state = 'idle'; a.dest = null; } }
+  }
+  // применить план и запомнить последний отрезок до точки вне графа; план нулевой длины (цель у своего узла) — отрезок стартует сразу
+  applyLeg(a, plan, lastLeg) { this.applyPlan(a, plan); a.lastLeg = lastLeg || null; if (a.state === 'idle') this.lastLegCut(a); }
+  // идти к точке (x, z): по графу до ближайшего узла или точки на ребре (a.stopT); с opts.cut управляемый скелет срезает напрямик,
+  // когда цель близко, а дорожка ведёт вокруг и прямая свободна; клик по газону доводит до самой точки последним отрезком;
+  // со свободной точки сначала возвращаемся на ближайшее ребро
+  moveTo(a, x, z, opts = {}) {
+    const g = this.graph;
+    // после прямого подхода (охотник) агент стоит вне ребра: сначала ставим его на ближайший узел
+    if (a.state === 'approach' || (!a.free && a.state !== 'cut' && a.from === a.to && Math.hypot(a.x - g.x[a.from], a.z - g.z[a.from]) > 3)) { const n = g.nearest(a.x, a.z, 140); if (n >= 0) this.teleport(a, n); if (a.state === 'approach') a.state = 'idle'; }
+    if (a.state === 'cut') { a.state = 'idle'; a.cut = null; a.free = true; } // новый приказ посреди срезки: считаем от текущей точки
+    a.lastLeg = null;
+    const node = g.nearest(x, z, 140); if (node < 0 && !opts.cut) return false;
+    let P = null;
+    if (a.free) { P = g.nearestEdgePoint(a.x, a.z, CUT.snapR); if (!P) this.snapBack(a); }
+    const pos = a.free ? { from: P.from, to: P.to, t: P.t, len: Math.hypot(g.x[P.to] - g.x[P.from], g.z[P.to] - g.z[P.from]) || 0.1 } : { from: a.from, to: a.to, t: a.t, len: a.len };
+    const plan = node >= 0 ? g.planRoute(pos, x, z) : null;
+    const d = Math.hypot(x - a.x, z - a.z);
+    const L = plan ? Math.hypot(x - plan.endX, z - plan.endZ) : 0; // остаток от конца дорожки до самой точки
+    const R = plan ? plan.cost + L + (a.free ? P.d : 0) : null;    // столько пройдёт культурный минчанин по дорожкам и газону
+    const onGraph = !!plan && L <= CUT.onPath; // цель на дорожке (узел, прохожий, конфета) или на газоне
+    if (opts.cut && shouldCut(d, R) && this.clear(a.x, a.z, x, z, onGraph)) {
+      const then = onGraph ? { kind: 'graph', ...this.endPose(plan), node: plan.ep ? -1 : plan.node } : { kind: 'free' };
+      this.startCut(a, x, z, then, true); return true;
+    }
+    if (!plan) return false;
+    const lastLeg = opts.cut && L > CUT.onPath && L <= CUT.maxDist ? { x, z } : null;
+    if (a.free) {
+      if (this.clear(a.x, a.z, P.x, P.z, true)) { this.startCut(a, P.x, P.z, { kind: 'plan', P, plan, lastLeg }, false); return true; }
+      this.snapBack(a); const plan2 = g.planRoute({ from: a.from, to: a.to, t: a.t, len: a.len }, x, z); if (!plan2) return false;
+      this.applyLeg(a, plan2, lastLeg); return true;
+    }
+    this.applyLeg(a, plan, lastLeg); return true;
+  }
+  stop(a) { if (a.state === 'cut') { a.state = 'idle'; a.free = true; a.cut = null; } a.path = null; a.stopT = null; a.dest = null; a.lastLeg = null; if (a.state === 'walk' || a.state === 'approach') a.state = 'idle'; }
   // прямой подход вне графа (последние метры охотника к игроку, как у попутчиков): цель в метрах, путь не нужен
   approach(a, x, z) { a.state = 'approach'; a.ax = x; a.az = z; a.path = null; a.stopT = null; a.dest = null; }
   // стоим на узле заведения?
   venueAt(a) { return a.from === a.to || a.t < 0.05 ? this.venueNode.get(a.from) : a.t > 0.95 ? this.venueNode.get(a.to) : null; }
 
+  // конец маршрута к точке вне графа (клик по газону): последние метры напрямик, если прямая свободна; иначе остаёмся на дорожке
+  lastLegCut(a) { const l = a.lastLeg; if (!l) return false; a.lastLeg = null; if (!this.clear(a.x, a.z, l.x, l.z)) return false; this.startCut(a, l.x, l.z, { kind: 'free' }, false); return true; }
   updatePlayer(a, dt) {
     const g = this.graph;
     if (a.state === 'walk') {
@@ -260,15 +312,29 @@ export class Sim {
       a.t += a.speed * (a.speedMul || 1) * dt / a.len;
       // цель посреди ребра (прохожий, конфета): встаём на точке, не доходя до узла; onArrive без узла, чтобы не «зайти» в бар в 30 м
       if (a.stopT != null && !(a.path && a.path.length) && a.t >= a.stopT) {
-        a.t = a.stopT; a.stopT = null; a.state = 'idle'; a.dest = null; a.path = null; this.place(a); if (this.onArrive) this.onArrive(a, -1); return;
+        a.t = a.stopT; a.stopT = null; a.state = 'idle'; a.dest = null; a.path = null; this.place(a); if (this.lastLegCut(a)) return; if (this.onArrive) this.onArrive(a, -1); return;
       }
       while (a.t >= 1 && a.state === 'walk') {
         a.from = a.to; a.t = 0;
         if (a.path && a.path.length) { a.to = a.path.shift(); a.len = Math.hypot(g.x[a.to] - g.x[a.from], g.z[a.to] - g.z[a.from]) || 0.1; }
-        else { a.to = a.from; a.state = 'idle'; const d = a.dest; a.dest = null; a.path = null; this.place(a); if (this.onArrive) this.onArrive(a, d); }
+        else { a.to = a.from; a.state = 'idle'; const d = a.dest; a.dest = null; a.path = null; this.place(a); if (this.lastLegCut(a)) break; if (this.onArrive) this.onArrive(a, d); }
       }
       if (a.state === 'walk') { this.place(a); const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from]; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; }
       // след для друзей
+      const tr = a.trail; if (tr) { const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
+    } else if (a.state === 'cut') {
+      // срезка: по прямой к точке со своей скоростью и множителем «штормит», с анимацией ходьбы и следом для друзей
+      const c = a.cut; if (!c) { a.state = 'idle'; a.free = true; return; }
+      const dx = c.x - a.x, dz = c.z - a.z, d = Math.hypot(dx, dz); const step = a.speed * (a.speedMul || 1) * dt;
+      if (d > Math.max(step, 0.5)) { a.x += dx / d * step; a.z += dz / d * step; a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1; a.sprite.position.set(a.x, 0.5, a.z); }
+      else {
+        a.x = c.x; a.z = c.z; a.cut = null; const th = c.then; const g2 = this.graph;
+        const stand = P => { a.from = P.from; a.to = P.to; a.t = P.t; a.len = P.from === P.to ? 1 : Math.hypot(g2.x[P.to] - g2.x[P.from], g2.z[P.to] - g2.z[P.from]) || 0.1; a.free = false; this.place(a); };
+        if (th.kind === 'graph') { stand(th); a.state = 'idle'; if (this.onArrive) this.onArrive(a, th.node); }
+        else if (th.kind === 'free') { a.free = true; a.state = 'idle'; a.sprite.position.set(a.x, 0.5, a.z); }
+        else if (th.kind === 'plan') { stand(th.P); this.applyLeg(a, th.plan, th.lastLeg); }
+        else if (th.kind === 'auto') { stand(th.P); a.state = 'idle'; this.setAuto(a, true); }
+      }
       const tr = a.trail; if (tr) { const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
     } else if (a.state === 'approach') {
       const dx = a.ax - a.x, dz = a.az - a.z, d = Math.hypot(dx, dz);
@@ -382,7 +448,7 @@ export class Sim {
     this.time += dt; const g = this.graph;
     for (const a of this.agents) {
       a.anim += dt; a.cooldown -= dt;
-      if ((a.player && !a.auto) || a.driven) this.updatePlayer(a, dt);
+      if ((a.player && !a.auto) || a.driven || a.state === 'cut') this.updatePlayer(a, dt);
       else if (a.state === 'follow') this.updateFollower(a, dt);
       else if (a.state === 'walk') {
         a.t += a.speed * dt / a.len;
@@ -410,7 +476,7 @@ export class Sim {
       let f;
       if (a.ghost) f = FRAMES.idle[0] + (Math.floor(a.anim * 2) % 2);
       else switch (a.state) {
-        case 'walk': case 'approach': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
+        case 'walk': case 'approach': case 'cut': f = FRAMES.walk[Math.floor(a.anim * 6) % 4]; break;
         case 'follow': f = a.moving ? FRAMES.walk[Math.floor(a.anim * 6) % 4] : FRAMES.idle[0]; break;
         case 'dance': f = FRAMES.dance[Math.floor(a.anim * 4) % 4]; break;
         case 'drink': f = FRAMES.drink[Math.floor(a.anim * 1.5) % 2]; break;
