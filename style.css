@@ -81,8 +81,7 @@ button.green:hover { background:#7cff52; color:var(--black); }
 .hudHint { color:var(--muted); font-size:9px; line-height:1.4; }
 i.hp { font-style:normal; color:#3a2a55; font-size:16px; line-height:1; margin-right:1px; }
 i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
-.sh { background:#2a1a08; border:1px solid var(--accent); border-radius:4px; padding:0 4px; font-size:11px; color:var(--accent); }
-.sh small { font-size:8px; margin-left:2px; }
+.sh { background:#2a1a08; border:1px solid var(--accent); border-radius:4px; padding:0 3px; font-size:11px; color:var(--accent); cursor:help; }
 .skc { color:var(--green); } .frc { color:#7cff52; } .vc { color:var(--accent); } .dc { color:#ff5f5f; }
 /* стак, счёт и угроза */
 .tl { color:#7cff52; } .pts { color:var(--gold, #ffd23a); font-weight:bold; }

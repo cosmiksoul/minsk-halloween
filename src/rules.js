@@ -147,7 +147,7 @@ export function statsOf(g) {
   const v2 = g.v === 2, log = Array.isArray(g.log) ? g.log : [];
   return {
     score: scoreOf(g), kills: v2 ? num(g.kills) : (g.skulls?.length ?? 0), friends: v2 ? num(g.friendsTotal, log.filter(e => e.kind === 'friend').length) : (g.friends?.length ?? 0),
-    tarot: g.tarot?.length ?? 0, visits: g.visits?.length ?? 0, hearts: num(g.maxHp, CAPS.baseHearts), tail: v2 ? (g.tail?.length ?? 0) : Math.min(CAPS.tail, g.friends?.length ?? 0),
+    tarot: g.tarot?.length ?? 0, visits: v2 && Array.isArray(g.seenVenues) ? g.seenVenues.length : (g.visits?.length ?? 0), hearts: num(g.maxHp, CAPS.baseHearts), tail: v2 ? (g.tail?.length ?? 0) : Math.min(CAPS.tail, g.friends?.length ?? 0),
     wins: num(g.wins), losses: num(g.losses), deaths: num(g.deaths),
   };
 }

@@ -443,8 +443,8 @@ async function renderShare() {
   renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
   $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
 }
-function openShare() { if (!game.player) return; $('share').hidden = false; $('shrNative').hidden = !navigator.share; renderShare(); }
-$('shrClose').onclick = () => { $('share').hidden = true; };
+function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; renderShare(); }
+$('shrClose').onclick = () => { if (game.modal === 'share') game.setModal(null); };
 for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
 const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: ★ ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
 $('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
