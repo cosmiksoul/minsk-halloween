@@ -73,7 +73,13 @@ export class Game {
     drawCardBack($('tBackCv'));
     this.hudAcc = 0;
     $('askSweet').onclick = () => this.choose('friend'); $('askTrick').onclick = () => this.choose('kill'); $('askNo').onclick = () => this.closeDialog();
-    addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeDialog(); if (this.selected) this.select(false); } });
+    addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      // сначала закрываем верхнюю модалку, управление отпускаем только когда ничего не открыто
+      for (const id of ['tarot', 'deck', 'shop', 'share']) if (!$(id).hidden) { $(id).hidden = true; return; }
+      if (!$('ask').hidden) { this.closeDialog(); return; }
+      if (this.selected) this.select(false);
+    });
   }
   get g() { return this.player ? this.player.def.game : null; }
   // сбросить текущую цель броска и отпустить скелета, который её ждал
@@ -109,6 +115,7 @@ export class Game {
   }
   save() { const g = this.g; if (!g) return; g.x = Math.round(this.player.x); g.z = Math.round(this.player.z); this.o.save(); if (this.o.onChange) this.o.onChange(); }
   select(on) {
+    if (on && this.player && this.player.state === 'dead') return; // мёртвым не управляют: ждём респауна
     this.selected = !!on && !!this.player; this.ring.visible = this.selected;
     if (this.player) { if (!this.selected) this.dropPending(); this.closeDialog(); this.sim.setAuto(this.player, !this.selected); }
     this.renderHUD(); document.body.classList.toggle('playing', this.selected);
@@ -257,7 +264,7 @@ export class Game {
       }
       const now = this.sim.time; const n0 = this.shields.length; this.shields = this.shields.filter(s => s.until > now); if (n0 !== this.shields.length) this.renderHUD();
     }
-    if (this.tarot) this.tarot.update(t, p, Math.max(9, H * 0.9), it => this.collect(it));
+    if (this.tarot) this.tarot.update(t, p, 12, it => this.collect(it));
     this.candies.update(p, H, t, kind => {
       const g = this.g;
       if (kind === 'coin') { g.coins++; this.sim.say(p, '🪙 +1', 'beer', 1.6); }
@@ -272,7 +279,9 @@ export class Game {
     if (g.tarot.some(t => t.id === it.a.id)) { this.tarot.markDone(it.a.id); return; }
     g.tarot.push({ id: it.a.id, at: clock() }); this.tarot.markDone(it.a.id);
     this.sim.say(this.player, `🃏 ${it.a.roman} ${it.a.name}`, 'music', 3);
-    this.save(); this.renderHUD(); this.o.showCard(this.player, true); this.showTarot(it.a, true);
+    this.save(); this.renderHUD(); this.o.showCard(this.player, true);
+    // на автопилоте карта ложится в колоду молча: модалка посреди чужих дел только мешает
+    if (!this.player.auto) this.showTarot(it.a, true);
   }
   showTarot(a, isNew) {
     const box = $('tarot'); box.hidden = false; const inner = $('tInner');

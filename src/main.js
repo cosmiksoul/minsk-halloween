@@ -159,7 +159,7 @@ function closeMine() { $('mine').hidden = true; }
 function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
 
 let rotateTo = null, follow = null, cardAgent = null;
-function flyTo(x, z) { const off = camera.position.clone().sub(controls.target); controls.target.set(x, 0, z); camera.position.copy(controls.target).add(off); }
+function flyTo(x, z) { follow = null; const off = camera.position.clone().sub(controls.target); controls.target.set(x, 0, z); camera.position.copy(controls.target).add(off); }
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 function showCard(a, refresh) {
@@ -226,7 +226,7 @@ function showTarotMarker(it) {
   const done = game.g && game.g.tarot.some(t => t.id === it.a.id);
   $('pName').textContent = done ? `${it.a.roman} · ${it.a.name}` : 'аркана таро';
   $('pType').textContent = done ? 'найдена' : 'ещё не найдена' + (it.node < 0 ? ' · вне пешеходной сети' : '');
-  $('pAddr').textContent = it.a.place; $('pInside').textContent = done ? '' : 'подойди своим скелетом, чтобы открыть';
+  $('pAddr').textContent = it.a.place; $('pInside').textContent = done ? '' : 'дойди до зелёной метки на тротуаре рядом, и карта откроется';
   $('pWeb').innerHTML = done ? '<a href="#" id="pOpenCard">посмотреть карту</a>' : '';
   if (done) $('pOpenCard').onclick = e => { e.preventDefault(); game.showTarot(it.a, false); };
   $('pGo').hidden = !(game.player && it.node >= 0 && !done); $('pGo').textContent = '🃏 дойти своим скелетом';
@@ -245,6 +245,9 @@ function showVenue(v) {
 // заметное здание: имя, адрес и описание из таблицы или только имя из OSM
 function showBuilding(b) {
   resetPopup(); const info = b.info || (b.landmark ? b.landmark : null); popupBld = { x: b.cx ?? b.x, z: b.cz ?? b.z, top: b.h || 10 };
+  // в этом здании спрятана аркана: «дойти» ведёт к её точке подбора на тротуаре
+  const arc = tarot.items.find(it => !it.done && (it.x - popupBld.x) ** 2 + (it.z - popupBld.z) ** 2 < 60 * 60);
+  if (arc) { popupBld.go = [arc.nx, arc.nz]; $('pHours').textContent = '🃏 здесь спрятана аркана таро: иди к зелёной метке на тротуаре'; }
   $('pName').textContent = info ? info.name : b.n;
   $('pType').textContent = info ? (b.t ? TYPE_LABEL[b.t] || 'здание' : 'достопримечательность') : (TYPE_LABEL[b.t] || 'здание') + (b.h ? ` · примерно ${Math.max(1, Math.round(b.h / 3.2))} эт.` : '');
   $('pAddr').textContent = info && info.addr ? 'адрес: ' + info.addr : '';
@@ -259,7 +262,7 @@ function updatePopup() {
 $('pClose').onclick = closePopup;
 $('pGo').onclick = () => {
   if (!game.player) return; takeControl(game.player);
-  if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.nx, popupTarot.nz); else if (popupShop) game.clickShop(popupShop); else if (popupBld) game.clickGround(popupBld.x, popupBld.z);
+  if (popupVenue) game.clickVenue(popupVenue); else if (popupTarot) game.clickGround(popupTarot.nx, popupTarot.nz); else if (popupShop) game.clickShop(popupShop); else if (popupBld) { const [gx, gz] = popupBld.go || [popupBld.x, popupBld.z]; game.clickGround(gx, gz); }
 };
 
 // --- списки: места (с «рядом»), афиша, лидеры
@@ -272,14 +275,15 @@ function renderPlaces() {
     const near = [];
     for (const v of venues) if (v.node >= 0) near.push({ d: distTo(v, p), label: `🎃 ${v.name}`, go: () => { flyTo(v.x, v.z); showVenue(v); } });
     for (const s of shops.items) if (s.node >= 0) near.push({ d: distTo(s, p), label: `🛍 ${s.name}`, go: () => { flyTo(s.x, s.z); showShopPopup(s); } });
-    for (const t of tarot.items) if (t.node >= 0 && !t.done) near.push({ d: distTo(t, p), label: `🃏 аркана · ${t.a.place.split(',')[0]}`, go: () => { flyTo(t.x, t.z); showTarotMarker(t); } });
+    for (const t of tarot.items) if (t.node >= 0 && !t.done) near.push({ d: Math.hypot(t.nx - p.x, t.nz - p.z), label: `🃏 аркана · ${t.a.place.split(',')[0]}`, go: () => { flyTo(t.x, t.z); showTarotMarker(t); } });
     near.sort((a, b) => a.d - b.d); nearItems = near.slice(0, 6);
     html += '<div class="day">рядом с вами</div>' + nearItems.map((n, i) => `<div class="near" data-n="${i}"><span>${esc(n.label)}</span><span class="d">${fmtDist(n.d)}</span></div>`).join('');
   }
   const list = [...venues].filter(v => v.node >= 0).sort((a, b) => (b.inside * 3 + b.visits + b.events.length * 5) - (a.inside * 3 + a.visits + a.events.length * 5)).slice(0, 18);
   html += '<div class="day">самые людные</div>' + list.map(v => `<div class="item" data-v="${v.id}"><span class="n">${esc(v.name)}</span><span class="r">${skulls(v, mx)}</span><span class="s">${VENUE_TYPES[v.type] || v.type}${v.addr ? ' · ' + esc(v.addr) : ''}${v.inside ? ` · внутри ${v.inside}` : ''}${v.events.length ? ' · <b>афиша</b>' : ''}</span></div>`).join('');
-  $('tabPlaces').innerHTML = html;
+  if (html !== lastPlacesHtml) { lastPlacesHtml = html; $('tabPlaces').innerHTML = html; }
 }
+let lastPlacesHtml = '';
 let nearItems = [];
 $('tabPlaces').onclick = e => { const nr = e.target.closest('.near'); if (nr) { nearItems[+nr.dataset.n]?.go(); return; } const it = e.target.closest('.item'); if (!it) return; const v = venues[+it.dataset.v]; flyTo(v.x, v.z); showVenue(v); };
 function renderEvents() {
@@ -380,6 +384,8 @@ canvas.addEventListener('pointerup', e => {
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const onGround = !!ray.ray.intersectPlane(groundPlane, hit);
+  const th = ray.intersectObjects(tarot.pickables, false);
+  if (th.length) { showTarotMarker(tarot.byId[th[0].object.userData.tarot.id]); return; }
   const a = onGround ? sim.pickAgent(ray, hit.x, hit.z) : null;
   if (a) {
     if (game.clickAgent(a)) return;
@@ -387,8 +393,6 @@ canvas.addEventListener('pointerup', e => {
     if (a === game.player && !game.selected) takeControl(a);
     return;
   }
-  const th = ray.intersectObjects(tarot.pickables, false);
-  if (th.length) { showTarotMarker(tarot.byId[th[0].object.userData.tarot.id]); return; }
   const sh = ray.intersectObjects(shops.pickables, false);
   if (sh.length) { const it = sh[0].object.userData.shop; showShopPopup(it); game.clickShop(it); return; }
   const mh = ray.intersectObjects(markers.pickables, false);
@@ -433,7 +437,7 @@ function drawBubbles() {
   for (let i = n; i < pool.length; i++) pool[i].style.display = 'none';
   const pt = popupVenue || popupTarot || popupShop || popupBld;
   if (pt) {
-    const y = popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : popupBld ? (popupBld.top || 10) + 4 : 30 + tarot.size;
+    const y = popupVenue ? (popupVenue.top || 6) + 2 + sim.H * 0.85 * 1.5 : popupShop ? 14 + sim.H * 1.3 : popupBld ? (popupBld.top || 10) + 4 : popupTarot.baseY + tarot.size;
     v3.set(pt.x, y, pt.z).project(camera);
     $('popup').style.left = ((v3.x + 1) / 2 * w | 0) + 'px'; $('popup').style.top = ((1 - v3.y) / 2 * h | 0) + 'px';
   }
@@ -479,5 +483,5 @@ function frame() {
 await tiles.ready(camera);
 frame();
 $('loading').remove();
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест');

@@ -78,7 +78,7 @@ export class Graph {
     return null;
   }
   // A* для игрока: любой конец города
-  route(from, to, maxExpand = 200000) {
+  route(from, to, maxExpand = 450000) {
     if (from === to) return { nodes: [], cost: 0 };
     const gen = ++this.gen, dist = this.dist, stamp = this.stamp, closed = this.closed, prev = this.prevN;
     const tx = this.x[to], tz = this.z[to]; const h = i => Math.hypot(this.x[i] - tx, this.z[i] - tz);
@@ -280,7 +280,8 @@ export class Sim {
   unsetPlayer(a) { this.setAuto(a, true); a.player = false; a.auto = false; a.speed = WALK_SPEED * (0.8 + a.rng() * 0.5); }
   // автопилот: без управления свой скелет гуляет, пьёт и танцует как все
   setAuto(a, on) {
-    if (a.auto === on && a.state !== 'dead') return;
+    if (a.state === 'dead') { a.auto = on; return; } // мёртвый лежит до респауна, что бы ни нажимали
+    if (a.auto === on) return;
     a.auto = on; a.path = null; a.target = null; a.dest = null; a.script = null;
     if (a.partner) { a.partner.partner = null; a.partner.state = 'walk'; a.partner.script = null; a.partner.cooldown = 8; a.partner = null; }
     this.leaveVenue(a); a.waitFor = null;
@@ -288,7 +289,7 @@ export class Sim {
     else { if (a.from === a.to) { a.state = 'idle'; } else if (a.state !== 'walk') { a.state = 'idle'; a.to = a.from; a.t = 0; this.place(a); } }
   }
   moveTo(a, x, z) {
-    const g = this.graph; const node = g.nearest(x, z, 90); if (node < 0) return false;
+    const g = this.graph; const node = g.nearest(x, z, 140); if (node < 0) return false;
     // откуда считать путь: с конца текущего ребра или с его начала (развернуться)
     let best = null;
     const tryFrom = (start, pre, swap) => { const r = g.route(start, node); if (r && (!best || r.cost + pre < best.cost)) best = { nodes: r.nodes, cost: r.cost + pre, swap }; };

@@ -57,7 +57,7 @@ export const ARCANA = [
   { id: 'star', num: 17, roman: 'XVII', name: 'Звезда', place: 'Минский планетарий', lat: 53.90423, lon: 27.57345,
     why: 'Планетарий с обсерваторией открылся в парке Горького в 1965 году. Под куполом показывают звёздное небо, а в ясные ночи пускают к телескопу.',
     legend: 'Смотрители говорят, что в ночь на 1 ноября купол обсерватории открывается сам, а телескоп поворачивается не к небу, а к городу. Кто посмотрит в окуляр, увидит свои окна и себя в них — спящего. Если не спать в ту ночь, в окне никого не будет. И это, говорят, хуже.' },
-  { id: 'moon', num: 18, roman: 'XVIII', name: 'Луна', place: 'Комсомольское озеро', lat: 53.9230, lon: 27.5395,
+  { id: 'moon', num: 18, roman: 'XVIII', name: 'Луна', place: 'Комсомольское озеро', lat: 53.9235, lon: 27.5376,
     why: 'Озеро на Свислочи выкопали вручную в 1939–1941 годах. Торжественное открытие назначили на воскресенье, 22 июня 1941 года, — в это утро началась война.',
     legend: 'Рыбаки говорят, что в полнолуние на середине озера появляется плот с оркестром, который так и не доиграл праздничный марш 22 июня. Музыку слышно, только если стоять в воде по колено. Кто подпоёт — проснётся дома сухим и без памяти о ночи. Кто поплывёт к плоту — станет в оркестре двадцать третьим.' },
   { id: 'sun', num: 19, roman: 'XIX', name: 'Солнце', place: 'Площадь Победы', lat: 53.9086, lon: 27.5748,
@@ -148,32 +148,40 @@ export class Tarot {
       // аркана на особом здании стоит ровно там, где само здание (landmarks.js), чтобы координаты не разъезжались
       const lmPos = a.landmark ? landmarks.find(l => l.id === a.landmark) : null;
       const x = lmPos ? lmPos.x : (a.lon - lon0) * kx, z = lmPos ? lmPos.z : -(a.lat - lat0) * kz;
-      const node = sim.graph.nearest(x, z, 260);
-      // подбор срабатывает у ближайшей дороги: до центра большого здания (Комаровка, библиотека) с улицы не дойти
-      const nx = node >= 0 ? sim.graph.x[node] : x, nz = node >= 0 ? sim.graph.z[node] : z;
+      // подбор срабатывает у ближайшей дороги: до центра большого здания (Комаровка, библиотека) с улицы не дойти.
+      // Берём ближайший узел, у которого есть хотя бы два ребра (не тупик во дворе), иначе просто ближайший
+      const g = sim.graph; let node = g.nearest(x, z, 260);
+      if (node >= 0 && g.adj[node].length < 2) { const cand = g.within(x, z, 260).filter(n => g.adj[n].length >= 2); if (cand.length) { let bd = Infinity; for (const n of cand) { const d = (g.x[n] - x) ** 2 + (g.z[n] - z) ** 2; if (d < bd) { bd = d; node = n; } } } }
+      const nx = node >= 0 ? g.x[node] : x, nz = node >= 0 ? g.z[node] : z; const dNode = Math.hypot(nx - x, nz - z);
       const ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.55, depthWrite: false })); ring.position.set(x, 0.58, z); ring.scale.set(18, 1, 18);
       const beam = new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide })); beam.position.set(x, 0, z);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(x, 30, z); sp.userData.tarot = a; sp.userData.phase = Math.random() * 6;
+      // маленькое кольцо на тротуаре: сюда нужно дойти
+      const spot = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x4df21e, transparent: true, opacity: 0.8, depthWrite: false })); spot.position.set(nx, 0.6, nz); spot.scale.set(5, 1, 5);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(x, 24, z); sp.userData.tarot = a; sp.userData.phase = Math.random() * 6;
       // аркана на особом здании: карта парит над его крышей, луч не нужен
       const lm = a.landmark ? landmarks.find(l => l.id === a.landmark) : null;
       if (lm) { sp.position.set(lm.x, lm.h + 6, lm.z); beam.visible = false; }
-      this.group.add(ring, beam, sp);
-      return { a, x, z, nx, nz, node, ring, beam, sp, done: false, lm, baseY: lm ? lm.h + 6 : 24 };
+      this.group.add(ring, beam, sp, spot);
+      return { a, x, z, nx, nz, dNode, node, ring, beam, sp, spot, done: false, lm, baseY: lm ? lm.h + 6 : 24 };
     });
     this.byId = Object.fromEntries(this.items.map(it => [it.a.id, it]));
-    this.pickables = this.items.map(it => it.sp); this.size = 7;
+    this.size = 7;
   }
+  // спрятанные спрайты собранных арканов не должны ловить клики (raycast three.js не смотрит на visible)
+  get pickables() { return this.items.filter(it => !it.done).map(it => it.sp); }
   // зоны для подсветки зданий в тайлах: [x, z, r, id]
   get zones() { return this.items.map(it => [it.x, it.z, 60, it.a.id]); }
   setScale(h) { this.size = h * 1.1; for (const it of this.items) it.sp.scale.set(this.size * 14 / 20, this.size, 1); }
-  markDone(id, done = true) { const it = this.byId[id]; if (!it) return; it.done = done; it.beam.visible = !done && !it.lm; it.sp.visible = !done; it.ring.material.opacity = done ? 0.18 : 0.55; }
+  markDone(id, done = true) { const it = this.byId[id]; if (!it) return; it.done = done; it.beam.visible = !done && !it.lm; it.sp.visible = !done; it.spot.visible = !done; it.ring.material.opacity = done ? 0.18 : 0.55; }
   reset() { for (const it of this.items) this.markDone(it.a.id, false); }
   update(t, player, reach, onCollect) {
     for (const it of this.items) {
       if (it.done) continue;
       it.sp.position.y = it.baseY + Math.sin(t * 1.6 + it.sp.userData.phase) * 2.5; it.beam.material.opacity = 0.12 + 0.06 * Math.sin(t * 2 + it.sp.userData.phase);
       it.ring.scale.setScalar(18 + Math.sin(t * 2 + it.sp.userData.phase) * 1.2); it.ring.scale.y = 1;
-      if (player && player.state !== 'dead' && ((it.nx - player.x) ** 2 + (it.nz - player.z) ** 2 < reach * reach || (it.x - player.x) ** 2 + (it.z - player.z) ** 2 < reach * reach)) onCollect(it);
+      it.spot.scale.setScalar(5 + Math.sin(t * 3 + it.sp.userData.phase) * 0.8); it.spot.scale.y = 1;
+      // подобрано, если игрок у точки подбора или подошёл к зданию настолько близко, насколько вообще позволяет сеть улиц
+      if (player && player.state !== 'dead' && ((it.nx - player.x) ** 2 + (it.nz - player.z) ** 2 < reach * reach || (it.x - player.x) ** 2 + (it.z - player.z) ** 2 < (it.dNode + reach) ** 2)) onCollect(it);
     }
   }
 }
