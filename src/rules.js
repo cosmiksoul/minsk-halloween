@@ -51,7 +51,7 @@ function oldScore(g) { return (g.skulls?.length ?? 0) * 3 + (g.friends?.length ?
 // старый прогресс (массивы skulls/friends, кап 6 сердец) один раз превращается в v2: счёт по старой формуле,
 // первые десять друзей в хвост, все черепа и друзья в журнал. Никто не теряет место в рейтинге
 export function migrate(g) {
-  if (g && g.v === 2) return g;
+  if (g && g.v === 2) { for (const k of ['log', 'tail', 'visits', 'tarot']) if (!Array.isArray(g[k])) g[k] = []; return g; } // v2 с битыми массивами чиним на месте
   const fresh = newProgress();
   if (!g || typeof g !== 'object') return fresh;
   const skulls = Array.isArray(g.skulls) ? g.skulls : [], friends = Array.isArray(g.friends) ? g.friends : [];
