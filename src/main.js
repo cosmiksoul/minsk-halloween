@@ -10,6 +10,7 @@ import { buildVenues, skulls, VENUE_TYPES } from './venues.js';
 import { projectHotspots } from './districts.js';
 import { Game } from './game.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
+import { statsOf } from './rules.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
 import { Tarot } from './tarot.js';
 import { Shops } from './shops.js';
@@ -80,9 +81,9 @@ const remote = makeRemote(); let remoteTimer = 0;
 const own = () => mine.filter(d => !d.guest).map(def => ({ def, agent: sim.agents.find(a => a.def === def) })).filter(o => o.agent);
 const b64 = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
-const shareLink = def => { const g = def.game || {}; return location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed, o: def.costume || undefined, b: def.about ? def.about.slice(0, 240) : undefined, st: [(g.skulls || []).length, (g.friends || []).length, (g.tarot || []).length, (g.visits || []).length] })); };
+const shareLink = def => { const st = statsOf(def.game); return location.origin + location.pathname + '#s=' + b64(JSON.stringify({ n: def.name, g: def.gender, a: def.age, j: def.job, c: def.arch, s: def.seed, o: def.costume || undefined, b: def.about ? def.about.slice(0, 240) : undefined, st: [st.kills, st.friends, st.tarot, st.visits], sc: st.score })); };
 let fromLink = null;
-if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location.hash.slice(3))); fromLink = { name: o.n, gender: o.g, age: o.a, job: o.j, arch: o.c, seed: o.s, costume: o.o, about: o.b, stats: o.st, guest: true }; } catch { } }
+if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location.hash.slice(3))); fromLink = { name: o.n, gender: o.g, age: o.a, job: o.j, arch: o.c, seed: o.s, costume: o.o, about: o.b, stats: o.st, score: o.sc, guest: true }; } catch { } }
 
 // объявлены до первого flyTo при старте: иначе ReferenceError (TDZ) у тех, у кого уже есть сохранённый скелет
 let rotateTo = null, follow = null, cardAgent = null;
@@ -321,7 +322,7 @@ $('mineForm').onsubmit = e => {
 };
 function renderMine() {
   const list = mine.filter(d => !d.guest);
-  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${list.length}/${MAX_OWN}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}" data-s="${d.seed}"><span class="n">${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? ` · 💀 ${d.game.skulls.length} · 💚 ${d.game.friends.length} · 🃏 ${d.game.tarot?.length || 0}` : ''}</span></div>`).join('') : '';
+  $('mineList').innerHTML = list.length ? `<div class="day">ваши скелеты · ${list.length}/${MAX_OWN}</div>` + list.map(d => `<div class="item${d.player ? ' cur' : ''}" data-s="${d.seed}"><span class="n">${esc(d.name)}</span><span class="r">${d.age} ${ageWord(d.age)}</span>${d.player ? '<span class="k">играет</span>' : `<button class="play" data-s="${d.seed}">играть</button>`}<span class="s">${esc(d.job)} · ${ARCH_LABEL[d.arch] || ''}${d.game ? (st => ` · ★ ${st.score} · ❤ ${st.hearts} · 💚 ${st.tail} · 💀 ${st.kills} · 🃏 ${st.tarot}`)(statsOf(d.game)) : ''}</span></div>`).join('') : '';
   if (!$('tabBoard').hidden) renderBoard(false);
 }
 $('mineList').onclick = e => {
@@ -332,11 +333,11 @@ $('mineList').onclick = e => {
 
 // --- лидеры: свои скелеты из этого браузера, а при настроенном Supabase — общая доска почёта
 let boardRows = null;
-const SCORE_HINT = 'счёт: 💀 и 💚 по 3, 🃏 по 5, 🎃 по 1';
+const SCORE_HINT = 'счёт: победа +2, поражение −1, аркана +5, новое заведение +1';
 function boardRow(r, i, me) { return `<div class="item${me ? ' me' : ''}"><span class="rank">${i + 1}</span><span class="n">${esc(r.name)}</span><span class="sc">★ ${r.score ?? 0}</span><span class="s">${esc(r.job || '')} · 💀 ${r.kills ?? 0} · 💚 ${r.friends ?? 0} · 🃏 ${r.tarot ?? 0} · 🎃 ${r.visits ?? 0}${r.deaths ? ` · ☠ ${r.deaths}` : ''}</span></div>`; }
 function renderBoard(fetchRemote = true) {
   const body = $('tabBoard'); const myId = game.player ? deviceId() + ':' + game.player.def.seed : null;
-  const localRows = mine.filter(d => !d.guest).map(d => { const g = d.game || {}; return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: (g.skulls || []).length, friends: (g.friends || []).length, tarot: (g.tarot || []).length, visits: (g.visits || []).length, deaths: g.deaths || 0, score: scoreOf(g) }; }).sort((a, b) => b.score - a.score);
+  const localRows = mine.filter(d => !d.guest).map(d => { const st = statsOf(d.game); return { id: deviceId() + ':' + d.seed, name: d.name, job: d.job, kills: st.kills, friends: st.friends, tarot: st.tarot, visits: st.visits, deaths: st.deaths, score: st.score, hearts: st.hearts, tail: st.tail, wins: st.wins, losses: st.losses }; }).sort((a, b) => b.score - a.score);
   const list = (rows, empty) => rows.length ? rows.map((r, i) => boardRow(r, i, r.id === myId)).join('') : `<div class="hint">${empty}</div>`;
   if (!remote) {
     body.innerHTML = '<div class="day">скелеты в этом браузере</div>' + list(localRows, 'пока никого: создай своего скелета') + `<div class="hint">${SCORE_HINT}. Общий рейтинг всех игроков появится, когда в config.js будет вписан Supabase (README, раздел «База»)</div>`;
@@ -362,7 +363,7 @@ async function renderShare() {
 function openShare() { if (!game.player) return; $('share').hidden = false; $('shrNative').hidden = !navigator.share; renderShare(); }
 $('shrClose').onclick = () => { $('share').hidden = true; };
 for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
-const shareText = () => { const p = game.player, g = game.g; return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: 💀 ${g.skulls.length} · 💚 ${g.friends.length} · 🃏 ${g.tarot.length}/22 · 🎃 ${g.visits.length}`; };
+const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: ★ ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
 $('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
 $('shrCopy').onclick = async () => { const link = shareLink(game.player.def); try { await navigator.clipboard.writeText(link); $('shrCopy').textContent = 'скопировано'; setTimeout(() => $('shrCopy').textContent = '🔗 скопировать ссылку', 1500); } catch { prompt('Ссылка на скелета', link); } };
 $('shrNative').onclick = async () => { const ok = await nativeShare($('shrCv'), shareText(), shareLink(game.player.def)); if (ok) { game.onShared('native'); renderShare(); } else if (ok === false) download($('shrCv'), `skeleton-${shareFormat}.png`); };

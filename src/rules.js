@@ -106,4 +106,14 @@ export function pickCemetery(items, px, pz, level) {
   }
   return best;
 }
+// сводка прогресса для карточек, списков и доски: понимает и старый формат до миграции
+export function statsOf(g) {
+  if (!g) return { score: 0, kills: 0, friends: 0, tarot: 0, visits: 0, hearts: CAPS.baseHearts, tail: 0, wins: 0, losses: 0, deaths: 0 };
+  const v2 = g.v === 2, log = Array.isArray(g.log) ? g.log : [];
+  return {
+    score: scoreOf(g), kills: v2 ? num(g.kills) : (g.skulls?.length ?? 0), friends: v2 ? log.filter(e => e.kind === 'friend').length : (g.friends?.length ?? 0),
+    tarot: g.tarot?.length ?? 0, visits: g.visits?.length ?? 0, hearts: num(g.maxHp, CAPS.baseHearts), tail: v2 ? (g.tail?.length ?? 0) : Math.min(CAPS.tail, g.friends?.length ?? 0),
+    wins: num(g.wins), losses: num(g.losses), deaths: num(g.deaths),
+  };
+}
 export function canReset(g, now) { return now - num(g.resetAt, -1e9) >= HEAT.resetCooldown; }

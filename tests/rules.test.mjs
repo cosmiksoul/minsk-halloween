@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, canReset } from '../src/rules.js';
+import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, canReset, statsOf } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(10), 'fail'); assert.equal(outcomeOf(11), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -46,3 +46,9 @@ test('pickCemetery: ближайшее к дистанции уровня, не 
 });
 test('canReset', () => { const g = newProgress(); assert.equal(canReset(g, 10), true); g.resetAt = 100; assert.equal(canReset(g, 200), false); assert.equal(canReset(g, 280), true); });
 test('HEAT из спеки', () => { assert.deepEqual(HEAT, { kill: 15, friend: 8, tarot: 10, raidWin: 12, minute: 1, decayPer: 20, idleAfter: 30, resetCooldown: 180, max: 100 }); });
+test('statsOf: v2 и старый формат', () => {
+  const g = newProgress(); g.score = 9; g.kills = 2; g.tail = [{ uid: 1 }]; logPush(g, { kind: 'friend' }); logPush(g, { kind: 'friend' }); logPush(g, { kind: 'kill' });
+  assert.deepEqual(statsOf(g), { score: 9, kills: 2, friends: 2, tarot: 0, visits: 0, hearts: 3, tail: 1, wins: 0, losses: 0, deaths: 0 });
+  const o = statsOf({ skulls: [1, 1], friends: Array(12).fill(1), tarot: [1], visits: [1], maxHp: 5 });
+  assert.equal(o.kills, 2); assert.equal(o.friends, 12); assert.equal(o.tail, 10); assert.equal(o.hearts, 5); assert.equal(o.score, 6 + 36 + 5 + 1); assert.equal(statsOf(null).hearts, 3);
+});

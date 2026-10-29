@@ -76,6 +76,13 @@ i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
 .sh { background:#2a1a08; border:1px solid var(--accent); border-radius:4px; padding:0 4px; font-size:11px; color:var(--accent); }
 .sh small { font-size:8px; margin-left:2px; }
 .skc { color:var(--green); } .frc { color:#7cff52; } .vc { color:var(--accent); } .dc { color:#ff5f5f; }
+/* стак, счёт и угроза */
+.tl { color:#7cff52; } .pts { color:var(--gold, #ffd23a); font-weight:bold; }
+.thr { color:#5a4a70; letter-spacing:1px; font-size:12px; cursor:help; } .thr.on { color:#e9dff7; }
+.thr.hot { animation:thrBlink .8s steps(2) infinite; } .thr.flash { animation:thrFlash 1.2s ease-out 1; }
+@keyframes thrBlink { 0% { filter:none } 50% { filter:brightness(1.9) drop-shadow(0 0 5px #ff3a5c) } 100% { filter:none } }
+@keyframes thrFlash { 0% { transform:scale(1.6); filter:drop-shadow(0 0 8px #ffd23a) } 100% { transform:scale(1); filter:none } }
+.sk.boss, .fr.boss { filter:drop-shadow(0 0 3px #ffd23a); }
 #cGame .gm { margin-top:2px; }
 #cGame .line { line-height:1.5; }
 .sk, .fr { display:inline-block; cursor:help; font-size:13px; margin-right:1px; filter:drop-shadow(0 0 2px #4df21e); }
