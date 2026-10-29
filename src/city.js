@@ -1,6 +1,9 @@
 // Сборка города из запечённых OSM-данных по тайлам: здания, дороги, вода, парки,
 // деревья, тыквы у подъездов, фонари. Каждый тайл — своя группа, которую можно выгрузить.
 import * as THREE from 'three';
+import { pointInPoly, polyBBox } from './geo.js'; // геометрия живёт в geo.js без three, чтобы гоняться тестами
+import { CUT } from './rules.js';
+export { pointInPoly };
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fixFor, addRoof, SKIP_NAMES } from './landmarks.js';
 
@@ -109,14 +112,6 @@ function buildingMaterial() {
   return m;
 }
 
-export function pointInPoly(x, z, p) {
-  let inside = false;
-  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
-    const xi = p[i], zi = p[i + 1], xj = p[j], zj = p[j + 1];
-    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
 function polyArea(p) { let a = 0; for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) a += (p[j] * p[i + 1] - p[i] * p[j + 1]); return a / 2; }
 
 // --- маркеры заведений: оранжевая пиксельная тыква парит над крышей
@@ -183,6 +178,7 @@ export function buildBig(big, M) {
   if (green) group.add(new THREE.Mesh(green, M.flat));
   const water = flatPolys(big.water || [], 0.18, () => new THREE.Color(C.water));
   if (water) group.add(new THREE.Mesh(water, M.water));
+  group.userData.obst = { buildings: [], water: (big.water || []).map(w => ({ p: w.p, bb: polyBBox(w.p) })), ribbons: [] }; // большая вода закрыта для срезок
   return group;
 }
 
@@ -223,6 +219,13 @@ export function buildTile(t, M, seed = 1) {
   }
   if (bgeos.length) { const bgeo = mergeGeometries(bgeos, false); bgeo.computeVertexNormals(); const bm = new THREE.Mesh(bgeo, M.building); bm.userData.isBuilding = true; group.add(bm); group.userData.buildingMesh = bm; }
   group.userData.named = named;
+  // препятствия для проверки прямой (срезки): все здания с дырками, включая пропущенные при отрисовке, вода и лента реки;
+  // проезжие части не препятствие — по ним ходят, машин в игре нет
+  group.userData.obst = {
+    buildings: (t.buildings || []).map(b => ({ p: b.p, holes: b.holes, bb: polyBBox(b.p) })),
+    water: (t.water || []).map(w => ({ p: w.p, bb: polyBBox(w.p) })),
+    ribbons: (t.river || []).map(r => ({ p: r.p, half: CUT.riverHalf })),
+  };
   for (const [fix, b, cx, cz, h] of roofs) { try { addRoof(group, fix, b, cx, cz, h); } catch (e) { console.warn('крыша', b.n, e); } }
 
   // деревья: из OSM плюс насыпанные в парки

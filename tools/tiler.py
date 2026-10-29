@@ -18,7 +18,7 @@ import shutil
 
 TILE = 500            # метров
 BIG_SPAN = 3          # полигон шире 3×3 тайлов уходит в big.json
-WALKABLE = ('path', 'service', 'minor')
+WALKABLE = ('path', 'service', 'minor', 'major')  # машин в игре нет: проезжие части тоже пешеходные
 
 
 def rnd(v, nd=1):

@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins } from '../src/rules.js';
+import { CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut } from '../src/rules.js';
 
-test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(10), 'fail'); assert.equal(outcomeOf(11), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
+test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
 test('LEVELS из спеки', () => { assert.equal(LEVELS.length, 6); assert.deepEqual(LEVELS[1], { hunters: 1, dist: 2500, speed: 0.85, pause: 90, bonus: 0 }); assert.deepEqual(LEVELS[5], { hunters: 5, dist: 900, speed: 1.25, pause: 30, bonus: 3 }); assert.equal(LEVELS[3].bonus, 1); });
 test('decayed: спад и защита от мусора', () => { assert.equal(decayed(50, 200), 40); assert.equal(decayed(10, 1e9), 0); assert.equal(decayed(30, -100), 30); assert.equal(decayed(30, NaN), 30); assert.ok(Number.isFinite(decayed(30, Infinity))); });
@@ -66,4 +66,16 @@ test('pickCemetery: разные кладбища для одновременн�
   assert.equal(pickCemetery([a, b, c], 0, 0, 1, [a]), b);
   assert.equal(pickCemetery([a, c], 0, 0, 1, [a]), a); // c дальше двух дистанций: берём занятое
   assert.equal(pickCemetery([a, b], 0, 0, 1), a);
+});
+test('CUT из спеки', () => { assert.deepEqual(CUT, { maxDist: 60, ratio: 2.5, onPath: 3, step: 2, riverHalf: 13, snapR: 140, say: 0.25 }); assert.equal(PURSUIT.spreadNear, 1.5); });
+test('shouldCut: близко и по графу вдвое с половиной дальше', () => {
+  assert.equal(shouldCut(20, 50), true); assert.equal(shouldCut(20, 49), false);
+  assert.equal(shouldCut(60, 150), true); assert.equal(shouldCut(61, 1000), false);
+  assert.equal(shouldCut(20, null), true); assert.equal(shouldCut(0, 0), false); assert.equal(shouldCut(0, null), false);
+});
+test('pickCemetery: в центре свободное кладбище берётся и в полутора расстояниях до ближайшего', () => {
+  const a = { x: 0, z: 2292, node: 1 }, b = { x: 0, z: 3373, node: 2 };
+  assert.equal(pickCemetery([a, b], 0, 0, 3, [a]), b);           // 3373 ≤ 1.5 × 2292
+  assert.equal(pickCemetery([a, { x: 0, z: 3500, node: 3 }], 0, 0, 3, [a]), a); // 3500 > 3438: берём занятое
+  assert.equal(pickCemetery([a], 0, 0, 3, [a]), a);
 });
