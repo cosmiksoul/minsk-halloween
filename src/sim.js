@@ -134,6 +134,8 @@ export class Sim {
     while (count() > n) { const a = [...this.agents].reverse().find(x => !x.custom && !x.ambient && !x.leader && !x.ghost && x.state !== 'wait'); if (!a) break; this.remove(a); }
   }
   setHeight(h) { this.H = h; for (const a of this.agents) a.sprite.scale.set(h * FW / FH, h, 1); }
+  // сколько скелетов было бы на всех улицах города сразу: та же формула, что у crowd() для кадра, но на всю застроенную площадь графа
+  potential() { const km2 = this.graph.grid.size * this.graph.cell ** 2 / 1e6; return Math.round((km2 * 70 + this.hotTotal * 5) * this.density); }
 
   place(a) {
     if (a.free || a.state === 'cut') { a.sprite.position.set(a.x, 0.5, a.z); return; } // вне графа координаты хранятся прямо

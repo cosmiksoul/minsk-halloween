@@ -1,7 +1,7 @@
-// Интро: четыре слайда один раз на устройство (minsk-skeletons.intro = '1'), когда своих скелетов ещё нет;
+// Интро: шесть слайдов один раз на устройство (minsk-skeletons.intro = '1'), когда своих скелетов ещё нет;
 // снова открывается кнопкой «как играть» в легенде. Картинка 96×64 рисуется функциями проекта (портрет скелета,
-// кубик, могила и охотник, веер карт) и показывается втрое крупнее; текста не больше двух строк. После последнего
-// слайда открывается форма создания, заполненная генератором.
+// кубик, могила и охотник, веер карт, дом с арканом, пьедестал) и показывается втрое крупнее. Последний слайд —
+// «Happy Halloween!» и ссылка на автора; после него просто карта и кнопка «создать своего скелета».
 import { drawPortrait, randomCostume } from './skeletons.js';
 import { makeRng, pickArchetype } from './bio.js';
 import { local } from './store.js';
@@ -31,6 +31,23 @@ function drawHunter(g) {
   // красная полоса розыска
   px(g, 6, 57, 84, 5, '#1b1326'); px(g, 7, 58, 60, 3, '#ff3a5c'); for (let x = 7; x < 90; x += 17) px(g, x + 16, 57, 1, 5, '#3a2a55');
 }
+function drawArcana(g) {
+  sky(g); houses(g);
+  // зелёный дом с лучом в небо и карта таро с золотой рамкой
+  px(g, 8, 30, 22, 24, '#1f6b2a'); px(g, 6, 26, 26, 5, '#4df21e'); for (let y = 34; y < 50; y += 6) px(g, 12, y, 3, 3, '#ffd23a'); px(g, 23, 34, 3, 3, '#ffd23a');
+  px(g, 17, 0, 4, 27, 'rgba(77,242,30,.35)'); px(g, 18, 0, 2, 27, 'rgba(200,255,180,.55)');
+  px(g, 52, 10, 30, 44, '#ffd23a'); px(g, 54, 12, 26, 40, '#1b1326'); px(g, 57, 15, 20, 34, '#2b1b4e');
+  px(g, 66, 20, 2, 2, '#ffd23a'); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; px(g, 66 + Math.round(Math.cos(a) * 6), 32 + Math.round(Math.sin(a) * 6), 2, 2, '#ffd23a'); } px(g, 65, 31, 4, 4, '#fff0a0');
+  g.fillStyle = '#ffd23a'; g.font = 'bold 6px monospace'; g.textAlign = 'center'; g.fillText('XVII', 67, 50);
+}
+function drawLeaders(g) {
+  sky(g); houses(g);
+  // пьедестал с тремя скелетами и кубок
+  px(g, 12, 46, 22, 12, '#3a2a55'); px(g, 36, 38, 24, 20, '#6d58a0'); px(g, 62, 50, 22, 8, '#3a2a55');
+  skeleton(g, 1313, 11, 16, true); skeleton(g, 2024, 36, 6); skeleton(g, 909, 61, 20);
+  px(g, 84, 8, 10, 12, '#ffd23a'); px(g, 82, 10, 2, 6, '#ffd23a'); px(g, 94, 10, 2, 6, '#ffd23a'); px(g, 87, 20, 4, 4, '#ffd23a'); px(g, 85, 24, 8, 2, '#ffd23a');
+  g.fillStyle = '#ffd23a'; g.font = 'bold 7px monospace'; g.textAlign = 'center'; g.fillText('1', 48, 46);
+}
 function drawHand(g, env) {
   sky(g); houses(g, 44);
   const cards = [[14, '♠'], [13, '♥'], [12, '♠'], [11, '♦'], [10, '♣']];
@@ -38,23 +55,25 @@ function drawHand(g, env) {
 }
 const SLIDES = [
   { draw: drawCity, text: 'Ты скелет в Минске. Сегодня Хэллоуин, и город не спит.' },
-  { draw: drawDuel, text: 'Гуляй, подходи к прохожим и бросай d20. Побеждай, дружи, собирай конфеты и арканы.' },
+  { draw: drawDuel, text: 'Гуляй, подходи к прохожим и бросай d20: «сладость» — дружба, «гадость» — череп. Квесты «онбординга» ведут по первым шагам.' },
   { draw: drawHunter, text: 'Шумишь — растёт розыск, и с кладбищ выходят охотники. Увидел метку могилы — уходи дворами.' },
-  { draw: drawHand, text: 'Каждый час город сдаёт руку из пяти карт. Найди боссов на карте, побей их и собери руку.' },
+  { draw: drawHand, text: 'Каждый час город сдаёт «Мёртвую руку» — пять карт. Боссы с картой над головой ходят по городу: побей всех и собери руку.' },
+  { draw: drawArcana, text: 'В зелёных домах с лучом спрятаны 22 аркана таро — от Национальной библиотеки до Лошицы. Открой карту: +5 XP и место в коллекции.' },
+  { draw: drawLeaders, text: 'Таблица лидеров сравнивает скелеты всех игроков. Твой — внизу слева. Happy Halloween!' },
 ];
 
-export function initIntro({ drawCard, onCreate }) {
+export function initIntro({ drawCard }) {
   let step = 0; const box = $('intro'), cv = $('inCv');
   const render = () => {
     const s = SLIDES[step]; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height);
     try { s.draw(g, { drawCard }); } catch (e) { console.warn('интро', e); }
     $('inText').textContent = s.text; $('inStep').textContent = `${step + 1}/${SLIDES.length}`;
-    $('inNext').textContent = step === SLIDES.length - 1 ? 'создать скелета' : 'дальше';
+    $('inNext').textContent = step === SLIDES.length - 1 ? 'Happy Halloween!' : 'дальше'; $('inAuthor').hidden = step !== SLIDES.length - 1;
     for (const d of box.querySelectorAll('.inDot')) d.classList.toggle('on', +d.dataset.i === step);
   };
   const close = () => { box.hidden = true; local.set('intro', '1'); };
   const api = { show() { step = 0; box.hidden = false; render(); }, get seen() { return local.get('intro', null) === '1'; } };
-  $('inNext').onclick = () => { if (step < SLIDES.length - 1) { step++; render(); } else { close(); if (onCreate) onCreate(); } };
+  $('inNext').onclick = () => { if (step < SLIDES.length - 1) { step++; render(); } else close(); }; // после последнего слайда — карта и кнопка «создать»: форму не открываем
   $('inClose').onclick = close; box.addEventListener('click', e => { if (e.target === box) close(); });
   box.querySelector('.inDots').innerHTML = SLIDES.map((_, i) => `<i class="inDot" data-i="${i}"></i>`).join('');
   return api;
