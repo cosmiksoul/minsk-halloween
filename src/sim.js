@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { FRAMES, FW, FH, NF, randomCostume, drawStrip, drawGhostStrip, GHOSTS } from './skeletons.js';
 import { LINES, makeRng, pick, pickArchetype, makeBio, ARCHETYPES, chatLine } from './bio.js';
+const PULL = { radius: 160, rate: 0.15, every: 120 }; // притяжение к танцплощадке: радиус (м), вероятность в секунду, пауза на скелета (с)
 import { Graph } from './graph.js';
 import { CUT, shouldCut } from './rules.js';
 import { segmentClear } from './geo.js';
@@ -34,6 +35,7 @@ export class Sim {
     this.center = opts.center; const [lat0, lon0] = opts.center; const kx = Math.cos(lat0 * Math.PI / 180) * 111320, kz = 110574;
     const pr = (lat, lon) => [(lon - lon0) * kx, -(lat - lat0) * kz];
     this.danceZones = [[...pr(53.9025, 27.5620), 'Октябрьская площадь', 50], [...pr(53.9083, 27.5752), 'площадь Победы', 50], [...pr(53.9045, 27.5560), 'площадь Свободы', 45], [...pr(53.9050, 27.5578), 'Зыбицкая', 40], [...pr(53.9052, 27.5530), 'Немига', 40]];
+    for (const z of this.danceZones) z.node = this.graph.nearest(z[0], z[1], 120); // узел дорожки у центра: сюда ведёт притяжение прохожих
     [this.cx, this.cz] = pr(53.9030, 27.5600); // центр тусовки
     // оживлённые районы: узлы в радиусе каждого, вес для выбора
     this.hotspots = (opts.hotspots || []).map(h => ({ ...h, nodes: this.graph.within(h.x, h.z, h.r) })).filter(h => h.nodes.length >= 5);
@@ -376,7 +378,8 @@ export class Sim {
     if (!a.ghost) {
       if (a.target != null && node === a.target) {
         a.target = null; a.path = null;
-        if (v && (v.type === 'nightclub' || v.type === 'event')) this.startDance(a, 14 + a.rng() * 12, v); else this.startDrink(a, v);
+        if (a.danceZone) { a.danceZone = null; this.startDance(a, 10 + a.rng() * 10); } // дошёл до площади, на которую свернул
+        else if (v && (v.type === 'nightclub' || v.type === 'event')) this.startDance(a, 14 + a.rng() * 12, v); else this.startDrink(a, v);
       }
       else if (v && a.rng() < 0.2 && a.thirst < 140) { if (v.type === 'nightclub') this.startDance(a, 10 + a.rng() * 8, v); else this.startDrink(a, v); }
       else if (this.time - a.lastDance > 40 && a.rng() < 0.5) {
@@ -403,6 +406,15 @@ export class Sim {
   }
 
   // выбираем заведение: ближние, с бонусом за афишу и клубы
+  // прохожий в PULL.radius от танцплощадки (и не внутри неё) сворачивает туда, танцует и идёт дальше; не чаще раза в PULL.every секунд
+  pullToDance(a) {
+    a.pullAt = this.time;
+    for (const z of this.danceZones) {
+      const d2 = (a.x - z[0]) ** 2 + (a.z - z[1]) ** 2; if (d2 > PULL.radius * PULL.radius || d2 < z[3] * z[3] || z.node < 0) continue;
+      const p = this.graph.path(a.to, z.node, 110, { crowd: true }); if (!p) return;
+      a.path = p; a.target = z.node; a.danceZone = z; this.say(a, pick(a.rng, LINES.pull), 'music', 1.8); return;
+    }
+  }
   goDrink(a) {
     const g = this.graph; const cand = [];
     for (const v of this.active) {
@@ -474,6 +486,7 @@ export class Sim {
         if (a.state === 'walk') {
           if (a.player) { const tr = a.trail; const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
           if (!a.ghost) { a.thirst -= dt; if (a.thirst <= 0 && !a.target) this.goDrink(a); }
+          if (!a.ghost && !a.player && !a.target && this.time - (a.pullAt || -999) > PULL.every && a.rng() < dt * PULL.rate) this.pullToDance(a);
           if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) { if (a.ghost || a.rng() < 0.5) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6); else this.say(a, pick(a.rng, LINES.named[a.bio?.name] || LINES.mutter), '', 2); } // «бу» или бормотание под нос (у именных — свои реплики)
           this.place(a);
           const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from];

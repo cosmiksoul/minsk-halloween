@@ -139,11 +139,9 @@ export function buildMarkers(venues, danceZones) {
     sp.center.set(0.5, 0); sp.position.set(v.x, v.top + 2, v.z); sp.userData.venue = v; sp.userData.major = major; sp.userData.phase = Math.random() * 6;
     group.add(sp); sprites.push(sp);
   }
-  // танцплощадки: тусклое оранжевое пятно на земле и кольцо тыкв-фонарей по краю, а не тор сквозь дома
-  const zoneMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.07, depthWrite: false });
+  // танцплощадки: кольцо тыкв-фонарей по краю (пятно на земле убрано: пиксельное квантование делало из него плотный красный блин)
   const lanterns = [];
   for (const z of danceZones) {
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(z[3], 28).rotateX(-Math.PI / 2), zoneMat); disc.position.set(z[0], 0.32, z[1]); group.add(disc);
     const n = Math.max(8, Math.round(z[3] / 5));
     for (let i = 0; i < n; i++) { const ang = i / n * Math.PI * 2; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texB, transparent: true, alphaTest: 0.5, fog: false })); sp.center.set(0.5, 0); sp.position.set(z[0] + Math.cos(ang) * z[3], 0.6, z[1] + Math.sin(ang) * z[3]); sp.userData.phase = i * 0.7; group.add(sp); lanterns.push(sp); }
   }
