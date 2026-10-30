@@ -568,7 +568,22 @@ if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(r
   if (game.player) game.notify(`пока тебя не было: ${n} ${plural(n, 'набег', 'набега', 'набегов')}`, 'afisha', 4000);
   if (game.o.onLog) game.o.onLog();
 });
-if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead }); if (r.dead) sim.ghostify(a, 'player'); } });
+// гости из сети: 20 последних чужих скелетов при загрузке и раз в час дозаливка новых (кто создал скелета, пока ты играешь);
+// уже выпущенных (по id строки) не дублируем, скелет самого игрока — тоже
+const guestIds = new Set();
+function spawnGuests() {
+  if (!remote) return;
+  remote.others(20).then(rows => {
+    if (!rows) return; let added = 0;
+    for (const r of rows) {
+      if (guestIds.has(r.id) || mine.some(d => d.seed === r.seed && d.name === r.name)) continue; guestIds.add(r.id); added++;
+      const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead });
+      if (r.dead) sim.ghostify(a, 'player');
+    }
+    if (added && guestIds.size > added) toast(`🦴 в город пришл${added === 1 ? 'ёл' : 'и'} ${added} ${pluralOf(added, ['новый гость', 'новых гостя', 'новых гостей'])}`);
+  });
+}
+spawnGuests(); setInterval(spawnGuests, 60 * 60000);
 
 // --- поделиться карточкой персонажа
 let shareFormat = isMobile ? 'story' : 'post'; // на телефоне сразу сторис
@@ -756,5 +771,5 @@ minimap = new Minimap({ canvas: $('minimap'), graph: sim.graph, venues, bbox: in
 $('minimap').hidden = !local.get('minimap', 1); $('mmChk').checked = !$('minimap').hidden;
 $('mmChk').onchange = () => { local.set('minimap', $('mmChk').checked ? 1 : 0); $('minimap').hidden = !$('mmChk').checked; };
 if (!mine.some(d => !d.guest) && !intro.seen) setTimeout(() => intro.show(), 400);
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, minimap, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, minimap, spawnGuests, guestIds, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');
