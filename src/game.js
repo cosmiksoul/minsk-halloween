@@ -86,9 +86,9 @@ export class Game {
     drawCardBack($('tBackCv'));
     this.hudAcc = 0;
     $('askSweet').onclick = () => this.choose('friend'); $('askTrick').onclick = () => this.choose('kill'); $('askNo').onclick = () => this.closeDialog();
-    // спринт: Shift зажат — ×SPRINT.mul, пока есть выносливость; кольцо выбора оранжевое на бегу и серое, когда выдохся
-    addEventListener('keydown', e => { if (e.key === 'Shift' && !e.repeat) this.sprinting = true; });
-    addEventListener('keyup', e => { if (e.key === 'Shift') this.sprinting = false; });
+    // спринт: пробел зажат — ×SPRINT.mul (не Shift: несколько быстрых нажатий включают залипание клавиш в Windows), пока есть выносливость; кольцо выбора оранжевое на бегу и серое, когда выдохся
+    addEventListener('keydown', e => { if (e.code === 'Space' && !e.repeat && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) this.sprinting = true; });
+    addEventListener('keyup', e => { if (e.code === 'Space') this.sprinting = false; });
     addEventListener('blur', () => { this.sprinting = false; });
     addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
@@ -675,7 +675,7 @@ export class Game {
       <div class="hudRow"><span class="tl" title="друзья в хвосте">${icon('friend', 1)} ${g.tail.length}/${CAPS.tail}</span><span class="pts" title="XP: победа +2, поражение −1, аркана +5, новое заведение +1, босс 2 × старшинство">${icon('xp', 1)} ${g.score}</span>${this.threatHtml()}${this.chipsHtml()}</div>
       <div class="hudRow">${statLine({ kills: st.kills, friends: st.friends, visits: g.seenVenues.length })}<button class="deck tc" title="арканы: открыть колоду">${icon('arcana', 1)} ${g.tarot.length}/${ARCANA.length}</button>${statLine({ coins: g.coins, tokens: g.tokens | 0, deaths: g.deaths })}${this.cards ? this.cards.myCardHtml() : ''}</div>
       ${this.cards ? this.cards.hudHtml() : ''}
-      <div class="hudCtlRow">${p.state === 'dead' ? '' : `<button class="hudCtl${this.selected ? '' : ' green'}">${this.selected ? 'отпустить' : 'управлять'}</button>`}<button class="hudFollow${this.o.isFollowing && this.o.isFollowing(p) ? ' on' : ''}" title="камера идёт за скелетом">следить</button><button class="hudLog" title="подробный профиль и журнал">журнал</button><span class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · Esc — отпустить' : 'гуляет сам · клик по карточке — профиль'}</span></div>`;
+      <div class="hudCtlRow">${p.state === 'dead' ? '' : `<button class="hudCtl${this.selected ? '' : ' green'}">${this.selected ? 'отпустить' : 'управлять'}</button>`}<button class="hudFollow${this.o.isFollowing && this.o.isFollowing(p) ? ' on' : ''}" title="камера идёт за скелетом">следить</button><span class="hudHint">${p.state === 'dead' ? 'собираем кости…' : this.pending ? 'идём к цели…' : this.selected ? 'клик по карте — идти · по скелету — сладость или гадость · по тыкве — зайти · зажатый пробел — бег · Esc — отпустить' : 'гуляет сам · клик по карточке — профиль'}</span></div>`;
     for (const cv of hud.querySelectorAll('canvas.av')) { const o = own.find(x => String(x.def.seed) === cv.dataset.seed); if (o) drawPortrait(o.agent.costume, cv); }
     const pic = hud.querySelector('canvas.hudPic'); if (pic) this.portrait(p, pic); // портрет своего скелета — карточки у него больше нет
     this.cards?.drawHandCards();
