@@ -25,41 +25,41 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=979ed43">
+<link rel="stylesheet" href="style.css?v=df88d2e">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "./src/bio.js": "./src/bio.js?v=979ed43",
-  "./src/cards.js": "./src/cards.js?v=979ed43",
-  "./src/chests.js": "./src/chests.js?v=979ed43",
-  "./src/city.js": "./src/city.js?v=979ed43",
-  "./src/dice.js": "./src/dice.js?v=979ed43",
-  "./src/districts.js": "./src/districts.js?v=979ed43",
-  "./src/game.js": "./src/game.js?v=979ed43",
-  "./src/gen.js": "./src/gen.js?v=979ed43",
-  "./src/geo.js": "./src/geo.js?v=979ed43",
-  "./src/graph.js": "./src/graph.js?v=979ed43",
-  "./src/hosts.js": "./src/hosts.js?v=979ed43",
-  "./src/hunters.js": "./src/hunters.js?v=979ed43",
-  "./src/intro.js": "./src/intro.js?v=979ed43",
-  "./src/landmarks.js": "./src/landmarks.js?v=979ed43",
-  "./src/main.js": "./src/main.js?v=979ed43",
-  "./src/minimap.js": "./src/minimap.js?v=979ed43",
-  "./src/poker.js": "./src/poker.js?v=979ed43",
-  "./src/post.js": "./src/post.js?v=979ed43",
-  "./src/quests.js": "./src/quests.js?v=979ed43",
-  "./src/rules.js": "./src/rules.js?v=979ed43",
-  "./src/sfx.js": "./src/sfx.js?v=979ed43",
-  "./src/share.js": "./src/share.js?v=979ed43",
-  "./src/shops.js": "./src/shops.js?v=979ed43",
-  "./src/sim.js": "./src/sim.js?v=979ed43",
-  "./src/skeletons.js": "./src/skeletons.js?v=979ed43",
-  "./src/store.js": "./src/store.js?v=979ed43",
-  "./src/tarot.js": "./src/tarot.js?v=979ed43",
-  "./src/tiles.js": "./src/tiles.js?v=979ed43",
-  "./src/ui.js": "./src/ui.js?v=979ed43",
-  "./src/venues.js": "./src/venues.js?v=979ed43"
+  "./src/bio.js": "./src/bio.js?v=df88d2e",
+  "./src/cards.js": "./src/cards.js?v=df88d2e",
+  "./src/chests.js": "./src/chests.js?v=df88d2e",
+  "./src/city.js": "./src/city.js?v=df88d2e",
+  "./src/dice.js": "./src/dice.js?v=df88d2e",
+  "./src/districts.js": "./src/districts.js?v=df88d2e",
+  "./src/game.js": "./src/game.js?v=df88d2e",
+  "./src/gen.js": "./src/gen.js?v=df88d2e",
+  "./src/geo.js": "./src/geo.js?v=df88d2e",
+  "./src/graph.js": "./src/graph.js?v=df88d2e",
+  "./src/hosts.js": "./src/hosts.js?v=df88d2e",
+  "./src/hunters.js": "./src/hunters.js?v=df88d2e",
+  "./src/intro.js": "./src/intro.js?v=df88d2e",
+  "./src/landmarks.js": "./src/landmarks.js?v=df88d2e",
+  "./src/main.js": "./src/main.js?v=df88d2e",
+  "./src/minimap.js": "./src/minimap.js?v=df88d2e",
+  "./src/poker.js": "./src/poker.js?v=df88d2e",
+  "./src/post.js": "./src/post.js?v=df88d2e",
+  "./src/quests.js": "./src/quests.js?v=df88d2e",
+  "./src/rules.js": "./src/rules.js?v=df88d2e",
+  "./src/sfx.js": "./src/sfx.js?v=df88d2e",
+  "./src/share.js": "./src/share.js?v=df88d2e",
+  "./src/shops.js": "./src/shops.js?v=df88d2e",
+  "./src/sim.js": "./src/sim.js?v=df88d2e",
+  "./src/skeletons.js": "./src/skeletons.js?v=df88d2e",
+  "./src/store.js": "./src/store.js?v=df88d2e",
+  "./src/tarot.js": "./src/tarot.js?v=df88d2e",
+  "./src/tiles.js": "./src/tiles.js?v=df88d2e",
+  "./src/ui.js": "./src/ui.js?v=df88d2e",
+  "./src/venues.js": "./src/venues.js?v=df88d2e"
 } }
 </script>
 <script src="config.js"></script>
@@ -137,7 +137,7 @@
     <div class="lg"><i class="chip" style="background:#ff3a5c"></i><div><b>Метки у края экрана</b>: 🪦 — ближайший охотник (красная рамка — он ближе 120 м), карта — ближайший босс часа; клик по метке летит к нему.</div></div>
     <div class="lg"><i class="chip" style="background:#ffd23a"></i><div><b>Конфеты и монетки</b> лежат на дорогах вокруг тебя: конфета лечит <i class="ic ic-heart" style="width:16px;height:16px"></i>, монетка идёт в кошелёк.</div></div>
     <div class="lg"><i class="chip" style="background:#9dff7a"></i><div><b>Зелёный призрак</b> — скелет, проигравший тебе «гадость».</div></div>
-    <div class="lg"><i class="chip" style="background:#5a2a0e"></i><div><b>Коричневое кольцо</b> — площадь, где скелеты танцуют.</div></div>
+    <div class="lg"><i class="chip" style="background:#ff8a2a"></i><div><b>Танцплощадка</b> — кольцо тыкв-фонарей на площади (Октябрьская, Победы, Свободы, Зыбицкая, Немига). Прохожие сворачивают туда, пляшут с полминуты и идут дальше по делам; зайди внутрь — твой скелет тоже запляшет.</div></div>
     <div class="lg"><i class="chip" style="background:#cdb892"></i><div><b>Заметные здания</b> — библиотека, «Футурис», телебашня, Ратуша, храмы, стадион: клик открывает описание и адрес.</div></div>
     <div class="hint">Свой скелет без управления гуляет сам: пьёт, танцует и заходит в бары. Панель слева сверху свёрнута в строку: клик по ней или по своему скелету разворачивает карточку с портретом и кнопками «управлять» (Esc отпускает) и «следить»; ещё клик или «Журнал» в шапке — подробный профиль. Тап мимо фигурки магнитится к ближайшему скелету, тыкве, вешалке или аркану. Можно завести до пяти скелетов и переключаться между ними.</div>
   </div>
@@ -304,6 +304,6 @@
   </div>
 </div>
 <div id="loading"><div class="skull">💀</div><div id="ldText">собираем кости…</div><div class="bar"><i id="ldBar"></i></div><div id="ldPct">0%</div></div>
-<script type="module" src="src/main.js?v=979ed43"></script>
+<script type="module" src="src/main.js?v=df88d2e"></script>
 </body>
 </html>
