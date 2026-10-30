@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { magnetPick, CHEST, chestOutcome, chestLoot, SPRINT, sprintStep, hunterSpeedFactor, isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
+import { CLASSES, classDie, classSpeed, outcomeWith, magnetPick, CHEST, chestOutcome, chestLoot, SPRINT, sprintStep, hunterSpeedFactor, isHalloweenNight, HALLOWEEN, CAPS, POINTS, HEAT, LEVELS, outcomeOf, levelOf, decayed, tailBonus, duel, newProgress, migrate, addPoints, growHearts, eatStack, logPush, scoreOf, intentOf, pickCemetery, statsOf, RPS, THROWS, PURSUIT, rpsBeats, hostThrow, hostSeed, stakeOf, resetAmount, deathCoins, CUT, shouldCut, CARD, HAND_MULT, TOKEN, ROAD, QUESTS, cardOfSlot, minskHour, hourLeft, handSeed, rngOf, dealHand, bossBonus, bossXp, questBonus, nextQuest, questFor, slotsOf, canBuyToken, buyToken, roadHeat, cardsFromDeck } from '../src/rules.js';
 
 test('outcomeOf пороги', () => { assert.equal(outcomeOf(1), 'critfail'); assert.equal(outcomeOf(2), 'fail'); assert.equal(outcomeOf(7), 'fail'); assert.equal(outcomeOf(8), 'success'); assert.equal(outcomeOf(19), 'success'); assert.equal(outcomeOf(20), 'crit'); });
 test('levelOf', () => { assert.equal(levelOf(0), 0); assert.equal(levelOf(19.9), 0); assert.equal(levelOf(20), 1); assert.equal(levelOf(99), 4); assert.equal(levelOf(100), 5); assert.equal(levelOf(140), 5); assert.equal(levelOf(-5), 0); });
@@ -193,4 +193,14 @@ test('magnetPick: ближайший предмет в допуске, отре�
   assert.equal(magnetPick([100, 20], items, 36).ref, 'a');
   assert.equal(magnetPick([100, 80], items, 1).ref, 'a'); // внутри фигурки расстояние отрицательное
   assert.equal(magnetPick([0, 0], [], 28), null);
+});
+
+test('классы: танк +1 сердце, воин +1 к d20 без критов бонусом, исследователь быстрее', () => {
+  assert.equal(newProgress().hp, 3); assert.equal(newProgress('tank').hp, 4); assert.equal(newProgress('tank').maxHp, 4); assert.equal(newProgress('nope').hp, 3);
+  assert.equal(migrate(newProgress('tank')).maxHp, 4);
+  assert.equal(classDie('warrior'), 1); assert.equal(classDie('tank'), 0); assert.equal(classDie(null), 0);
+  assert.equal(classSpeed('scout'), 1.15); assert.equal(classSpeed('warrior'), 1); assert.equal(classSpeed(undefined), 1);
+  assert.equal(outcomeWith(7, 1), 'success'); assert.equal(outcomeWith(7, 0), 'fail'); assert.equal(outcomeWith(19, 1), 'success'); // крит только натуральной двадцаткой
+  assert.equal(outcomeWith(1, 1), 'critfail'); assert.equal(outcomeWith(20, 0), 'crit'); assert.equal(outcomeWith(2, 1), 'fail');
+  assert.deepEqual(Object.keys(CLASSES), ['tank', 'scout', 'warrior']);
 });

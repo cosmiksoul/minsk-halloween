@@ -130,8 +130,9 @@ export function duel(foe, foeBonus, me, meBonus) {
 }
 
 // --- прогресс скелета (v2): стак, счёт, журнал, угроза
-export function newProgress() {
-  return { v: 2, hp: CAPS.baseHearts, maxHp: CAPS.baseHearts, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null, hand: null, hands: 0, bestHand: null, chests: {} };
+export function newProgress(cls = null) {
+  const hp = CAPS.baseHearts + (classOf(cls)?.hp || 0); // танк стартует с лишним сердцем
+  return { v: 2, hp, maxHp: hp, score: 0, wins: 0, losses: 0, tail: [], log: [], visits: [], tarot: [], coins: 0, tokens: 0, deaths: 0, kills: 0, friendsTotal: 0, seenVenues: [], shields: 0, hosts: {}, heat: 0, heatAt: 0, shared: null, hand: null, hands: 0, bestHand: null, chests: {} };
 }
 function oldScore(g) { return (g.skulls?.length ?? 0) * 3 + (g.friends?.length ?? 0) * 3 + (g.tarot?.length ?? 0) * 5 + (g.visits?.length ?? 0); }
 // старый прогресс (массивы skulls/friends, кап 6 сердец) один раз превращается в v2: счёт по старой формуле,
@@ -263,3 +264,16 @@ export function magnetPick(tap, items, slop) {
   for (const it of items) { const d = segDist(tap[0], tap[1], it.x1, it.y1, it.x2, it.y2) - (it.w || 0) / 2; if (d < bd) { bd = d; best = it; } }
   return best;
 }
+
+// классы своего скелета (выбор при создании, хранится в def.cls): танк — +1 сердце на старте, исследователь — быстрее (охотники считают от базовой скорости),
+// воин — +1 к d20 в сладости/гадости и к своему кубику в дуэлях
+export const CLASSES = {
+  tank: { label: 'танк', hint: '+1 сердце на старте', hp: 1 },
+  scout: { label: 'исследователь', hint: 'скорость +15 %', speed: 1.15 },
+  warrior: { label: 'воин', hint: '+1 к d20 на успех и в дуэлях', die: 1 },
+};
+export function classOf(cls) { return CLASSES[cls] || null; }
+export function classDie(cls) { return classOf(cls)?.die || 0; }
+export function classSpeed(cls) { return classOf(cls)?.speed || 1; }
+// исход d20 с бонусом класса: натуральные 1 и 20 остаются критами, иначе к броску прибавляется бонус (не выше 19 — крит бонусом не купить)
+export function outcomeWith(n, bonus = 0) { const r = num(n); return r <= 1 || r >= 20 || !bonus ? outcomeOf(r) : outcomeOf(Math.min(19, r + num(bonus))); }

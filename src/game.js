@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { rollDice, hideDice, showDuelResult, OUTCOMES } from './dice.js';
 import { Sfx } from './sfx.js';
 import { icon, toast, escHtml, statLine } from './ui.js';
-import { CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
+import { classDie, classSpeed, CAPS, POINTS, PURSUIT, RPS, THROWS, THROW_ICON, THROW_NAME, rpsBeats, hostThrow, stakeOf, resetAmount, migrate, addPoints, growHearts, eatStack, logPush, statsOf, tailBonus, duel, deathCoins, ROAD, roadHeat, TOKEN, canBuyToken, buyToken, bossBonus, bossXp } from './rules.js';
 import { cardLabel, isRed } from './poker.js';
 import { hostOf } from './hosts.js';
 import { drawCandy, drawPortrait, drawGhostPortrait, GHOSTS, CATALOG, SHOP_KINDS, PALETTE, randomItem } from './skeletons.js';
@@ -128,7 +128,7 @@ export class Game {
     if (this.player === a) return;
     if (this.player) { this.sim.unsetPlayer(this.player); this.player.def.player = false; this.select(false); }
     this.hunters?.reset(true); // смена скелета: охотники прежнего расходятся без записей, угроза остаётся в его прогрессе
-    this.player = a; a.def.player = true; this.lastPerished = null; this.tipsyUntil = 0; this.seenUntil = 0; this.sim.setPlayer(a);
+    this.player = a; a.def.player = true; this.lastPerished = null; this.tipsyUntil = 0; this.seenUntil = 0; this.sim.setPlayer(a); a.baseSpeed = a.speed; a.speed = a.baseSpeed * classSpeed(a.def.cls); // исследователь быстрее; охотники считают от baseSpeed
     const g = a.def.game = migrate(a.def.game); // старый прогресс один раз превращается в v2: счёт, хвост, журнал
     if (g.hp <= 0) g.hp = g.maxHp; // сохранились мёртвым: собираемся заново с полным здоровьем
     if (this.tarot) { this.tarot.reset(); for (const t of g.tarot) this.tarot.markDone(t.id); }
@@ -399,10 +399,10 @@ export class Game {
     const title = (p.action === 'kill' ? '💀 Гадость · ' : '🍬 Сладость · ') + npc.bio.name;
     let res; const g = this.g;
     try {
-      res = await rollDice(title, this.debugRoll ?? undefined, true);
+      res = await rollDice(title, this.debugRoll ?? undefined, true, { bonus: classDie(me.def.cls) }); // воин: +1 к порогу успеха
       if ((res.kind === 'fail' || res.kind === 'critfail') && g.tokens > 0) {
         const again = await this.offerSave(res);
-        if (again) { g.tokens--; this.save(); this.renderHUD(); res = await rollDice('🎟 Спас-бросок · ' + npc.bio.name, this.debugRoll2 ?? undefined, false); }
+        if (again) { g.tokens--; this.save(); this.renderHUD(); res = await rollDice('🎟 Спас-бросок · ' + npc.bio.name, this.debugRoll2 ?? undefined, false, { bonus: classDie(me.def.cls) }); }
         else hideDice();
       } else setTimeout(hideDice, 1800);
     } catch (e) { console.warn(e); hideDice(); res = { n: 10, kind: 'fail' }; }
@@ -448,7 +448,7 @@ export class Game {
     const g = this.g, me = this.player;
     if (!g || !me || this.busy || me.state === 'dead' || !this.closeBlocking()) return null;
     this.busy = true; this.dropPending(); this.sim.stop(me); this.setModal('dice');
-    const a = h.a, name = a.bio.name, fb = h.bonus || 0, tb = tailBonus(g.tail.length);
+    const a = h.a, name = a.bio.name, fb = h.bonus || 0, tb = tailBonus(g.tail.length) + classDie(me.def.cls); // бонус хвоста плюс класс (воин)
     const titleFoe = (h.card ? '🃏 ' + cardLabel(h.card.rank, h.card.suit) + ' · ' : h.intent === 'kill' ? '⚔ ' : '🤝 ') + name + (fb ? ' +' + fb : ''), titleMe = 'ты' + (tb ? ' +' + tb : '');
     const won = x => x.bio.gender === 'f' ? 'выиграла' : 'выиграл';
     const cmp = (foe, m) => `${foe}${fb ? '+' + fb : ''} против ${m}${tb ? '+' + tb : ''}`;

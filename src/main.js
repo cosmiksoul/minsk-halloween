@@ -16,10 +16,11 @@ import { initIntro } from './intro.js';
 import { icon, installFrames, registerIcons, statLine, toast } from './ui.js';
 import { beaten, cardLabel } from './poker.js';
 import { local, makeRemote, scoreOf, deviceId } from './store.js';
-import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf, cardOfSlot, QUESTS, magnetPick } from './rules.js';
+import { statsOf, PURSUIT, THROW_ICON, THROW_NAME, migrate, logPush, slotsOf, cardOfSlot, QUESTS, magnetPick, newProgress, CLASSES } from './rules.js';
 import { hostOf } from './hosts.js';
 import { Hunters, genitiveCem } from './hunters.js';
 import { buildLandmarks, TYPE_LABEL } from './landmarks.js';
+import { Minimap } from './minimap.js';
 import { Tarot, ARCANA_BY_ID } from './tarot.js';
 import { Shops } from './shops.js';
 import { generateCharacter } from './gen.js';
@@ -127,7 +128,8 @@ if (location.hash.startsWith('#s=')) { try { const o = JSON.parse(unb64(location
 const stateName = { walk: 'гуляет', talk: 'болтает', drink: 'пьёт пиво', dance: 'танцует', idle: 'стоит', wait: 'ждёт', follow: 'идёт следом', dead: 'рассыпался', ghost: 'летает' };
 const stateOf = a => a.ghost ? stateName.ghost : stateName[a.state] || a.state;
 const stateText = a => 'Сейчас: ' + a.bio.status + ' · ' + stateOf(a); // строка статуса на панели своего скелета
-const metaText = a => `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}`;
+const clsLabel = def => def && def.cls && CLASSES[def.cls] ? ' · ' + CLASSES[def.cls].label : ''; // класс своего скелета в мете панели и профиля
+const metaText = a => `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}${clsLabel(a.def)}`;
 // объявлены до первого flyTo при старте: иначе ReferenceError (TDZ) у тех, у кого уже есть сохранённый скелет
 let rotateTo = null, follow = null, cardAgent = null;
 const game = new Game(sim, scene, {
@@ -206,9 +208,10 @@ function renderQuests(force = false) {
 function placeDrawer() { if (isMobile) return; const hud = $('hud'); $('drawer').style.top = (hud.classList.contains('has') ? Math.round(hud.getBoundingClientRect().bottom + 8) : 52) + 'px'; } // без скелета панель внизу — ящик под шапкой
 new ResizeObserver(() => { if (drawerTab) placeDrawer(); }).observe($('hud'));
 function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn[data-drawer]')) b.classList.remove('on'); }
-const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map', quests: 'quest', deck: 'arcana', hand: 'hand', journal: 'book', how: 'dice' };
+const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map', quests: 'quest', deck: 'arcana', hand: 'hand', journal: 'book', share: 'share', how: 'dice' };
 // кнопки шапки: ящики по data-drawer, остальные действия по data-act (колода арканов, «как играть»)
 const TOP_ACT = { deck: () => game.openDeck(), how: () => { closeDrawer(); intro.show(); }, journal: () => { closeDrawer(); if (game.player) openProfile(game.player); else openMine(); },
+  share: () => { closeDrawer(); if (game.player) openShare(); else openMine(); }, // «Поделиться»: попап со ссылкой, карточкой и соцсетями
   hand: () => { if (!game.player) { openMine(); return; } const hud = $('hud'); const on = hud.classList.toggle('handOpen'); if (on) foldHud(); document.querySelector('.tbtn[data-act=hand]')?.classList.toggle('on', on); } }; // «Рука»: карты часа под строкой статуса // «Журнал» — профиль своего скелета, без скелета — создание
 for (const b of document.querySelectorAll('.tbtn')) { const k = b.dataset.drawer || b.dataset.act; b.innerHTML = icon(TAB_ICON[k] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => (b.dataset.drawer ? openDrawer(b.dataset.drawer) : TOP_ACT[b.dataset.act]?.()); }
 $('drawerClose').onclick = closeDrawer;
@@ -257,6 +260,7 @@ function updateMbar() {
 $('mbRun').innerHTML = icon('run', 2) + '<small>бег</small><i class="stam"></i>';
 $('mbRun').addEventListener('pointerdown', e => { e.preventDefault(); game.sprinting = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('mbRun').addEventListener(ev, () => { game.sprinting = false; });
+$('mbShare').innerHTML = icon('share', 2) + '<small>поделиться</small>'; $('mbShare').onclick = () => { if (game.player) openShare(); else openMine(); }; // на телефоне «Поделиться» из шапки спрятана
 $('mnClose').onclick = () => closeMine();
 $('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
 addEventListener('keydown', e => {
@@ -269,7 +273,7 @@ $('bFollow').onclick = () => { follow = follow ? null : cardAgent; $('bFollow').
 $('bPlay').onclick = () => takeControl(cardAgent);
 $('bSelect').onclick = () => { if (game.selected && cardAgent === game.player) game.select(false); else takeControl(cardAgent); };
 $('bProfile').onclick = () => openProfile(cardAgent);
-$('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; previewMine(); };
+$('bGen').onclick = () => { const c = generateCharacter(); $('mName').value = c.name; $('mGender').value = c.gender; $('mAge').value = c.age; $('mJob').value = c.job; $('mAbout').value = c.about; mArch.value = c.arch; mineSeed = c.costumeSeed; const ck = Object.keys(CLASSES); $('mClass').value = ck[Math.floor(Math.random() * ck.length)]; updateClassHint(); previewMine(); };
 function openMine() { const full = own().length >= slots(); $('mnLimit').hidden = !full; $('mSubmit').disabled = full; $('mine').hidden = false; renderMine(); previewMine(); if (!isMobile && !full) setTimeout(() => $('mName').focus(), 50); }
 function closeMine() { $('mine').hidden = true; }
 function pickPlayer() { if (game.player) return; const d = mine.find(x => !x.guest && !x.dead); if (d) { const a = sim.agents.find(x => x.def === d); if (a) game.setPlayer(a); } game.renderHUD(); }
@@ -304,7 +308,7 @@ $('bFight').onclick = () => { const a = cardAgent; if (!a || !game.player) retur
 let profileAgent = null;
 function renderProfile(a) {
   $('pfName').textContent = a.bio.name; game.portrait(a, $('pfPic'));
-  $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
+  $('pfMeta').textContent = `${a.bio.age} ${ageWord(a.bio.age)} · ${a.bio.gender === 'm' ? 'мужчина' : 'женщина'} · ${ARCH_LABEL[a.arch] || ''}${clsLabel(a.def)}` + (a.def.guest ? ' · гость' : a === game.player ? (game.selected ? ' · под управлением' : ' · гуляет сам') : ' · ваш скелет');
   $('pfJob').textContent = 'При жизни: ' + a.bio.job; $('pfStatus').innerHTML = a.def.dead ? ripText(a.def) : 'Сейчас: ' + esc(a.bio.status) + ' · ' + stateOf(a);
   $('pfAbout').textContent = a.def.about ? 'О себе: ' + a.def.about : '';
   $('pfGame').innerHTML = a.def.guest ? (a.def.stats ? `<div class="line">${guestStats(a.def)}</div>` : '') : game.profileHtml(a);
@@ -486,13 +490,17 @@ for (const a of ARCHETYPES) { const o = document.createElement('option'); o.valu
 mArch.value = 'raver';
 let mineSeed = Math.floor(Math.random() * 1e9);
 function previewMine() { const arch = ARCHETYPES.find(a => a.id === mArch.value); drawPortrait(randomCostume(makeRng(mineSeed * 2654435761 + 7), arch), $('minePic')); }
-mArch.onchange = previewMine; $('bReroll').onclick = () => { mineSeed = Math.floor(Math.random() * 1e9); previewMine(); }; previewMine();
+mArch.onchange = previewMine;
+$('mClass').innerHTML = Object.entries(CLASSES).map(([k, c]) => `<option value="${k}">${c.label}</option>`).join('');
+function updateClassHint() { const c = CLASSES[$('mClass').value]; $('mClassHint').textContent = c ? `${c.label}: ${c.hint}` : ''; }
+$('mClass').onchange = updateClassHint; updateClassHint(); $('bReroll').onclick = () => { mineSeed = Math.floor(Math.random() * 1e9); previewMine(); }; previewMine();
 $('mineForm').onsubmit = e => {
   e.preventDefault();
   if (own().length >= slots()) { $('mnLimit').hidden = false; return; }
   const age = Math.max(18, Math.min(120, +$('mAge').value || 18));
-  const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed, about: $('mAbout').value.trim().slice(0, 240) };
+  const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed, about: $('mAbout').value.trim().slice(0, 240), cls: CLASSES[$('mClass').value] ? $('mClass').value : null };
   if (!def.name || !def.job) return;
+  def.game = newProgress(def.cls); // прогресс сразу с бонусом класса (танк — четыре сердца)
   mine.push(def); saveMine();
   const a = sim.spawnCustom(def, controls.target.x, controls.target.z);
   takeControl(a);
@@ -557,20 +565,23 @@ if (remote) remote.raids(local.get('raids.seen', '1970-01-01T00:00:00Z')).then(r
 if (remote) remote.others(20).then(rows => { if (!rows) return; for (const r of rows) { if (mine.some(d => d.seed === r.seed && d.name === r.name)) continue; const a = sim.spawnCustom({ name: r.name, gender: r.gender, age: r.age, job: r.job, arch: r.arch, seed: r.seed, guest: true, remote: true, rid: r.id, device: r.device, stats: { kills: r.kills || 0, friends: r.friends || 0 }, costume: r.costume || undefined, score: r.score || 0, dead: !!r.dead }); if (r.dead) sim.ghostify(a, 'player'); } });
 
 // --- поделиться карточкой персонажа
-let shareFormat = 'post';
+let shareFormat = isMobile ? 'story' : 'post'; // на телефоне сразу сторис
+function syncShareUi() { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x.dataset.f === shareFormat)); $('shrDl').textContent = shareFormat === 'story' ? '⬇ скачать для сторис' : '⬇ скачать пост'; }
 async function renderShare() {
   const p = game.player; if (!p) return;
   await ensureFonts();
   const friends = (p.followers || []).map(f => f.costume);
   renderShareCard($('shrCv'), { def: p.def, costume: p.costume, friends, format: shareFormat, myCard: cards.myCard(), url: shareLink(p.def).replace(/^https?:\/\//, '').slice(0, 70) + '…' });
   $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
+  $('shrUrl').value = shareLink(p.def);
 }
-function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; renderShare(); }
+function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; syncShareUi(); renderShare(); }
 $('shrClose').onclick = () => { if (game.modal === 'share') game.setModal(null); };
-for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('on', x === b)); shareFormat = b.dataset.f; renderShare(); };
+for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { shareFormat = b.dataset.f; syncShareUi(); renderShare(); };
+syncShareUi();
 const shareText = () => { const p = game.player, st = statsOf(game.g); return `Мой скелет ${p.bio.name} гуляет по Хэллоуину в Минске: XP ${st.score} · 💀 ${st.kills} · 💚 ${st.friends} · 🃏 ${st.tarot}/22 · 🎃 ${st.visits}`; };
 $('shrDl').onclick = () => { download($('shrCv'), `skeleton-${shareFormat}.png`); };
-$('shrCopy').onclick = async () => { const link = shareLink(game.player.def); try { await navigator.clipboard.writeText(link); $('shrCopy').textContent = 'скопировано'; setTimeout(() => $('shrCopy').textContent = '🔗 скопировать ссылку', 1500); } catch { prompt('Ссылка на скелета', link); } };
+$('shrCopy').onclick = async () => { const link = shareLink(game.player.def); try { await navigator.clipboard.writeText(link); $('shrCopy').textContent = 'скопировано'; setTimeout(() => $('shrCopy').textContent = '🔗 копировать', 1500); } catch { prompt('Ссылка на скелета', link); } };
 $('shrNative').onclick = async () => { const ok = await nativeShare($('shrCv'), shareText(), shareLink(game.player.def)); if (ok) { game.onShared('native'); renderShare(); } else if (ok === false) download($('shrCv'), `skeleton-${shareFormat}.png`); };
 for (const b of document.querySelectorAll('.socials button')) b.onclick = () => {
   const net = b.dataset.net; const link = shareLink(game.player.def); const t = shareTargets(link, shareText());
@@ -638,6 +649,7 @@ canvas.addEventListener('pointermove', e => {
 addEventListener('pointerup', () => { downAt = null; });
 
 // --- пузыри реплик и подписи своих скелетов
+let minimap = null, mmAcc = 0; // миникарта создаётся после загрузки города, кадр к ней обращается раньше
 const bubLayer = $('bubbles'); const pool = []; const v3 = new THREE.Vector3();
 function drawBubbles() {
   let n = 0; const w = innerWidth, h = innerHeight;
@@ -719,12 +731,13 @@ function frame() {
   markers.update(clock.elapsedTime); lms.update(clock.elapsedTime, dt); shops.update(clock.elapsedTime); tiles.animate(clock.elapsedTime);
   const e = camera.matrixWorld.elements; sim.camRight.set(e[0], 0, e[2]).normalize();
   const sdt = dt * +ui.spd.value;
-  sim.crowd(tiles.footprint(camera), dt);
+  const fp = tiles.footprint(camera); sim.crowd(fp, dt);
   sim.update(sdt);
   game.update(sdt, clock.elapsedTime);
   hunters.update(sdt);
   cards.update(sdt);
   drawBubbles();
+  mmAcc += dt; if (minimap && mmAcc > 0.1) { mmAcc = 0; minimap.draw({ player: game.player, hunters: hunters.list.map(h => h.a), bosses: cards.bosses.filter(b => sim.agents.includes(b.a)).map(b => b.a), footprint: fp }); }
   acc += dt; if (acc > 0.5) { acc = 0; updateMbar(); if (drawerTab === 'quests') renderQuests(); renderStats(); if (cardAgent && !$('card').hidden) { if (sim.agents.includes(cardAgent)) $('cState').textContent = 'Состояние: ' + stateOf(cardAgent); else { $('card').hidden = true; cardAgent = null; } } if (game.player) { const hud = $('hud'); const hs = hud.querySelector('.hudState'); if (hs) hs.textContent = stateText(game.player); const hf = hud.querySelector('.hudFollow'); if (hf) hf.classList.toggle('on', follow === game.player); } updatePopup(); updateCompass(); }
   feedAcc += dt; if (feedAcc > 2.5) { feedAcc = 0; if (drawerTab === 'places') renderPlaces(); if (drawerTab === 'legend') renderChestList(); }
   pixel.render(scene, camera, clock.elapsedTime);
@@ -733,6 +746,9 @@ function frame() {
 loader.to(88); await tiles.ready(camera);
 frame();
 loader.done();
+minimap = new Minimap({ canvas: $('minimap'), graph: sim.graph, venues, bbox: index.bbox || [-15000, -11000, 15500, 12500], onJump: (x, z) => flyTo(x, z) });
+$('minimap').hidden = !local.get('minimap', 1); $('mmChk').checked = !$('minimap').hidden;
+$('mmChk').onchange = () => { local.set('minimap', $('mmChk').checked ? 1 : 0); $('minimap').hidden = !$('mmChk').checked; };
 if (!mine.some(d => !d.guest) && !intro.seen) setTimeout(() => intro.show(), 400);
-window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
+window.__app = { camera, controls, sim, game, tiles, venues, tarot, lms, shops, hunters, minimap, renderShare, openShare, openDrawer, openProfile, takeControl, unfollow: () => { follow = null; }, project: (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; }, flyTo, showCard, showVenue, showBuilding, renderer, remote, mine: () => mine, slots, addSlot, cards, quests, intro, perf: () => ({ frameMs: +frameMs.toFixed(2), frames, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, tiles: tiles.stats }) };
 console.log('город собран:', index.stats?.buildings, 'зданий в', Object.keys(index.tiles).length, 'тайлах,', sim.graph.walkable.length, 'узлов,', venues.length, 'заведений,', events.length, 'событий,', sim.hotspots.length, 'оживлённых мест,', cems.length, 'кладбищ с узлами');

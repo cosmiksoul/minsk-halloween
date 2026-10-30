@@ -121,8 +121,9 @@ body.playing #c { cursor:crosshair; }
 .askTitle { font-family:"Press Start 2P", monospace; font-size:9px; color:var(--accent); line-height:1.5; }
 .askBtns { display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
 .askBtns button { font-size:11px; padding:6px 8px; }
-button.sweet { background:#ff5fa2; color:var(--black); border-color:#ff5fa2; font-weight:700; } button.sweet:hover { background:#ff8ac0; color:var(--black); }
-button.trick { background:var(--green); color:var(--black); border-color:var(--green); font-weight:700; } button.trick:hover { background:#7cff52; color:var(--black); }
+/* сладость зелёная (как 💚 друг), гадость розовая (как 💀) */
+button.sweet { background:var(--green); color:var(--black); border-color:var(--green); font-weight:700; } button.sweet:hover { background:#7cff52; color:var(--black); }
+button.trick { background:#ff5fa2; color:var(--black); border-color:#ff5fa2; font-weight:700; } button.trick:hover { background:#ff8ac0; color:var(--black); }
 
 #dice { position:fixed; left:50%; top:38%; transform:translate(-50%,-50%); z-index:8; pointer-events:none; display:flex; flex-direction:column; align-items:center; gap:8px; font-family:"Press Start 2P", monospace; font-size:9px; color:var(--ink); text-shadow:2px 2px 0 var(--black); }
 #dice[hidden] { display:none; }
@@ -398,8 +399,8 @@ button:disabled { opacity:.45; filter:grayscale(.6); cursor:not-allowed; transfo
 button.on, .tbtn.on, .tabs2 button.on, button.green, button.trick, button.sweet, button.gen, button:hover, button.green:hover, button.trick:hover, button.sweet:hover, button.gen:hover { background:transparent; border-color:transparent; }
 button.on, .tbtn.on, .tabs2 button.on, button.on:hover, .tbtn.on:hover, .tabs2 button.on:hover { border-image-source:var(--btn-on); color:#1b1326; }
 button.on:active, .tbtn.on:active, .tabs2 button.on:active { border-image-source:var(--btn-on-p); }
-button.green, button.trick, button.green:hover, button.trick:hover { border-image-source:var(--btn-green); color:var(--black); } button.green:active, button.trick:active { border-image-source:var(--btn-green-p); }
-button.sweet, button.sweet:hover { border-image-source:var(--btn-sweet); color:var(--black); } button.sweet:active { border-image-source:var(--btn-sweet-p); }
+button.green, button.sweet, button.green:hover, button.sweet:hover { border-image-source:var(--btn-green); color:var(--black); } button.green:active, button.sweet:active { border-image-source:var(--btn-green-p); }
+button.trick, button.trick:hover { border-image-source:var(--btn-sweet); color:var(--black); } button.trick:active { border-image-source:var(--btn-sweet-p); }
 button.gen, button.gen:hover { border-image-source:var(--btn-gen); color:var(--black); } button.gen:active { border-image-source:var(--btn-gen-p); }
 .socials button { color:var(--ink); } .socials button[data-net=tg] { color:#2aabee; } .socials button[data-net=fb] { color:#6ea8ff; } /* бренд — цветом подписи, рамка у всех одна */
 button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; background:none; font-family:"JetBrains Mono", monospace; filter:none; transform:none; }
@@ -484,3 +485,15 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
   #mbar #mbRun { padding:1px 0; gap:1px; } /* полоска дыхания в потоке под подписью, а не поверх неё («бег» читался как «бес») */
   #mbar #mbRun .stam { position:static; align-self:flex-start; margin-left:4px; }
 }
+
+/* --- релиз: класс в форме, попап «поделиться» со ссылкой, «поделиться» на телефоне в нижней панели */
+.mClassHint { margin-top:-2px; }
+.shrLink { display:flex; gap:6px; align-items:stretch; }
+.shrLink input { flex:1; min-width:0; font:inherit; font-size:10px; background:#1b1326; color:var(--ink); border:2px solid var(--line); box-shadow:inset 2px 2px 0 #0b0b0b; padding:5px 7px; }
+.shrLink button { white-space:nowrap; }
+@media (max-width: 700px) { .tbtn[data-act="share"] { display:none; } #mbar button { width:80px; } }
+
+/* --- миникарта: весь город в правом нижнем углу, клик или перетаскивание двигает камеру */
+#minimap { position:fixed; right:12px; bottom:12px; width:196px; height:auto; z-index:4; border:3px solid #3a2a55; box-shadow:0 0 0 1px #0b0b0b; image-rendering:pixelated; cursor:crosshair; touch-action:none; background:#120b1f; }
+#minimap[hidden] { display:none; }
+@media (max-width: 700px) { #minimap { right:8px; bottom:72px; width:112px; } #toasts { right:124px; } }

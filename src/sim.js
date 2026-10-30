@@ -157,7 +157,7 @@ export class Sim {
     const dur = 5.5 + a.rng() * 3; a.timer = b.timer = dur;
     let pool = LINES.chat;
     if (a.custom || b.custom) pool = LINES.chat.concat(LINES.toYou || []);
-    const lines = [chatLine(a.rng, a.arch, pool), chatLine(b.rng, b.arch, pool), chatLine(a.rng, a.arch)]; // часть реплик — по архетипу
+    const lines = [chatLine(a.rng, a.arch, pool, 0.45, a.bio?.name), chatLine(b.rng, b.arch, pool, 0.45, b.bio?.name), chatLine(a.rng, a.arch, LINES.chat, 0.45, a.bio?.name)]; // часть реплик — по архетипу, у именных (Папирус) — свои
     a.script = [{ at: dur - 0.2, text: lines[0] }, { at: dur - 4.6, text: lines[2] }]; b.script = [{ at: dur - 2.4, text: lines[1] }];
     this.stats.meetings++;
   }
@@ -474,7 +474,7 @@ export class Sim {
         if (a.state === 'walk') {
           if (a.player) { const tr = a.trail; const last = tr[tr.length - 1]; if (!last || (last[0] - a.x) ** 2 + (last[1] - a.z) ** 2 > 2.25) { tr.push([a.x, a.z]); if (tr.length > 600) tr.splice(0, tr.length - 600); } }
           if (!a.ghost) { a.thirst -= dt; if (a.thirst <= 0 && !a.target) this.goDrink(a); }
-          if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) { if (a.ghost || a.rng() < 0.5) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6); else this.say(a, pick(a.rng, LINES.mutter), '', 2); } // «бу» или бормотание под нос
+          if (a.rng() < dt * (a.ghost ? 0.01 : 0.004)) { if (a.ghost || a.rng() < 0.5) this.say(a, pick(a.rng, LINES.boo), 'boo', 1.6); else this.say(a, pick(a.rng, LINES.named[a.bio?.name] || LINES.mutter), '', 2); } // «бу» или бормотание под нос (у именных — свои реплики)
           this.place(a);
           const dx = g.x[a.to] - g.x[a.from], dz = g.z[a.to] - g.z[a.from];
           a.face = dx * this.camRight.x + dz * this.camRight.z >= 0 ? 1 : -1;

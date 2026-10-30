@@ -1,6 +1,6 @@
 // Бросок d20: пиксельный кубик крутится на оверлее, число мельтешит, потом замирает.
 // Режим plain (дуэль): без ярлыка исхода и нейтральным цветом; showDuelResult показывает экран сравнения.
-import { outcomeOf } from './rules.js';
+import { outcomeOf, outcomeWith } from './rules.js';
 import { Sfx } from './sfx.js';
 export { outcomeOf };
 const $ = id => document.getElementById(id);
@@ -34,7 +34,7 @@ export function hideDice() { const box = $('dice'); box.hidden = true; box.class
 export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hold = false, opts = {}) {
   const box = $('dice'), cv = $('diceCv'), ctx = cv.getContext('2d'); cv.hidden = false; const plain = !!opts.plain;
   box.hidden = false; box.className = 'rolling'; Sfx.play('dice'); $('diceTitle').textContent = title; $('diceRes').textContent = ''; $('diceNum').textContent = ''; $('diceSave').hidden = true;
-  const kind = outcomeOf(result), out = OUTCOMES[kind];
+  const bonus = opts.bonus | 0; const kind = outcomeWith(result, bonus), out = OUTCOMES[kind]; // бонус класса (воин +1): порог сдвигается, криты только натуральные
   return new Promise(resolve => {
     const t0 = performance.now(); const dur = 1400; let last = 0;
     const tick = now => {
@@ -44,7 +44,7 @@ export function rollDice(title, result = 1 + Math.floor(Math.random() * 20), hol
         requestAnimationFrame(tick);
       } else {
         if (plain) { drawD20(ctx, result, '#e9dff7', 0); box.className = 'done plain'; $('diceRes').textContent = ''; $('diceNum').textContent = `выпало ${result}`; }
-        else { drawD20(ctx, result, out.color, 0); box.className = 'done ' + kind; $('diceRes').textContent = out.label; $('diceRes').style.color = out.color; $('diceNum').textContent = `выпало ${result}`; }
+        else { drawD20(ctx, result, out.color, 0); box.className = 'done ' + kind; $('diceRes').textContent = out.label; $('diceRes').style.color = out.color; $('diceNum').textContent = `выпало ${result}${bonus ? ' +' + bonus + ' класс' : ''}`; }
         setTimeout(() => { resolve({ n: result, kind }); }, 700);
         if (!hold) setTimeout(() => { if (box.className.startsWith('done')) box.hidden = true; }, 2600);
       }
