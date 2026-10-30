@@ -497,3 +497,10 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
 #minimap { position:fixed; right:12px; bottom:12px; width:196px; height:auto; z-index:4; border:3px solid #3a2a55; box-shadow:0 0 0 1px #0b0b0b; image-rendering:pixelated; cursor:crosshair; touch-action:none; background:#120b1f; }
 #minimap[hidden] { display:none; }
 @media (max-width: 700px) { #minimap { right:8px; bottom:72px; width:112px; } #toasts { right:124px; } }
+
+/* --- телефон: 100vh в мобильном Chrome выше видимой области (адресная строка), поэтому колода арканов и другие высокие модалки
+   центрировались по невидимой высоте, упирались в верх экрана и прятали «×». Высота по видимой области (dvh) с запасом 48 px
+   сверху и снизу: шапка остаётся видна, короткие модалки как были — по центру */
+@media (max-width: 700px) {
+  .dBox, .tBox, .mnBox { max-height:calc(100vh - 96px); max-height:calc(100dvh - 96px); }
+}
