@@ -462,7 +462,9 @@ export class Sim {
 
   update(dt) {
     this.time += dt; const g = this.graph;
+    let gone = null;
     for (const a of this.agents) {
+      if (a.fade != null) { a.fade -= dt; a.sprite.material.opacity = Math.min(0.85, Math.max(0, a.fade)); if (a.fade <= 0) { (gone ||= []).push(a); continue; } } // тает и исчезает (побитый босс)
       a.anim += dt; a.cooldown -= dt;
       if ((a.player && !a.auto) || a.driven || a.state === 'cut') this.updatePlayer(a, dt);
       else if (a.state === 'follow') this.updateFollower(a, dt);
@@ -503,6 +505,7 @@ export class Sim {
       a.sprite.position.y = a.ghost ? 1.5 + Math.sin(a.anim * 2.5) * this.H * 0.08 + this.H * 0.1 : a.haunted ? 0.5 + this.H * 0.05 + Math.sin(a.anim * 3) * this.H * 0.04 : a.state === 'dance' ? 0.5 + (Math.floor(a.anim * 4) % 2) * this.H * 0.07 : 0.5;
       if (a.tipsy) a.sprite.position.x = a.x + Math.sin(this.time * 6) * this.H * 0.04; // «штормит»: скелет идёт шатаясь
     }
+    if (gone) for (const a of gone) this.remove(a);
     this.meetTimer -= dt;
     if (this.meetTimer <= 0) {
       this.meetTimer = 0.25; const cell = 8, grid = new Map();

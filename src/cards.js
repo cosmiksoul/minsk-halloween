@@ -147,6 +147,8 @@ export class Cards {
       g.coins += 4; g.wins++; const xp = bossXp(card.rank); game.points(xp);
       game.log('card', base); this.hunters?.gain('boss'); game.quests?.onEvent('card', xp);
       game.notify(`${base.cardName} ${beaten(card.rank)} · XP +${xp} · +4 монеты`, 'card', 3000);
+      // побитый босс золотым призраком уплывает и тает за четыре секунды; трекер и стрелка его уже не считают (карта бита)
+      this.sim.drive(a, false); this.sim.ghostify(a, 'player'); this.sim.say(a, 'карта бита', '', 2); a.fade = 4;
       if (this.hand && this.hand.cards.every(c => c.state === 'down')) this.completeHand();
       game.save(); return 'card';
     }
@@ -192,7 +194,7 @@ export class Cards {
   }
   myCardHtml() { const mc = this.myCard(); return mc ? `<span class="myCard" title="твоя карта в колоде часа: место ${mc.slot} в топ-52">карта ${cardLabel(mc.rank, mc.suit)}</span>` : ''; }
   // камера к боссу карты и его карточка (клик по полосе на HUD)
-  flyTo(slot) { const b = this.bosses.find(b => b.card.slot === slot); if (!b) return; if (this.flyToFn) this.flyToFn(b.a.x, b.a.z); if (this.showCard) this.showCard(b.a); }
+  flyTo(slot) { const b = this.bosses.find(b => b.card.slot === slot); if (!b) return; if (this.flyToFn) this.flyToFn(b.a.x, b.a.z); if (this.showCard && this.sim.agents.includes(b.a)) this.showCard(b.a); } // растаявшего босса не показываем
   // раз в секунду: смена часа (не посреди боя), откаты, таймер на HUD
   update(dt) {
     this.acc += dt; if (this.acc < 1) return; this.acc = 0;
