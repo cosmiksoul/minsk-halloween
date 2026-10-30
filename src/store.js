@@ -21,6 +21,9 @@ export function deviceId() {
   return id;
 }
 
+// версия сборки для телеметрии — из ?v= у style.css (tools/version.py)
+const VER = typeof document === 'undefined' ? null : ((document.querySelector('link[rel=stylesheet][href*="?v="]')?.href || '').match(/v=([^&]+)/) || [])[1] || null;
+
 export class Remote {
   constructor(cfg) { this.url = cfg.url.replace(/\/$/, ''); this.key = cfg.anonKey; this.table = cfg.table || 'skeletons'; this.ok = true; this.lastError = null; }
   headers(extra = {}) { return { apikey: this.key, Authorization: 'Bearer ' + this.key, 'Content-Type': 'application/json', ...extra }; }
@@ -45,6 +48,12 @@ export class Remote {
   top(limit = 52) { return this.call(`${this.table}?select=id,device,name,gender,age,seed,costume,job,arch,kills,friends,visits,deaths,tarot,score,hearts,tail,wins,losses,dead,updated_at&order=score.desc,kills.desc,friends.desc&limit=${limit}`); }
   // набег: стычка чужого охотника с моим скелетом (пишет клиент жертвы)
   logEncounter(row) { return this.call('encounters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); }
+  // микротелеметрия: строка в таблицу events (схема и запросы в README, «Телеметрия»). У anon-ключа нет права читать — смотреть в SQL Editor.
+  // Отдельный fetch, не трогает ok/lastError и ничего не ждёт: пока таблицы нет или сеть легла, игра этого не замечает
+  event(kind, info = null) {
+    const row = { device: deviceId(), kind, platform: matchMedia('(max-width: 700px)').matches ? 'phone' : 'desktop', ref: kind === 'open' ? (document.referrer || '').slice(0, 120) || null : null, info: info == null ? null : String(info).slice(0, 60), ver: VER };
+    try { fetch(this.url + '/rest/v1/events', { method: 'POST', headers: this.headers({ Prefer: 'return=minimal' }), body: JSON.stringify(row), keepalive: true }).catch(() => null); } catch { }
+  }
   // набеги с моим участием (как охотник или жертва) новее отметки
   raids(sinceIso, limit = 50) { const me = encodeURIComponent(deviceId()); return this.call(`encounters?or=(hunter_device.eq.${me},victim_device.eq.${me})&at=gt.${encodeURIComponent(sinceIso)}&order=at.desc&limit=${limit}`); }
   remove(def) { return this.call(`${this.table}?id=eq.${encodeURIComponent(deviceId() + ':' + def.seed)}`, { method: 'DELETE' }); }

@@ -114,6 +114,11 @@ sim.setPopulation(isMobile ? 120 : 260);
 let mine = local.load();
 const saveMine = () => local.save(mine);
 const remote = makeRemote(); let remoteTimer = 0;
+// микротелеметрия (README, «Телеметрия»): open при загрузке, ping за каждые 5 минут видимой вкладки, skeleton/share по действиям,
+// остальное — записи журнала из TEL_KINDS (обёртка над game.log ниже). Без имён, позиции и IP: тот же случайный device, что у скелета
+const TEL_KINDS = new Set(['card', 'tarot', 'death', 'rip', 'hand', 'kill', 'friend', 'chest', 'buy', 'quest', 'win']);
+let telMinutes = 0;
+if (remote) { remote.event('open'); setInterval(() => { if (document.visibilityState === 'visible' && ++telMinutes % 5 === 0) remote.event('ping', telMinutes); }, 60000); }
 const own = () => mine.filter(d => !d.guest && !d.dead).map(def => ({ def, agent: sim.agents.find(a => a.def === def) })).filter(o => o.agent);
 // слоты живых скелетов на устройстве: один по умолчанию, слот за каждую собранную руку, до пяти; старые устройства с несколькими живыми ничего не теряют
 const slots = () => slotsOf(local.get('slots', 0), mine.filter(d => !d.guest && !d.dead).length);
@@ -138,6 +143,7 @@ const game = new Game(sim, scene, {
   onChange: () => { if (remote && game.player) { const p = game.player; clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(p.def, p.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
   onPerish: p => { if (remote) { clearTimeout(remoteTimer); remote.upsert(p.def, p.def.game); } renderMine(); if (cardAgent === p) showCard(p); if (!$('tabBoard').hidden) renderBoard(false); },
 });
+if (remote) { const logOrig = game.log.bind(game); game.log = (kind, ...rest) => { if (TEL_KINDS.has(kind)) remote.event(kind); return logOrig(kind, ...rest); }; } // телеметрия по журналу
 const hunters = new Hunters({ sim, game, cemeteries: cems, remote }); game.hunters = hunters;
 const cards = new Cards({ sim, game, scene, remote, hunters, addSlot, flyTo, showCard }); game.cards = cards; // карты часа: колода из рейтинга, боссы вокруг игрока
 for (const def of mine) { const a = sim.spawnCustom(def, def.game?.x, def.game?.z); if (def.dead) sim.ghostify(a, 'player'); } // упокоенные стоят в городе золотыми призраками
@@ -501,7 +507,7 @@ $('mineForm').onsubmit = e => {
   const def = { name: $('mName').value.trim(), gender: $('mGender').value, age, job: $('mJob').value.trim(), arch: mArch.value, seed: mineSeed, about: $('mAbout').value.trim().slice(0, 240), cls: CLASSES[$('mClass').value] ? $('mClass').value : null };
   if (!def.name || !def.job) return;
   def.game = newProgress(def.cls); // прогресс сразу с бонусом класса (танк — четыре сердца)
-  mine.push(def); saveMine();
+  mine.push(def); saveMine(); remote?.event('skeleton', def.cls || 'none');
   const a = sim.spawnCustom(def, controls.target.x, controls.target.z);
   takeControl(a);
   mineSeed = Math.floor(Math.random() * 1e9); previewMine(); renderMine(); $('mAbout').value = ''; $('mName').value = ''; $('mJob').value = '';
@@ -575,7 +581,7 @@ async function renderShare() {
   $('shrTok').textContent = game.g.shared ? 'карточка уже публиковалась' : 'первая публикация: +1 🎟';
   $('shrUrl').value = shareLink(p.def);
 }
-function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); $('shrNative').hidden = !navigator.share; syncShareUi(); renderShare(); }
+function openShare() { if (!game.player || (game.modal && game.modal !== 'share')) return; game.setModal('share'); remote?.event('share'); $('shrNative').hidden = !navigator.share; syncShareUi(); renderShare(); }
 $('shrClose').onclick = () => { if (game.modal === 'share') game.setModal(null); };
 for (const b of document.querySelectorAll('.tabs2 button')) b.onclick = () => { shareFormat = b.dataset.f; syncShareUi(); renderShare(); };
 syncShareUi();
