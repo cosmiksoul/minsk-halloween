@@ -141,6 +141,7 @@ const game = new Game(sim, scene, {
   tarot, shops, save: saveMine, own, slots, isFollowing: a => follow === a, metaText, stateText,
   showCard: (a, refresh) => { showCard(a, refresh); if (refresh && !$('profile').hidden && profileAgent === a) renderProfile(a); },
   onChange: () => { if (remote && game.player) { const p = game.player; clearTimeout(remoteTimer); remoteTimer = setTimeout(() => remote.upsert(p.def, p.def.game), 4000); } if (!$('tabBoard').hidden) renderBoard(false); },
+  onDialog: () => { if (!$('card').hidden) { $('card').hidden = true; cardAgent = null; follow = null; hideTip(); } }, // открылся вопрос НПС или игра с хозяином — карточку прячем
   onPerish: p => { if (remote) { clearTimeout(remoteTimer); remote.upsert(p.def, p.def.game); } renderMine(); if (cardAgent === p) showCard(p); if (!$('tabBoard').hidden) renderBoard(false); },
 });
 if (remote) { const logOrig = game.log.bind(game); game.log = (kind, ...rest) => { if (TEL_KINDS.has(kind)) remote.event(kind); return logOrig(kind, ...rest); }; } // телеметрия по журналу
@@ -292,6 +293,7 @@ function showCard(a, refresh) {
   if (refresh && (cardAgent !== a || $('card').hidden)) return;
   if (a === game.player) { if (cardAgent === a) { $('card').hidden = true; cardAgent = null; } expandHud(); return; } // у своего скелета карточки нет: всё на панели слева сверху
   cardAgent = a; $('card').hidden = false;
+  if (game.modal === 'ask') game.closeDialog(); // и наоборот: карточка вытесняет вопрос НПС
   game.portrait(a, $('cardPic'));
   $('cName').textContent = a.bio.name; $('cName').className = 'name' + (a === game.player ? ' player' : a.custom ? ' mine' : a.ghost ? ' ghost' : '');
   const hh = a.custom && a.def.hunter ? hunters.list.find(x => x.a === a) : null;

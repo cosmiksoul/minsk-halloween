@@ -51,7 +51,7 @@ button.green:hover { background:#7cff52; color:var(--black); }
 #popup .pe { margin-top:6px; padding:6px 8px; border:1px dashed var(--green); border-radius:4px; }
 #popup .pe b { color:#fff; }
 
-#card { position:fixed; left:12px; bottom:12px; display:flex; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; max-width:calc(100vw - 24px); z-index:4; }
+#card { position:fixed; left:50%; bottom:44px; transform:translateX(-50%); display:flex; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11px; max-width:calc(100vw - 24px); z-index:4; }
 #card[hidden] { display:none; }
 #cardPic { image-rendering:pixelated; background:#1b1326; border:1px solid var(--line); border-radius:4px; }
 .cardBody { display:flex; flex-direction:column; gap:4px; min-width:200px; }
@@ -106,7 +106,7 @@ i.hp.on { color:#ff3a5c; text-shadow:0 0 4px #ff3a5c; }
 .bub.tag.boss { display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px 5px 3px; } .bub.tag.boss .tagCard { display:block; width:24px; height:33px; background-size:100% 100%; image-rendering:pixelated; filter:drop-shadow(1px 1px 0 #0b0b0b); } /* сверху карта часа, под ней имя; поверх домов, как все подписи */ /* босс с картой часа: золото, охотники и гости — зелёные, свой — оранжевый */
 body.playing #c { cursor:crosshair; }
 
-#ask, #host { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
+#ask, #host { position:fixed; left:50%; bottom:44px; transform:translateX(-50%); z-index:7; display:flex; gap:10px; background:var(--black); border:2px solid var(--accent); border-radius:6px; padding:10px 12px; width:min(360px, calc(100vw - 24px)); box-shadow:3px 3px 0 var(--accent); font-size:11px; }
 #ask[hidden], #host[hidden] { display:none; }
 /* плашка хозяина: жесты крупно, полоска времени, результат партии */
 #host { border-color:#ffd23a; box-shadow:3px 3px 0 #ffd23a; }
@@ -256,7 +256,7 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 .dHead { display:flex; align-items:center; padding:8px 10px; font-family:"Press Start 2P", monospace; font-size:9px; color:var(--green); border-bottom:1px solid var(--line); }
 .dHead .x { margin-left:auto; background:transparent; border:0; color:var(--green); font-size:16px; padding:0 4px; }
 #drawer .tabBody { flex:1; min-height:0; overflow:auto; } /* содержимое вкладки длиннее ящика: скролл внутри рамки */
-body.drawerOpen #card { left:344px; }
+body.drawerOpen #card { left:calc(50% + 160px); }
 .lg { display:flex; gap:8px; align-items:flex-start; line-height:1.45; color:var(--ink); }
 .lg .chip { flex:0 0 auto; width:12px; height:12px; border-radius:3px; margin-top:2px; border:1px solid rgba(255,255,255,.25); }
 .lg b { color:var(--green); }
@@ -295,7 +295,7 @@ body.drawerOpen #card { left:344px; }
   #mbar #mbRun { position:relative; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   #mbar #mbRun .stam { position:absolute; left:4px; bottom:3px; height:3px; width:calc(100% - 8px); max-width:calc(100% - 8px); background:var(--green); }
   #mbar #mbRun.on { border-image-source:var(--btn-on); color:#1b1326; } #mbar #mbRun.ex .stam { background:#777; } #mbar #mbRun.ex { opacity:.6; }
-  #card { left:0; right:0; bottom:64px; width:100%; max-width:100%; animation:slideUp .2s ease-out; }
+  #card { left:0; right:0; bottom:64px; width:100%; max-width:100%; transform:none; animation:slideUp .2s ease-out; }
   @keyframes slideUp { from { transform:translateY(100%) } to { transform:none } }
   #ask, #host { bottom:72px; }
   #toasts { top:auto; bottom:72px; right:8px; left:8px; align-items:stretch; }
@@ -504,3 +504,7 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
 @media (max-width: 700px) {
   .dBox, .tBox, .mnBox { max-height:calc(100vh - 96px); max-height:calc(100dvh - 96px); }
 }
+
+/* карточка прохожего и вопрос НПС стоят по центру над полосой статистики — там же, где у новичка кнопка «создать своего скелета»;
+   пока карточка открыта, кнопку прячем (после «закрыть» она возвращается) */
+body:has(#card:not([hidden])) #hud:not(.has) { display:none; }

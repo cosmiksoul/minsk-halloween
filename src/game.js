@@ -111,6 +111,7 @@ export class Game {
     const prev = this.modal; this.modal = name || null;
     if (prev && elOf[prev] && elOf[prev] !== elOf[name]) { const el = $(elOf[prev]); if (el) el.hidden = true; }
     if (name && elOf[name]) { const el = $(elOf[name]); if (el) el.hidden = false; }
+    if ((name === 'ask' || name === 'host' || name === 'rps') && this.o.onDialog) this.o.onDialog(); // плашка НПС вытесняет карточку: на экране одна
   }
   // закрыть то, что не мешает дуэли (плашки и меню магазина); false, если идёт партия, кубик или открыта колода/карта/шаринг
   closeBlocking() {
