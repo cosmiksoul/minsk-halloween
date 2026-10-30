@@ -152,6 +152,37 @@ alter table skeletons add column if not exists dead boolean default false;
 
 Чтобы доска лидеров и колода карт часа не пустовали с первого дня, `node tools/seed_top.mjs` пишет в ту же таблицу 52 скелета-бота (`device` вида `bot:NN`, где NN — место): первое место — Папирус с 1000 XP (пасхалка из Undertale: белые кости, красный шарф и ботинки, «мастер головоломок и повар спагетти», в разговорах и под нос — «Нье-хе-хе!»), дальше имена на «Скелет» по убывающей до 100 XP у 52-го. Биографии — из генератора по зерну, статистика выведена из очков. `--dry` только печатает таблицу, `--wipe` удаляет ботов; повторный запуск обновляет их по id.
 
+### Телеметрия
+
+Чтобы видеть, играет ли кто-то вообще, клиент пишет события в таблицу `events` того же проекта: `open` при загрузке (с `ref` — откуда пришли), `ping` за каждые 5 минут видимой вкладки (`info` — минуты), `skeleton` при создании (`info` — класс), `share` при открытии «Поделиться», и записи журнала: `card` (побит босс), `tarot`, `death`, `rip`, `hand`, `kill`, `friend`, `chest`, `buy`, `quest`, `win`. Поля: `device` (тот же случайный id, что у скелета), `platform` (phone/desktop по ширине экрана), `ver` (версия сборки из `?v=`). Без IP, куки и имён. Отправка не ждёт ответа и не влияет на игру: пока таблицы нет, запросы просто падают с 404.
+
+```sql
+create table events (
+  id bigserial primary key,
+  device text, kind text not null, platform text, ref text, info text, ver text,
+  at timestamptz default now()
+);
+alter table events enable row level security;
+create policy "insert any" on events for insert with check (true);
+-- select-политики нет: anon-ключ читать не может, статистика видна только в SQL Editor
+```
+
+Запросы для SQL Editor:
+
+```sql
+-- уникальные устройства и загрузки по дням (минское время)
+select (at at time zone 'Europe/Minsk')::date d, count(distinct device) devices, count(*) filter (where kind = 'open') opens,
+       count(distinct device) filter (where platform = 'phone') phones
+from events group by 1 order by 1 desc;
+-- воронка: открыл → создал скелета → поделился
+select count(distinct device) filter (where kind = 'open') opened, count(distinct device) filter (where kind = 'skeleton') created,
+       count(distinct device) filter (where kind = 'share') shared, count(distinct device) filter (where kind = 'card') beat_boss from events;
+-- сколько сидят: устройства по максимуму минут за сессию (ping каждые 5 минут)
+select device, max(info::int) minutes, min(at) first_seen from events where kind = 'ping' group by 1 order by 2 desc limit 20;
+-- откуда приходят
+select coalesce(nullif(ref, ''), '(прямой)') ref, count(*) from events where kind = 'open' group by 1 order by 2 desc;
+```
+
 ## Как устроено
 
 - `src/city.js` — сборка тайла: здания, дороги, вода, парки, деревья, тыквы, фонари; окна считаются в шейдере. Тыквы-маркеры заведений.
