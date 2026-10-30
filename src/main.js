@@ -178,7 +178,7 @@ function openDrawer(name) {
   if (drawerTab === name) { closeDrawer(); return; }
   drawerTab = name; $('drawer').hidden = false; $('drawerTitle').textContent = DRAWER_TITLES[name];
   for (const id of ['places', 'events', 'board', 'legend', 'quests']) $('tab' + id[0].toUpperCase() + id.slice(1)).hidden = name !== id;
-  for (const b of document.querySelectorAll('.tbtn')) b.classList.toggle('on', b.dataset.drawer === name);
+  for (const b of document.querySelectorAll('.tbtn[data-drawer]')) b.classList.toggle('on', b.dataset.drawer === name);
   document.body.classList.add('drawerOpen'); placeDrawer();
   if (name === 'places') renderPlaces(); if (name === 'board') renderBoard(true); if (name === 'quests') renderQuests(true); if (name === 'legend') renderChestList();
 }
@@ -205,10 +205,11 @@ function renderQuests(force = false) {
 }
 function placeDrawer() { if (isMobile) return; const hud = $('hud'); $('drawer').style.top = (hud.classList.contains('has') ? Math.round(hud.getBoundingClientRect().bottom + 8) : 52) + 'px'; } // без скелета панель внизу — ящик под шапкой
 new ResizeObserver(() => { if (drawerTab) placeDrawer(); }).observe($('hud'));
-function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn')) b.classList.remove('on'); }
-const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map', quests: 'quest', deck: 'arcana', journal: 'book', how: 'dice' };
+function closeDrawer() { drawerTab = null; $('drawer').hidden = true; document.body.classList.remove('drawerOpen'); for (const b of document.querySelectorAll('.tbtn[data-drawer]')) b.classList.remove('on'); }
+const TAB_ICON = { places: 'places', events: 'afisha', board: 'leaders', legend: 'map', quests: 'quest', deck: 'arcana', hand: 'hand', journal: 'book', how: 'dice' };
 // кнопки шапки: ящики по data-drawer, остальные действия по data-act (колода арканов, «как играть»)
-const TOP_ACT = { deck: () => game.openDeck(), how: () => { closeDrawer(); intro.show(); }, journal: () => { closeDrawer(); if (game.player) openProfile(game.player); else openMine(); } }; // «Журнал» — профиль своего скелета, без скелета — создание
+const TOP_ACT = { deck: () => game.openDeck(), how: () => { closeDrawer(); intro.show(); }, journal: () => { closeDrawer(); if (game.player) openProfile(game.player); else openMine(); },
+  hand: () => { if (!game.player) { openMine(); return; } const hud = $('hud'); const on = hud.classList.toggle('handOpen'); if (on) foldHud(); document.querySelector('.tbtn[data-act=hand]')?.classList.toggle('on', on); } }; // «Рука»: карты часа под строкой статуса // «Журнал» — профиль своего скелета, без скелета — создание
 for (const b of document.querySelectorAll('.tbtn')) { const k = b.dataset.drawer || b.dataset.act; b.innerHTML = icon(TAB_ICON[k] || 'map', 1) + `<span class="tlabel">${b.textContent.replace(/^[^\wА-Яа-яЁё]+/, '')}</span>`; b.onclick = () => (b.dataset.drawer ? openDrawer(b.dataset.drawer) : TOP_ACT[b.dataset.act]?.()); }
 $('drawerClose').onclick = closeDrawer;
 
@@ -226,7 +227,6 @@ $('hud').onclick = e => {
   if (e.target.closest('.hudFold')) { foldHud(); return; }
   if (e.target.closest('.hudCtl')) { if (!game.player) return; if (game.selected) game.select(false); else takeControl(game.player); return; }
   if (e.target.closest('.hudFollow')) { follow = follow === game.player ? null : game.player; e.target.closest('.hudFollow').classList.toggle('on', !!follow); return; } // камера за своим скелетом
-  if (e.target.closest('.hudLog')) { if (game.player) openProfile(game.player); return; }
   if (e.target.closest('.deck')) { game.openDeck(); return; } // 🃏 на панели открывает колоду без взятия управления
   if (e.target.closest('.hudNew') || e.target.closest('.avAdd') || e.target.closest('.hudPick')) { openMine(); return; }
   const hc = e.target.closest('.hc'); if (hc) { cards.flyTo(+hc.dataset.slot); return; } // карта в полосе руки: камера к боссу
@@ -253,18 +253,16 @@ function updateMbar() {
   const key = ic + '|' + label + '|' + dis; if (act.dataset.key !== key) { act.dataset.key = key; act.innerHTML = icon(ic, 2) + `<small>${label}</small>`; act.disabled = dis; }
   act.onclick = fn;
 }
-// телефон: спринт, пока палец на кнопке «бег» (аналог Shift)
+// телефон: спринт, пока палец на кнопке «бег» (аналог зажатого пробела)
 $('mbRun').innerHTML = icon('run', 2) + '<small>бег</small><i class="stam"></i>';
 $('mbRun').addEventListener('pointerdown', e => { e.preventDefault(); game.sprinting = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('mbRun').addEventListener(ev, () => { game.sprinting = false; });
-$('mbHand').innerHTML = icon('hand', 2) + '<small>рука</small>'; $('mbHand').onclick = () => { const hud = $('hud'); hud.classList.toggle('handOpen'); if (hud.classList.contains('handOpen')) hud.classList.add('min'); };
-$('mbMap').innerHTML = icon('map', 2) + '<small>легенда</small>'; $('mbMap').onclick = () => openDrawer('legend');
 $('mnClose').onclick = () => closeMine();
 $('mine').addEventListener('click', e => { if (e.target === $('mine')) closeMine(); });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (!$('mine').hidden) closeMine(); if (!$('profile').hidden) closeProfile(); if (!$('menu').hidden) { $('menu').hidden = true; $('menuBtn').classList.remove('on'); } }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.code === 'Space') { e.preventDefault(); if (game.player) takeControl(game.player); else openMine(); }
+  if (e.code === 'Space') { e.preventDefault(); if (e.repeat) return; if (game.player) takeControl(game.player); else openMine(); } // пробел: к своему скелету и управление; зажатый — бег (слушатель в game.js)
 });
 $('bClose').onclick = () => { $('card').hidden = true; follow = null; hideTip(); };
 $('bFollow').onclick = () => { follow = follow ? null : cardAgent; $('bFollow').classList.toggle('on', !!follow); };

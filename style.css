@@ -478,6 +478,7 @@ button.x, #popup .x, .dTitle .x, .dHead .x { border:0; border-image:none; backgr
   #top { justify-content:space-between; } /* шапка на всю ширину: шестерёнка слева, звук справа, вкладки растянуты между ними — вровень со строкой статуса */
   .tBtns { flex:1; justify-content:space-between; }
   .tbtn[data-act="how"] { display:none; } /* «Как играть» на телефоне живёт в меню настроек */
+  .tbtn { padding:4px; } .tBtns { gap:2px; } /* восемь иконок + шестерёнка и звук влезают в 360 px */
   #hud.has { right:8px; } .hudMini .hudArrow { margin-left:auto; }
   #mbar button { width:76px; } #mbar button small { font-size:7px; } /* «отпустить» и «управлять» влезают в кнопку целиком */
   #mbar #mbRun { padding:1px 0; gap:1px; } /* полоска дыхания в потоке под подписью, а не поверх неё («бег» читался как «бес») */
