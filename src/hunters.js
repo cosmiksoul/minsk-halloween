@@ -104,7 +104,7 @@ export class Hunters {
     if (h.state === 'duel') return;
     const d = Math.hypot(a.x - p.x, a.z - p.z);
     // скорость: за кадром вчетверо быстрее игрока, вблизи по таблице уровня; от базовой скорости игрока, без дебаффов
-    a.speed = p.speed * hunterSpeedFactor(d, h.level); // плавно от табличной к ×4 между 400 и 800 м, без скачка на границе кадра
+    a.speed = (p.baseSpeed || p.speed) * hunterSpeedFactor(d, h.level); // плавно от табличной к ×4 между 400 и 800 м, без скачка на границе кадра
     if (!ctrl) {
       // без управления: дальние теряют след через минуту, ближние замирают и ждут до пяти минут
       h.lostSince ||= sim.time;
@@ -161,7 +161,7 @@ export class Hunters {
       sim.drive(a, true); sim.teleport(a, node); sim.haunt(a);
     }
     sim.say(a, pick(a.rng, LINES.hunterSpawn), 'boo', 2.6);
-    a.speed = p.speed * L.speed; a.state = 'idle'; a.path = null;
+    a.speed = (p.baseSpeed || p.speed) * L.speed; a.state = 'idle'; a.path = null;
     const st = a.def.stats || {};
     const intent = owner ? intentOf(st.kills || 0, st.friends || 0, rng) : (level >= 3 ? 'kill' : rng() < 0.7 ? 'kill' : 'friend');
     const seen = this.game.seenActive ? this.game.seenActive() : false;

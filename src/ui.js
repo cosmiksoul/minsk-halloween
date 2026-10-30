@@ -74,6 +74,9 @@ const ICONS = {
   book: [
     '................', '................', '..tttttttttttt..', '..tppppppppppt..', '..tpwwwwwwwwpt..', '..tpwkkkkkkwpt..', '..tpwwwwwwwwpt..', '..tpwkkkkkwwpt..',
     '..tpwwwwwwwwpt..', '..tpwkkkkkkwpt..', '..tpwwwwwwwwpt..', '..tpwkkkwwwwpt..', '..tppppppppppt..', '..tttttttttttt..', '................', '................'],
+  share: [
+    '................', '..........kkkk..', '.........kppppk.', '.........kppppk.', '..........kkkk..', '........kk......', '.......kk.......', '..kkkk.k........',
+    '.kppppkk........', '.kppppk.........', '..kkkk.k........', '.......kk.......', '........kk......', '..........kkkk..', '.........kppppk.', '..........kkkk..'],
   run: [
     '................', '................', '................', '.........kkk....', '........kooook..', '.......koooook..', '..gg..koooooook.', '.gg..koooooooook',
     '..gg.koooooooook', '....kooooooooook', '...kkkkkkkkkkkkk', '...kccccccccccck', '....kkkkkkkkkkk.', '................', '................', '................'],
