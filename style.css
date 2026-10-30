@@ -256,7 +256,7 @@ button.gen { background:#d8c2ff; color:var(--black); border-color:#d8c2ff; font-
 .dHead { display:flex; align-items:center; padding:8px 10px; font-family:"Press Start 2P", monospace; font-size:9px; color:var(--green); border-bottom:1px solid var(--line); }
 .dHead .x { margin-left:auto; background:transparent; border:0; color:var(--green); font-size:16px; padding:0 4px; }
 #drawer .tabBody { flex:1; min-height:0; overflow:auto; } /* содержимое вкладки длиннее ящика: скролл внутри рамки */
-body.drawerOpen #card { left:calc(50% + 160px); }
+body.drawerOpen #card { left:clamp(50%, 630px, calc(100% - 300px)); } /* карточка остаётся по центру над статистикой, как вопрос НПС; на узком окне лишь отодвигается от ящика (его правый край 332 px) */
 .lg { display:flex; gap:8px; align-items:flex-start; line-height:1.45; color:var(--ink); }
 .lg .chip { flex:0 0 auto; width:12px; height:12px; border-radius:3px; margin-top:2px; border:1px solid rgba(255,255,255,.25); }
 .lg b { color:var(--green); }
