@@ -46,3 +46,10 @@ test('makeBio: работа строкой, возраст в рамках', () 
   const rng = makeRng(7);
   for (let i = 0; i < 500; i++) { const a = pickArchetype(rng); const b = makeBio(rng, a); assert.ok(typeof b.job === 'string' && b.job.length > 3, `${a.id}: ${b.job}`); assert.ok(b.age >= 18 && b.age <= 95); assert.ok(['m', 'f'].includes(b.gender)); }
 });
+
+test('chatLine: именные реплики (Папирус) перебивают архетип, чужое имя их не получает', () => {
+  const rng = makeRng(7); let own = 0;
+  for (let i = 0; i < 500; i++) { const t = chatLine(rng, 'knight', LINES.chat, 0.45, 'Папирус'); if (LINES.named['Папирус'].includes(t)) own++; else assert.ok(LINES.chat.includes(t)); }
+  assert.ok(own > 400 && own < 500, `именных ${own} из 500`);
+  for (let i = 0; i < 50; i++) assert.ok(LINES.chat.includes(chatLine(rng, 'knight', LINES.chat, 0, 'Скелет Скелетович')));
+});
